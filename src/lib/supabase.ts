@@ -25,7 +25,6 @@ export interface User {
 
 export interface POSMachine {
   id: string
-  name: string
   address: string
   latitude: number
   longitude: number
@@ -33,15 +32,23 @@ export interface POSMachine {
   basic_info: {
     model?: string
     acquiring_institution?: string
+    checkout_location?: '自助收银' | '人工收银'
     supports_foreign_cards?: boolean
     supports_apple_pay?: boolean
     supports_google_pay?: boolean
     supports_contactless?: boolean
     min_amount_no_pin?: number
+    supported_card_networks?: string[]
   }
+  remarks?: string
+  custom_links?: {
+    platform: string
+    url: string
+    title: string
+  }[]
   extended_fields: Record<string, any>
   status: 'active' | 'inactive' | 'pending_verification'
-  created_by: string
+  created_by?: string | null
   verified_by?: string
   verified_at?: string
   created_at: string

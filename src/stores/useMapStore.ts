@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { type POSMachine } from '@/lib/supabase'
+import { type POSMachine, supabase } from '@/lib/supabase'
 import { locationUtils } from '@/lib/amap'
 
 interface MapState {
@@ -82,84 +82,55 @@ export const useMapStore = create<MapState>((set, get) => ({
     try {
       set({ loading: true })
       
-      // 使用模拟数据，移除数据库依赖
-      const mockPOSMachines: POSMachine[] = [
-        {
-          id: '1',
-          name: '星巴克POS机',
-          merchant_name: '星巴克咖啡',
-          address: '北京市朝阳区建国门外大街1号',
-          longitude: 116.4074,
-          latitude: 39.9042,
-          basic_info: {
-            supports_apple_pay: true,
-            supports_google_pay: true,
-            supports_foreign_cards: true,
-            supports_contactless: true
-          },
-          extended_fields: {},
-          status: 'active',
-           created_by: 'mock-user-id',
-           created_at: new Date().toISOString(),
-           updated_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          name: '麦当劳POS机',
-          merchant_name: '麦当劳',
-          address: '北京市朝阳区三里屯路19号',
-          longitude: 116.4551,
-          latitude: 39.9368,
-          basic_info: {
-            supports_apple_pay: true,
-            supports_google_pay: false,
-            supports_foreign_cards: true,
-            supports_contactless: true
-          },
-           extended_fields: {},
-           status: 'active',
-           created_by: 'mock-user-id',
-           created_at: new Date().toISOString(),
-           updated_at: new Date().toISOString()
-         },
-         {
-           id: '3',
-           name: '中关村银行POS机',
-           merchant_name: '中关村银行',
-           address: '北京市海淀区中关村大街1号',
-           longitude: 116.3119,
-           latitude: 39.9830,
-           basic_info: {
-             supports_apple_pay: false,
-             supports_google_pay: false,
-             supports_foreign_cards: false,
-             supports_contactless: true
-           },
-           extended_fields: {},
-           status: 'active',
-           created_by: 'mock-user-id',
-           created_at: new Date().toISOString(),
-           updated_at: new Date().toISOString()
-        }
-      ]
+      // 从Supabase数据库加载POS机数据
+      const { data: posMachines, error } = await supabase
+        .from('pos_machines')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
       
-      // 计算平均评分和距离
+      if (error) {
+        console.error('加载POS机数据失败:', error)
+        throw error
+      }
+      
+      // 计算距离和评分
       const { currentLocation } = get()
-      const processedData = mockPOSMachines.map(machine => {
-        // 模拟评分数据
-        const avgRating = Math.random() * 2 + 3 // 3-5分随机评分
-        const reviewCount = Math.floor(Math.random() * 50) + 1 // 1-50个评论
+      
+      // 获取所有POS机的评价数据
+      const { data: reviewsData } = await supabase
+        .from('reviews')
+        .select('pos_machine_id, rating')
+      
+      // 计算每个POS机的平均评分和评价数量
+      const reviewStats = (reviewsData || []).reduce((acc, review) => {
+        if (!acc[review.pos_machine_id]) {
+          acc[review.pos_machine_id] = { ratings: [], count: 0 }
+        }
+        acc[review.pos_machine_id].ratings.push(review.rating)
+        acc[review.pos_machine_id].count++
+        return acc
+      }, {} as Record<string, { ratings: number[], count: number }>)
+      
+      const processedData = (posMachines || []).map(machine => {
+        const stats = reviewStats[machine.id] || { ratings: [], count: 0 }
+        const avgRating = stats.ratings.length > 0 
+          ? stats.ratings.reduce((sum, rating) => sum + rating, 0) / stats.ratings.length
+          : 0
+        const reviewCount = stats.count
         
         let distance = 0
         if (currentLocation) {
           distance = locationUtils.calculateDistance(
             currentLocation,
-            { longitude: machine.longitude, latitude: machine.latitude }
+            { longitude: Number(machine.longitude), latitude: Number(machine.latitude) }
           )
         }
         
         return {
           ...machine,
+          longitude: Number(machine.longitude),
+          latitude: Number(machine.latitude),
           avgRating,
           distance,
           reviewCount,
@@ -169,7 +140,7 @@ export const useMapStore = create<MapState>((set, get) => ({
       set({ posMachines: processedData })
     } catch (error) {
       console.error('加载POS机数据失败:', error)
-      // 即使出错也要设置空数组，避免界面卡住
+      // 设置空数组，避免界面卡住
       set({ posMachines: [] })
     } finally {
       set({ loading: false })
@@ -194,20 +165,88 @@ export const useMapStore = create<MapState>((set, get) => ({
 
   addPOSMachine: async (posMachineData) => {
     try {
-      // 生成本地ID和时间戳
-      const newPOSMachine: POSMachine = {
-        ...posMachineData,
-        id: Date.now().toString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      // 获取当前用户（如果未登录则使用null）
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      // 准备数据 - 确保name字段有值或者不包含name字段
+      const { name, ...baseData } = posMachineData as any
+      const newPOSMachine = {
+        ...baseData,
+        created_by: userId,
+        status: 'active' as const,
+        // 如果有merchant_name，使用它作为name的默认值，否则不包含name字段
+        ...(baseData.merchant_name ? { name: baseData.merchant_name } : {})
+      }
+      
+      // 保存到Supabase数据库
+      let { data, error } = await supabase
+        .from('pos_machines')
+        .insert([newPOSMachine])
+        .select()
+        .single()
+      
+      // 如果遇到列不存在的错误（custom_links、remarks 或 checkout_location），尝试移除可能缺失的列后重试
+        if (error && error.message && (error.message.includes('custom_links') || error.message.includes('remarks') || error.message.includes('checkout_location'))) {
+        console.warn('检测到数据库列缺失，尝试移除相关字段后重试:', error.message)
+        
+        // 创建备份数据，并仅移除触发错误的列，保留其余字段
+        const fallbackData = { ...newPOSMachine }
+        if (error.message.includes('custom_links')) delete (fallbackData as any).custom_links
+        if (error.message.includes('remarks')) delete (fallbackData as any).remarks
+        if (error.message.includes('checkout_location')) {
+          // 如果checkout_location字段不存在，从basic_info中移除
+          if (fallbackData.basic_info && 'checkout_location' in fallbackData.basic_info) {
+            const { checkout_location, ...restBasicInfo } = fallbackData.basic_info
+            fallbackData.basic_info = restBasicInfo
+          }
+        }
+        
+        const { data: retryData, error: retryError } = await supabase
+          .from('pos_machines')
+          .insert([fallbackData])
+          .select()
+          .single()
+        
+        if (retryError) {
+          console.error('重试添加POS机失败:', retryError)
+          throw retryError
+        }
+        
+        data = retryData
+        error = null
+      }
+      
+      // 处理name字段非空约束违反错误
+      if (error && error.code === '23502' && error.message && error.message.includes('name')) {
+        console.error('name字段非空约束违反:', {
+          error: error.message,
+          data: newPOSMachine,
+          hasName: 'name' in newPOSMachine,
+          nameValue: newPOSMachine.name
+        })
+      }
+      
+      if (error) {
+        console.error('添加POS机失败:', error)
+        throw error
       }
       
       // 更新本地状态
+      const processedMachine = {
+        ...data,
+        longitude: Number(data.longitude),
+        latitude: Number(data.latitude),
+        avgRating: 0,
+        distance: 0,
+        reviewCount: 0,
+      }
+      
       set(state => ({
-        posMachines: [...state.posMachines, newPOSMachine]
+        posMachines: [...state.posMachines, processedMachine]
       }))
       
-      return newPOSMachine
+      return processedMachine
     } catch (error) {
       console.error('添加POS机失败:', error)
       throw error
@@ -216,19 +255,72 @@ export const useMapStore = create<MapState>((set, get) => ({
 
   updatePOSMachine: async (id, updates) => {
     try {
-      // 添加更新时间戳
-      const updatesWithTimestamp = {
-        ...updates,
-        updated_at: new Date().toISOString()
+      // 准备更新数据 - 确保name字段有值或者不包含name字段
+      const { name, ...baseUpdates } = updates as any
+      const finalUpdates = {
+        ...baseUpdates,
+        // 如果有merchant_name，使用它作为name的默认值，否则不包含name字段
+        ...(baseUpdates.merchant_name ? { name: baseUpdates.merchant_name } : {})
+      }
+      
+      // 更新Supabase数据库
+      let { data, error } = await supabase
+        .from('pos_machines')
+        .update(finalUpdates)
+        .eq('id', id)
+        .select()
+        .single()
+      
+      // 如果遇到列不存在的错误（custom_links、remarks 或 checkout_location），尝试移除相关字段后重试
+        if (error && error.message && (error.message.includes('custom_links') || error.message.includes('remarks') || error.message.includes('checkout_location'))) {
+        console.warn('检测到数据库列缺失，尝试移除相关字段后重试:', error.message)
+        
+        // 创建备份更新数据，并仅移除触发错误的列，保留其余字段
+        const fallbackUpdates = { ...finalUpdates }
+        if (error.message.includes('custom_links')) delete (fallbackUpdates as any).custom_links
+        if (error.message.includes('remarks')) delete (fallbackUpdates as any).remarks
+        if (error.message.includes('checkout_location')) {
+          // 如果checkout_location字段不存在，从basic_info中移除
+          if (fallbackUpdates.basic_info && 'checkout_location' in fallbackUpdates.basic_info) {
+            const { checkout_location, ...restBasicInfo } = fallbackUpdates.basic_info
+            fallbackUpdates.basic_info = restBasicInfo
+          }
+        }
+        
+        const { data: retryData, error: retryError } = await supabase
+          .from('pos_machines')
+          .update(fallbackUpdates)
+          .eq('id', id)
+          .select()
+          .single()
+        
+        if (retryError) {
+          console.error('重试更新POS机失败:', retryError)
+          throw retryError
+        }
+        
+        data = retryData
+        error = null
+      }
+      
+      if (error) {
+        console.error('更新POS机失败:', error)
+        throw error
       }
       
       // 更新本地状态
+      const processedMachine = {
+        ...data,
+        longitude: Number(data.longitude),
+        latitude: Number(data.latitude),
+      }
+      
       set(state => ({
         posMachines: state.posMachines.map(machine => 
-          machine.id === id ? { ...machine, ...updatesWithTimestamp } : machine
+          machine.id === id ? { ...machine, ...processedMachine } : machine
         ),
         selectedPOSMachine: state.selectedPOSMachine?.id === id 
-          ? { ...state.selectedPOSMachine, ...updatesWithTimestamp }
+          ? { ...state.selectedPOSMachine, ...processedMachine }
           : state.selectedPOSMachine
       }))
     } catch (error) {
@@ -239,6 +331,17 @@ export const useMapStore = create<MapState>((set, get) => ({
 
   deletePOSMachine: async (id) => {
     try {
+      // 从Supabase数据库删除
+      const { error } = await supabase
+        .from('pos_machines')
+        .delete()
+        .eq('id', id)
+      
+      if (error) {
+        console.error('删除POS机失败:', error)
+        throw error
+      }
+      
       // 更新本地状态
       set(state => ({
         posMachines: state.posMachines.filter(machine => machine.id !== id),

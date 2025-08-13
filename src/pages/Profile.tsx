@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Heart, MapPin, Settings, LogOut, Edit, Star } from 'lucide-react'
+import { User, Heart, MapPin, Settings, LogOut, Edit, Star, Shield, Crown, Users } from 'lucide-react'
 import { toast } from 'sonner'
-// import { supabase } from '@/lib/supabase' // 移除数据库依赖
+import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import Button from '@/components/ui/Button'
 import Loading from '@/components/ui/Loading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
+import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 
 interface UserStats {
   posCount: number
@@ -20,7 +21,6 @@ interface FavoritePOS {
   id: string
   pos_machines: {
     id: string
-    name: string
     merchant_name: string
     address: string
     average_rating?: number
@@ -30,6 +30,7 @@ interface FavoritePOS {
 const Profile = () => {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
+  const permissions = usePermissions()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<UserStats>({ posCount: 0, reviewCount: 0, favoriteCount: 0 })
   const [favorites, setFavorites] = useState<FavoritePOS[]>([])
@@ -50,38 +51,65 @@ const Profile = () => {
     if (!user) return
     
     try {
-      // 使用模拟数据，移除数据库依赖
+      // 并行查询用户统计数据
+      const [posCountResult, reviewCountResult, favoritesResult] = await Promise.all([
+        // 查询用户添加的POS机数量
+        supabase
+          .from('pos_machines')
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by', user.id),
+        
+        // 查询用户发表的评价数量
+        supabase
+          .from('reviews')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        
+        // 查询用户收藏的POS机（包含POS机详情和评分）
+        supabase
+          .from('favorites')
+          .select(`
+            id,
+            pos_machines (
+              id,
+              merchant_name,
+              address,
+              reviews (
+                rating
+              )
+            )
+          `)
+          .eq('user_id', user.id)
+          .limit(5)
+      ])
+      
+      // 设置统计数据
       setStats({
-        posCount: Math.floor(Math.random() * 10) + 1, // 1-10个POS机
-        reviewCount: Math.floor(Math.random() * 20) + 5, // 5-25个评论
-        favoriteCount: Math.floor(Math.random() * 8) + 2 // 2-10个收藏
+        posCount: posCountResult.count || 0,
+        reviewCount: reviewCountResult.count || 0,
+        favoriteCount: favoritesResult.data?.length || 0
       })
       
-      // 模拟收藏的POS机数据
-      const mockFavorites: FavoritePOS[] = [
-        {
-          id: '1',
+      // 设置收藏数据
+      const formattedFavorites: FavoritePOS[] = (favoritesResult.data || []).map(fav => {
+        const posMachine = fav.pos_machines as any
+        const reviews = posMachine?.reviews || []
+        const avgRating = reviews.length > 0 
+          ? reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / reviews.length
+          : 0
+        
+        return {
+          id: fav.id,
           pos_machines: {
-            id: '1',
-            name: '星巴克POS机',
-            merchant_name: '星巴克咖啡',
-            address: '北京市朝阳区建国门外大街1号',
-            average_rating: 4.5
-          }
-        },
-        {
-          id: '2',
-          pos_machines: {
-            id: '2',
-            name: '麦当劳POS机',
-            merchant_name: '麦当劳',
-            address: '北京市朝阳区三里屯路19号',
-            average_rating: 4.2
+            id: posMachine?.id,
+            merchant_name: posMachine?.merchant_name,
+            address: posMachine?.address,
+            average_rating: avgRating
           }
         }
-      ]
+      })
       
-      setFavorites(mockFavorites)
+      setFavorites(formattedFavorites)
       
       // 初始化编辑表单
       setEditForm({
@@ -102,16 +130,25 @@ const Profile = () => {
     
     setUpdating(true)
     try {
-      // 模拟更新操作，移除数据库依赖
-      // 在实际应用中，这里会更新本地用户状态
+      // 使用Supabase Auth更新用户元数据
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          display_name: editForm.display_name,
+          bio: editForm.bio
+        }
+      })
+      
+      if (error) {
+        console.error('更新用户信息失败:', error)
+        toast.error('更新失败，请重试')
+        return
+      }
       
       toast.success('个人信息更新成功')
       setShowEditModal(false)
       
-      // 模拟延迟后重新加载数据
-      setTimeout(() => {
-        loadUserData()
-      }, 500)
+      // 重新加载用户数据以反映更新
+      loadUserData()
       
     } catch (error) {
       console.error('更新个人信息失败:', error)
@@ -132,8 +169,23 @@ const Profile = () => {
   }
 
   const removeFavorite = async (favoriteId: string) => {
+    if (!user) return
+    
     try {
-      // 模拟删除操作，移除数据库依赖
+      // 从数据库删除收藏记录
+      const { error } = await supabase
+        .from('favorites')
+        .delete()
+        .eq('id', favoriteId)
+        .eq('user_id', user.id)
+      
+      if (error) {
+        console.error('取消收藏失败:', error)
+        toast.error('取消收藏失败，请重试')
+        return
+      }
+      
+      // 更新本地状态
       setFavorites(prev => prev.filter(fav => fav.id !== favoriteId))
       setStats(prev => ({ ...prev, favoriteCount: prev.favoriteCount - 1 }))
       toast.success('已取消收藏')
@@ -156,6 +208,36 @@ const Profile = () => {
       )
     }
     return stars
+  }
+
+  const getRoleInfo = (role: UserRole) => {
+    switch (role) {
+      case 'super_admin':
+        return {
+          label: '超级管理员',
+          icon: Crown,
+          color: 'text-purple-600 bg-purple-50 border-purple-200'
+        }
+      case 'admin':
+        return {
+          label: '管理员',
+          icon: Shield,
+          color: 'text-yellow-600 bg-yellow-50 border-yellow-200'
+        }
+      case 'beta':
+        return {
+          label: 'Beta用户',
+          icon: Users,
+          color: 'text-blue-600 bg-blue-50 border-blue-200'
+        }
+      case 'regular':
+      default:
+        return {
+          label: '普通用户',
+          icon: User,
+          color: 'text-gray-600 bg-gray-50 border-gray-200'
+        }
+    }
   }
 
   if (loading) {
@@ -190,9 +272,21 @@ const Profile = () => {
                   )}
                 </div>
                 <div>
-                  <CardTitle className="text-xl">
-                    {user.user_metadata?.display_name || user.email?.split('@')[0] || '用户'}
-                  </CardTitle>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <CardTitle className="text-xl">
+                      {user.user_metadata?.display_name || user.email?.split('@')[0] || '用户'}
+                    </CardTitle>
+                    {!permissions.isLoading && (() => {
+                      const roleInfo = getRoleInfo(permissions.role)
+                      const RoleIcon = roleInfo.icon
+                      return (
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${roleInfo.color}`}>
+                          <RoleIcon className="w-3 h-3 mr-1" />
+                          {roleInfo.label}
+                        </span>
+                      )
+                    })()}
+                  </div>
                   <CardDescription>{user.email}</CardDescription>
                   {user.user_metadata?.bio && (
                     <p className="text-sm text-gray-600 mt-1">{user.user_metadata.bio}</p>
@@ -276,7 +370,7 @@ const Profile = () => {
                         className="flex-1 cursor-pointer"
                         onClick={() => navigate(`/pos/${favorite.pos_machines!.id}`)}
                       >
-                        <h4 className="font-medium text-gray-900">{favorite.pos_machines.name}</h4>
+                        <h4 className="font-medium text-gray-900">{favorite.pos_machines.merchant_name}</h4>
                         <p className="text-sm text-gray-600">{favorite.pos_machines.merchant_name}</p>
                         <p className="text-xs text-gray-500 mt-1">{favorite.pos_machines.address}</p>
                         {favorite.pos_machines.average_rating && (
@@ -312,14 +406,27 @@ const Profile = () => {
             <CardTitle>快捷操作</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button
-              onClick={() => navigate('/add-pos')}
-              variant="outline"
-              className="w-full justify-start"
-            >
-              <MapPin className="w-4 h-4 mr-3" />
-              添加POS机
-            </Button>
+            {permissions.canAdd && (
+              <Button
+                onClick={() => navigate('/add-pos')}
+                variant="outline"
+                className="w-full justify-start"
+              >
+                <MapPin className="w-4 h-4 mr-3" />
+                添加POS机
+              </Button>
+            )}
+            
+            {permissions.canManageRoles && (
+              <Button
+                onClick={() => navigate('/role-management')}
+                variant="outline"
+                className="w-full justify-start text-purple-600 border-purple-200 hover:bg-purple-50"
+              >
+                <Crown className="w-4 h-4 mr-3" />
+                角色管理
+              </Button>
+            )}
             
             <Button
               onClick={() => navigate('/my-pos')}
