@@ -7,7 +7,7 @@ const isDevelopment = import.meta.env.DEV || window.location.hostname === 'local
 export const AMAP_CONFIG = {
   key: import.meta.env.VITE_AMAP_KEY,
   version: '2.0',
-  plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.Geolocation'],
+  plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.Geolocation', 'AMap.Geocoder'],
   securityJsCode: import.meta.env.VITE_AMAP_SECURITY_JS_CODE,
   isDevelopment,
 }
@@ -35,19 +35,31 @@ export const DEFAULT_MAP_CONFIG = {
 
 // 地理位置工具函数
 export const locationUtils = {
-  // 获取当前位置（带重试机制）
+  // 获取当前位置（带重试机制和默认位置）
   getCurrentPosition: (maxRetries: number = 3): Promise<{ longitude: number; latitude: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('浏览器不支持地理位置获取'))
+        console.error('浏览器不支持地理位置获取，使用默认位置')
+        // 使用北京市中心作为默认位置
+        resolve({
+          longitude: 116.397428,
+          latitude: 39.90923
+        })
         return
       }
 
       let retryCount = 0
       
       const attemptGetLocation = () => {
+        console.log(`开始获取位置 (尝试 ${retryCount + 1}/${maxRetries})`)
+        
         navigator.geolocation.getCurrentPosition(
           (position) => {
+            console.log('位置获取成功:', {
+              longitude: position.coords.longitude,
+              latitude: position.coords.latitude,
+              accuracy: position.coords.accuracy
+            })
             resolve({
               longitude: position.coords.longitude,
               latitude: position.coords.latitude,
@@ -55,20 +67,32 @@ export const locationUtils = {
           },
           (error) => {
             retryCount++
-            console.warn(`位置获取失败 (尝试 ${retryCount}/${maxRetries}):`, error.message)
+            const errorDetails = {
+              code: error.code,
+              message: error.message,
+              attempt: retryCount,
+              maxRetries
+            }
+            console.warn('位置获取失败详情:', errorDetails)
             
             if (retryCount < maxRetries) {
-              // 等待2秒后重试
+              console.log(`将在1秒后重试 (${retryCount}/${maxRetries})`)
+              // 减少重试间隔时间到1秒
               setTimeout(() => {
                 attemptGetLocation()
-              }, 2000)
+              }, 1000)
             } else {
-              reject(new Error(`位置获取失败: ${error.message}`))
+              console.error('所有重试均失败，使用默认位置')
+              // 提供默认位置而不是拒绝
+              resolve({
+                longitude: 116.397428, // 北京市中心
+                latitude: 39.90923
+              })
             }
           },
           {
             enableHighAccuracy: true,
-            timeout: 30000, // 增加到30秒
+            timeout: 10000, // 减少到10秒
             maximumAge: 60000,
           }
         )
@@ -104,6 +128,77 @@ export const locationUtils = {
     }
     return `${(distance / 1000).toFixed(1)}km`
   },
+
+  // 根据经纬度获取地址信息
+  getAddress: async (longitude: number, latitude: number): Promise<string> => {
+    try {
+      // 使用高德地图逆地理编码API
+      const AMap = await loadAMap()
+      
+      return new Promise((resolve, reject) => {
+        // 使用 AMap.plugin 显式加载 Geocoder 插件
+        AMap.plugin('AMap.Geocoder', () => {
+          try {
+            const geocoder = new AMap.Geocoder({
+              radius: 1000,
+              extensions: 'all'
+            })
+            
+            geocoder.getAddress([longitude, latitude], (status: string, result: any) => {
+              if (status === 'complete' && result.info === 'OK') {
+                const regeocode = result.regeocode
+                if (regeocode) {
+                  // 优先使用详细地址组合
+                  const addressComponent = regeocode.addressComponent
+                  if (addressComponent) {
+                    const province = addressComponent.province || ''
+                    const city = addressComponent.city || addressComponent.province || ''
+                    const district = addressComponent.district || ''
+                    const township = addressComponent.township || ''
+                    const street = addressComponent.streetNumber?.street || ''
+                    const number = addressComponent.streetNumber?.number || ''
+                    
+                    // 构建详细地址
+                    let detailedAddress = ''
+                    if (province && province !== city) detailedAddress += province
+                    if (city) detailedAddress += city
+                    if (district) detailedAddress += district
+                    if (township) detailedAddress += township
+                    if (street) detailedAddress += street
+                    if (number) detailedAddress += number
+                    
+                    if (detailedAddress) {
+                      resolve(detailedAddress)
+                      return
+                    }
+                  }
+                  
+                  // 回退到格式化地址
+                  const formattedAddress = regeocode.formattedAddress
+                  if (formattedAddress) {
+                    resolve(formattedAddress)
+                    return
+                  }
+                }
+                
+                // 最后回退
+                resolve('地址解析成功，但无详细信息')
+              } else {
+                console.warn('地址解析状态异常:', status, result)
+                reject(new Error(`地址解析失败: ${status}`))
+              }
+            })
+          } catch (pluginError) {
+            console.error('Geocoder插件初始化失败:', pluginError)
+            reject(new Error(`Geocoder插件初始化失败: ${pluginError}`))
+          }
+        })
+      })
+    } catch (error) {
+      console.error('获取地址失败:', error)
+      throw error // 抛出错误而不是返回字符串
+    }
+  },
 }
 
 // API错误处理函数
@@ -130,100 +225,74 @@ const handleApiError = (error: any): Error => {
 }
 
 // 地图加载器
-export const loadAMap = (): Promise<typeof AMap> => {
+export const loadAMap = (): Promise<any> => {
   return new Promise((resolve, reject) => {
-    console.log('开始加载高德地图...')
-    console.log('API配置:', {
-      key: AMAP_CONFIG.key ? `${AMAP_CONFIG.key.substring(0, 8)}...` : '未设置',
-      version: AMAP_CONFIG.version,
-      plugins: AMAP_CONFIG.plugins,
-      securityJsCode: AMAP_CONFIG.securityJsCode ? `${AMAP_CONFIG.securityJsCode.substring(0, 8)}...` : '未设置',
-      isDevelopment: AMAP_CONFIG.isDevelopment
-    })
-    
     if (window.AMap) {
-      console.log('高德地图已加载，直接返回')
-      resolve(window.AMap)
-      return
+      console.log('高德地图已加载，直接返回');
+      return resolve(window.AMap);
     }
 
-    // 检查API密钥
     if (!AMAP_CONFIG.key) {
-      const error = new Error('高德地图API密钥未配置，请在环境变量中设置VITE_AMAP_KEY')
-      console.error(error)
-      reject(error)
-      return
-    }
-    
-    // 开发环境提示
-    if (AMAP_CONFIG.isDevelopment) {
-      console.log('当前为开发环境，如遇到域名白名单问题，请在高德地图控制台添加localhost到白名单')
+      const error = new Error('高德地图API密钥未配置 (VITE_AMAP_KEY)');
+      console.error(error);
+      return reject(error);
     }
 
-    // 设置安全密钥（必须在脚本加载之前设置）
     if (AMAP_CONFIG.securityJsCode) {
       window._AMapSecurityConfig = {
         securityJsCode: AMAP_CONFIG.securityJsCode,
-      }
-      console.log('安全密钥已设置')
+      };
+      console.log('高德地图安全密钥已设置');
     } else {
-      console.warn('安全密钥未设置，可能影响地图加载')
+      console.warn('高德地图安全密钥未设置，部分功能可能受限');
     }
 
-    // 创建全局回调函数
-    const callbackName = 'amapInitCallback_' + Date.now()
-    ;(window as any)[callbackName] = () => {
-      console.log('高德地图回调函数执行')
-      if (window.AMap) {
-        console.log('高德地图API可用')
-      // 清理回调函数
-      clearTimeout(timeoutId)
-      delete (window as any)[callbackName]
-      resolve(window.AMap)
-      } else {
-        clearTimeout(timeoutId)
-        const error = handleApiError('高德地图加载失败：window.AMap未定义')
-        console.error(error)
-        delete (window as any)[callbackName]
-        reject(error)
-      }
-    }
+    const callbackName = 'amapInitCallback_' + Date.now();
 
-    const script = document.createElement('script')
-    
-    // 超时处理，15 秒未回调则判定失败
     const timeoutId = setTimeout(() => {
-      const error = handleApiError('高德地图加载超时，请检查网络或 API 配置')
-      console.error(error)
-      delete (window as any)[callbackName]
-      reject(error)
-    }, 15000)
-    
-    // 添加callback参数来解决USERKEY_PLAT_NOMATCH问题
-    const scriptUrl = `https://webapi.amap.com/maps?v=${AMAP_CONFIG.version}&key=${AMAP_CONFIG.key}&plugin=${AMAP_CONFIG.plugins.join(',')}&callback=${callbackName}`
-    console.log('加载脚本URL:', scriptUrl)
-    
-    script.src = scriptUrl
-    script.async = true
+      if ((window as any)[callbackName]) {
+        delete (window as any)[callbackName];
+      }
+      const error = handleApiError('高德地图加载超时(15s)，请检查网络或API配置');
+      console.error(error);
+      reject(error);
+    }, 15000);
+
+    (window as any)[callbackName] = () => {
+      clearTimeout(timeoutId);
+      delete (window as any)[callbackName];
+      if (window.AMap) {
+        console.log('高德地图API加载成功');
+        resolve(window.AMap);
+      } else {
+        const error = handleApiError('高德地图加载失败：window.AMap 未定义');
+        console.error(error);
+        reject(error);
+      }
+    };
+
+    const script = document.createElement('script');
+    script.src = `https://webapi.amap.com/maps?v=${AMAP_CONFIG.version}&key=${AMAP_CONFIG.key}&plugin=${AMAP_CONFIG.plugins.join(',')}&callback=${callbackName}`;
+    script.async = true;
     script.onerror = (event) => {
       clearTimeout(timeoutId);
-      const error = handleApiError('高德地图脚本加载失败，可能是网络问题或API配置错误')
-      console.error('脚本加载错误:', event)
-      // 清理回调函数
-      delete (window as any)[callbackName]
-      reject(error)
-    }
-    
+      if ((window as any)[callbackName]) {
+        delete (window as any)[callbackName];
+      }
+      const error = handleApiError('高德地图脚本加载失败，请检查网络连接或CSP策略');
+      console.error('Script load error:', event);
+      reject(error);
+    };
 
-    
-    document.head.appendChild(script)
-  })
-}
+    document.head.appendChild(script);
+    console.log('正在加载高德地图API脚本...');
+  });
+};
 
 // 扩展全局类型
 declare global {
   interface Window {
-    AMap: typeof AMap
+    AMap: any
     _AMapSecurityConfig?: {
       securityJsCode: string
     }

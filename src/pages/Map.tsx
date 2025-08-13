@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Plus, Filter, Search } from 'lucide-react'
+import { MapPin, Plus, Filter, Search, CreditCard, Smartphone, Settings, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 import { useMapStore } from '@/stores/useMapStore'
@@ -11,6 +11,8 @@ import Loading from '@/components/ui/Loading'
 import Modal from '@/components/ui/Modal'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import PaymentIcon from '@/components/icons/PaymentIcon'
+import { getCardNetworkLabel } from '@/lib/cardNetworks'
+import { usePermissions } from '@/hooks/usePermissions'
 
 const Map = () => {
   const navigate = useNavigate()
@@ -37,6 +39,7 @@ const Map = () => {
   } = useMapStore()
   
   const { user } = useAuthStore()
+  const permissions = usePermissions()
 
   // 初始化地图 - 简化版本
   useEffect(() => {
@@ -168,7 +171,7 @@ const Map = () => {
     posMachines.forEach((pos) => {
       const marker = new window.AMap.Marker({
         position: [pos.longitude, pos.latitude],
-        title: pos.name,
+        title: pos.merchant_name,
         icon: new window.AMap.Icon({
           size: new window.AMap.Size(32, 32),
           image: 'data:image/svg+xml;base64,' + btoa(`
@@ -281,16 +284,20 @@ const Map = () => {
           onClick={handleGetLocation}
           loading={locationLoading}
           className="w-12 h-12 rounded-full p-0 shadow-lg"
+          title="获取当前位置"
         >
           <MapPin className="w-5 h-5" />
         </Button>
         
-        <Button
-          onClick={handleAddPOS}
-          className="w-12 h-12 rounded-full p-0 shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-        </Button>
+        {permissions.canAdd && (
+          <Button
+            onClick={handleAddPOS}
+            className="w-12 h-12 rounded-full p-0 shadow-lg"
+            title="添加POS机"
+          >
+            <Plus className="w-5 h-5" />
+          </Button>
+        )}
       </div>
 
       {/* POS机详情弹窗 */}
@@ -303,31 +310,101 @@ const Map = () => {
         {selectedPOSMachine && (
           <Card>
             <CardHeader>
-              <CardTitle>{selectedPOSMachine.name}</CardTitle>
+              <CardTitle className="text-xl font-bold">{selectedPOSMachine.merchant_name}</CardTitle>
               <CardDescription>{selectedPOSMachine.address}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">商户信息</h4>
-                <p className="text-sm text-gray-600">{selectedPOSMachine.merchant_name}</p>
-              </div>
               
               {selectedPOSMachine.basic_info && Object.keys(selectedPOSMachine.basic_info).length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">支付信息</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    {selectedPOSMachine.basic_info.supports_apple_pay && (
-                      <span className="inline-flex items-center text-green-600"><PaymentIcon type="apple_pay" size={16} className="mr-1" />Apple Pay</span>
-                    )}
-                    {selectedPOSMachine.basic_info.supports_google_pay && (
-                      <span className="inline-flex items-center text-green-600"><PaymentIcon type="google_pay" size={16} className="mr-1" />Google Pay</span>
-                    )}
-                    {selectedPOSMachine.basic_info.supports_foreign_cards && (
-                      <span className="inline-flex items-center text-green-600"><PaymentIcon type="foreign_cards" size={16} className="mr-1" />外卡支持</span>
-                    )}
-                    {selectedPOSMachine.basic_info.supports_contactless && (
-                      <span className="inline-flex items-center text-green-600"><PaymentIcon type="contactless" size={16} className="mr-1" />闪付支持</span>
-                    )}
+                <div className="space-y-4">
+                  {/* 卡组织支持和Contactless支持并行布局 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 卡组织支持 */}
+                    <div>
+                      <h4 className="flex items-center space-x-2 font-medium text-gray-900 mb-2">
+                        <CreditCard className="w-4 h-4 text-blue-600" />
+                        <span>卡组织支持</span>
+                      </h4>
+                      {selectedPOSMachine.basic_info.supported_card_networks && selectedPOSMachine.basic_info.supported_card_networks.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedPOSMachine.basic_info.supported_card_networks.map((network) => (
+                            <span
+                              key={network}
+                              className="inline-block px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-md"
+                            >
+                              {getCardNetworkLabel(network)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm">待勘察</p>
+                      )}
+                    </div>
+
+                    {/* Contactless 支持 */}
+                    <div>
+                      <h4 className="flex items-center space-x-2 font-medium text-gray-900 mb-2">
+                        <Smartphone className="w-4 h-4 text-green-600" />
+                        <span>Contactless 支持</span>
+                      </h4>
+                      {(selectedPOSMachine.basic_info.supports_apple_pay || selectedPOSMachine.basic_info.supports_google_pay || selectedPOSMachine.basic_info.supports_contactless) ? (
+                        <div className="space-y-2 text-sm">
+                          {selectedPOSMachine.basic_info.supports_apple_pay && (
+                            <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <span>Apple Pay</span>
+                            </div>
+                          )}
+                          {selectedPOSMachine.basic_info.supports_google_pay && (
+                            <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <span>Google Pay</span>
+                            </div>
+                          )}
+                          {selectedPOSMachine.basic_info.supports_contactless && (
+                            <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <span>闪付支持</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm">待勘察</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 设备支持 - 重新定义为POS机型号和收单机构 */}
+                  <div>
+                    <h4 className="flex items-center space-x-2 font-medium text-gray-900 mb-2">
+                      <Settings className="w-4 h-4 text-purple-600" />
+                      <span>设备支持</span>
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-700">POS机型号:</span>
+                        <p className="text-gray-900 mt-1">
+                          {selectedPOSMachine.basic_info.model || <span className="text-gray-500">待勘察</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">收单机构:</span>
+                        <p className="text-gray-900 mt-1">
+                          {selectedPOSMachine.basic_info.acquiring_institution || <span className="text-gray-500">待勘察</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 备注板块 */}
+                  <div>
+                    <h4 className="flex items-center space-x-2 font-medium text-gray-900 mb-2">
+                      <FileText className="w-4 h-4 text-amber-600" />
+                      <span>备注</span>
+                    </h4>
+                    <p className="text-sm text-gray-900">
+                      {selectedPOSMachine.remarks || <span className="text-gray-500">待勘察</span>}
+                    </p>
                   </div>
                 </div>
               )}
@@ -387,15 +464,7 @@ const Map = () => {
                 />
                 <span className="text-sm">Google Pay</span>
               </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsForeignCards || false}
-                  onChange={(e) => setFilters({ supportsForeignCards: e.target.checked })}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">外卡支持</span>
-              </label>
+
             </div>
           </div>
           

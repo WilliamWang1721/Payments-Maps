@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { POSMachine } from '@/lib/supabase'
 import PaymentIcon from '@/components/icons/PaymentIcon'
+import { getCardNetworkLabel } from '@/lib/cardNetworks'
 
 interface POSMachineWithStats extends POSMachine {
   distance?: number
@@ -21,7 +22,7 @@ interface POSMachineWithStats extends POSMachine {
 const List = () => {
   const navigate = useNavigate()
   const [showFilters, setShowFilters] = useState(false)
-  const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'name'>('distance')
+  const [sortBy, setSortBy] = useState<'distance' | 'rating'>('distance')
   
   const {
     posMachines,
@@ -91,9 +92,7 @@ const List = () => {
       return (b.average_rating || 0) - (a.average_rating || 0)
     }
     
-    if (sortBy === 'name') {
-      return a.name.localeCompare(b.name)
-    }
+
     
     return 0
   })
@@ -185,13 +184,7 @@ const List = () => {
           >
             评分
           </Button>
-          <Button
-            onClick={() => setSortBy('name')}
-            variant={sortBy === 'name' ? 'primary' : 'outline'}
-            size="sm"
-          >
-            名称
-          </Button>
+
         </div>
       </div>
 
@@ -219,9 +212,9 @@ const List = () => {
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <CardTitle className="text-lg">{pos.name}</CardTitle>
-                    <CardDescription className="mt-1">
-                      {pos.merchant_name}
+                    <CardTitle className="text-xl font-bold">{pos.merchant_name}</CardTitle>
+                    <CardDescription className="mt-1 text-sm text-gray-500">
+                      {pos.address}
                     </CardDescription>
                   </div>
                   <div className="text-right">
@@ -236,9 +229,6 @@ const List = () => {
               
               <CardContent className="pt-0">
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600 line-clamp-2">
-                    {pos.address}
-                  </p>
                   
                   {/* 评分 */}
                   {pos.average_rating && (
@@ -252,7 +242,14 @@ const List = () => {
                     </div>
                   )}
                   
-                  {/* 支付方式标签 */}
+                  {/* 备注信息 */}
+                  {pos.remarks && (
+                    <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                      <span className="font-medium">备注：</span>{pos.remarks}
+                    </div>
+                  )}
+                  
+                  {/* 支付方式标签 - 只显示已填写的信息 */}
                   {pos.basic_info && (
                     <div className="flex flex-wrap gap-1">
                       {pos.basic_info.supports_apple_pay && (
@@ -265,14 +262,15 @@ const List = () => {
                           <PaymentIcon type="google_pay" size={14} className="mr-1" />Google Pay
                         </span>
                       )}
-                      {pos.basic_info.supports_foreign_cards && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
-                          <PaymentIcon type="foreign_cards" size={14} className="mr-1" />外卡支持
-                        </span>
-                      )}
                       {pos.basic_info.supports_contactless && (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-800">
                           <PaymentIcon type="contactless" size={14} className="mr-1" />闪付
+                        </span>
+                      )}
+                      {/* 显示卡组织支持（如果有的话） */}
+                      {pos.basic_info.supported_card_networks && pos.basic_info.supported_card_networks.length > 0 && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">
+                          {pos.basic_info.supported_card_networks.length}种卡组织
                         </span>
                       )}
                     </div>
@@ -313,15 +311,7 @@ const List = () => {
                 />
                 <span className="text-sm"><PaymentIcon type="google_pay" size={14} className="mr-1" />Google Pay</span>
               </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsForeignCards || false}
-                  onChange={(e) => setFilters({ supportsForeignCards: e.target.checked })}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">外卡支持</span>
-              </label>
+
               <label className="flex items-center space-x-2">
                 <input
                   type="checkbox"

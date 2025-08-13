@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Star, Edit, Heart, ExternalLink, MessageCircle } from 'lucide-react'
+import { ArrowLeft, MapPin, Star, Edit, Heart, ExternalLink, MessageCircle, CreditCard, Smartphone, Settings, FileText, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-// import { supabase } from '@/lib/supabase' // 移除数据库依赖
+import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
 import { locationUtils } from '@/lib/amap'
@@ -11,10 +11,11 @@ import Loading from '@/components/ui/Loading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
+import { getCardNetworkLabel } from '@/lib/cardNetworks'
+import { usePermissions } from '@/hooks/usePermissions'
 
 interface POSMachine {
   id: string
-  name: string
   merchant_name: string
   address: string
   latitude: number
@@ -27,6 +28,8 @@ interface POSMachine {
     supports_google_pay?: boolean
     supports_contactless?: boolean
     min_amount_no_pin?: number
+    supported_card_networks?: string[]
+    checkout_location?: '自助收银' | '人工收银'
   }
   extended_fields: Record<string, any>
   average_rating?: number
@@ -34,6 +37,8 @@ interface POSMachine {
   created_at: string
   updated_at: string
   created_by: string
+  remarks?: string
+  custom_links?: Array<{ title: string; url: string; platform: string }>
 }
 
 interface Review {
@@ -60,7 +65,8 @@ const POSDetail = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { posMachines } = useMapStore()
+  const { posMachines, deletePOSMachine } = useMapStore()
+  const permissions = usePermissions()
   
   const [pos, setPOS] = useState<POSMachine | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
@@ -70,6 +76,8 @@ const POSDetail = () => {
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [newReview, setNewReview] = useState({ rating: 5, comment: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -93,7 +101,6 @@ const POSDetail = () => {
         // 如果没找到，使用模拟数据
         const mockPOS: POSMachine = {
           id: id || '1',
-          name: '星巴克POS机',
           merchant_name: '星巴克咖啡',
           address: '北京市朝阳区建国门外大街1号',
           latitude: 39.9042,
@@ -122,33 +129,46 @@ const POSDetail = () => {
   }
 
   const loadReviews = async () => {
+    if (!id) return
+    
     try {
-      // 使用模拟评价数据，移除数据库依赖
-      const mockReviews: Review[] = [
-        {
-          id: '1',
-          rating: 5,
-          comment: '支付很方便，支持多种支付方式！',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          user_id: 'user1',
-          users: {
-            display_name: '张三',
-            avatar_url: undefined
-          }
-        },
-        {
-          id: '2',
-          rating: 4,
-          comment: '设备运行稳定，但有时候网络会慢一点。',
-          created_at: new Date(Date.now() - 172800000).toISOString(),
-          user_id: 'user2',
-          users: {
-            display_name: '李四',
-            avatar_url: undefined
-          }
+      // 从Supabase数据库查询真实评价数据
+      const { data: reviewsData, error } = await supabase
+        .from('reviews')
+        .select(`
+          id,
+          rating,
+          comment,
+          created_at,
+          user_id,
+          users (
+            id,
+            username,
+            avatar_url
+          )
+        `)
+        .eq('pos_machine_id', id)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('加载评价失败:', error)
+        return
+      }
+      
+      // 转换数据格式
+      const formattedReviews: Review[] = (reviewsData || []).map(review => ({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        created_at: review.created_at,
+        user_id: review.user_id,
+        users: {
+          display_name: (review.users as any)?.username || '匿名用户',
+          avatar_url: (review.users as any)?.avatar_url
         }
-      ]
-      setReviews(mockReviews)
+      }))
+      
+      setReviews(formattedReviews)
     } catch (error) {
       console.error('加载评价失败:', error)
     }
@@ -156,39 +176,64 @@ const POSDetail = () => {
 
   const loadExternalLinks = async () => {
     try {
-      // 使用模拟外部链接数据，移除数据库依赖
-      const mockLinks: ExternalLinkType[] = [
-        {
-          id: '1',
-          title: '商户官网',
-          url: 'https://www.starbucks.com.cn',
-          description: '星巴克中国官方网站',
+      // 从POS机数据中获取自定义链接
+      if (pos?.custom_links && pos.custom_links.length > 0) {
+        const links: ExternalLinkType[] = pos.custom_links.map((link, index) => ({
+          id: `custom-${index}`,
+          title: link.title,
+          url: link.url,
+          description: link.platform ? `${link.platform} 链接` : '',
           created_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          title: '支付指南',
-          url: 'https://help.starbucks.com.cn/payment',
-          description: '了解更多支付方式',
-          created_at: new Date().toISOString()
+        }))
+        setExternalLinks(links)
+      } else {
+        // 从数据库查询外部链接
+        const { data: externalLinksData, error: linksError } = await supabase
+          .from('external_links')
+          .select('*')
+          .eq('pos_machine_id', id)
+          .order('created_at', { ascending: false })
+        
+        if (linksError) {
+          console.error('加载外部链接失败:', linksError)
+          setExternalLinks([])
+        } else {
+          const links: ExternalLinkType[] = (externalLinksData || []).map(link => ({
+            id: link.id,
+            title: link.title,
+            url: link.url,
+            description: link.description || '',
+            created_at: link.created_at
+          }))
+          setExternalLinks(links)
         }
-      ]
-      setExternalLinks(mockLinks)
+      }
     } catch (error) {
       console.error('加载外部链接失败:', error)
     }
   }
 
   const checkFavoriteStatus = async () => {
-    if (!user) return
+    if (!user || !id) return
     
     try {
-      // 使用模拟收藏状态，移除数据库依赖
-      // 模拟用户已收藏某些POS机
-      const mockFavoriteIds = ['1', '2']
-      setIsFavorite(mockFavoriteIds.includes(id || ''))
+      // 从Supabase数据库查询用户收藏状态
+      const { data, error } = await supabase
+        .from('favorites')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('pos_machine_id', id)
+        .single()
+      
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 表示没有找到记录，这是正常的
+        console.error('查询收藏状态失败:', error)
+        return
+      }
+      
+      setIsFavorite(!!data)
     } catch (error) {
-      // 没有收藏记录是正常的
+      console.error('查询收藏状态失败:', error)
     }
   }
 
@@ -198,12 +243,40 @@ const POSDetail = () => {
       return
     }
 
+    if (!id) return
+
     try {
-      // 使用本地状态管理收藏，移除数据库依赖
       if (isFavorite) {
+        // 取消收藏 - 从数据库删除记录
+        const { error } = await supabase
+          .from('favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('pos_machine_id', id)
+        
+        if (error) {
+          console.error('取消收藏失败:', error)
+          toast.error('取消收藏失败，请重试')
+          return
+        }
+        
         setIsFavorite(false)
         toast.success('已取消收藏')
       } else {
+        // 添加收藏 - 向数据库插入记录
+        const { error } = await supabase
+          .from('favorites')
+          .insert({
+            user_id: user.id,
+            pos_machine_id: id
+          })
+        
+        if (error) {
+          console.error('添加收藏失败:', error)
+          toast.error('添加收藏失败，请重试')
+          return
+        }
+        
         setIsFavorite(true)
         toast.success('已添加到收藏')
       }
@@ -219,6 +292,8 @@ const POSDetail = () => {
       return
     }
 
+    if (!id) return
+
     if (!newReview.comment.trim()) {
       toast.error('请填写评价内容')
       return
@@ -226,20 +301,48 @@ const POSDetail = () => {
 
     setSubmittingReview(true)
     try {
-      // 使用本地状态管理评价，移除数据库依赖
+      // 保存评价到Supabase数据库
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert({
+          pos_machine_id: id,
+          user_id: user.id,
+          rating: newReview.rating,
+          comment: newReview.comment.trim()
+        })
+        .select(`
+          id,
+          rating,
+          comment,
+          created_at,
+          user_id,
+          users (
+            id,
+            username,
+            avatar_url
+          )
+        `)
+        .single()
+      
+      if (error) {
+        console.error('提交评价失败:', error)
+        toast.error('提交失败，请重试')
+        return
+      }
+      
+      // 格式化新评价数据并添加到本地列表
       const newReviewData: Review = {
-        id: Date.now().toString(),
-        rating: newReview.rating,
-        comment: newReview.comment.trim(),
-        created_at: new Date().toISOString(),
-        user_id: user.id,
+        id: data.id,
+        rating: data.rating,
+        comment: data.comment,
+        created_at: data.created_at,
+        user_id: data.user_id,
         users: {
-          display_name: user.user_metadata?.display_name || '匿名用户',
-          avatar_url: user.user_metadata?.avatar_url
+          display_name: (data.users as any)?.username || '匿名用户',
+          avatar_url: (data.users as any)?.avatar_url
         }
       }
       
-      // 添加到本地评价列表
       setReviews(prev => [newReviewData, ...prev])
       
       toast.success('评价提交成功')
@@ -250,6 +353,23 @@ const POSDetail = () => {
       toast.error('提交失败，请重试')
     } finally {
       setSubmittingReview(false)
+    }
+  }
+
+  const handleDeletePOS = async () => {
+    if (!id || !pos) return
+
+    setDeleting(true)
+    try {
+      await deletePOSMachine(id)
+      toast.success('POS机删除成功')
+      navigate('/')
+    } catch (error) {
+      console.error('删除POS机失败:', error)
+      toast.error('删除失败，请重试')
+    } finally {
+      setDeleting(false)
+      setShowDeleteModal(false)
     }
   }
 
@@ -320,14 +440,27 @@ const POSDetail = () => {
               <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
             </Button>
             
-            {user && user.id === pos.created_by && (
+            {permissions.canEditItem(pos.created_by) && (
               <Button
                 onClick={() => navigate(`/edit-pos/${pos.id}`)}
                 variant="ghost"
                 size="sm"
                 className="p-2"
+                title="编辑POS机"
               >
                 <Edit className="w-5 h-5" />
+              </Button>
+            )}
+            
+            {permissions.canDeleteItem(pos.created_by) && (
+              <Button
+                onClick={() => setShowDeleteModal(true)}
+                variant="ghost"
+                size="sm"
+                className="p-2 text-red-600 hover:text-red-700"
+                title="删除POS机"
+              >
+                <Trash2 className="w-5 h-5" />
               </Button>
             )}
           </div>
@@ -338,8 +471,7 @@ const POSDetail = () => {
         {/* 基本信息 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">{pos.name}</CardTitle>
-            <CardDescription>{pos.merchant_name}</CardDescription>
+            <CardTitle className="text-xl">{pos.merchant_name}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start space-x-2">
@@ -360,41 +492,130 @@ const POSDetail = () => {
           </CardContent>
         </Card>
 
-        {/* 支付信息 */}
+        {/* 支付信息 - 左右并行布局 */}
         {pos.basic_info && Object.keys(pos.basic_info).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>支付信息</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {pos.basic_info.supports_apple_pay && (
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span className="text-sm">Apple Pay</span>
+          <>
+            {/* 卡组织支持和Contactless支持并行布局 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* 卡组织支持 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <CreditCard className="w-5 h-5 text-blue-600" />
+                    <span>卡组织支持</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {pos.basic_info.supported_card_networks && pos.basic_info.supported_card_networks.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {pos.basic_info.supported_card_networks.map((network) => (
+                        <span
+                          key={network}
+                          className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                        >
+                          {getCardNetworkLabel(network)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">待勘察</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Contactless 支持 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Smartphone className="w-5 h-5 text-green-600" />
+                    <span>Contactless 支持</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(pos.basic_info.supports_apple_pay || pos.basic_info.supports_google_pay || pos.basic_info.supports_contactless) ? (
+                    <div className="space-y-3">
+                      {pos.basic_info.supports_apple_pay && (
+                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          <span className="text-sm font-medium">Apple Pay</span>
+                        </div>
+                      )}
+                      {pos.basic_info.supports_google_pay && (
+                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          <span className="text-sm font-medium">Google Pay</span>
+                        </div>
+                      )}
+                      {pos.basic_info.supports_contactless && (
+                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          <span className="text-sm font-medium">闪付支持</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">待勘察</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 设备支持 - 重新定义为POS机型号和收单机构 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Settings className="w-5 h-5 text-purple-600" />
+                  <span>设备支持</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">POS机型号</label>
+                    <p className="text-sm text-gray-900">
+                      {pos.basic_info.model || <span className="text-gray-500">待勘察</span>}
+                    </p>
                   </div>
-                )}
-                {pos.basic_info.supports_google_pay && (
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span className="text-sm">Google Pay</span>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">收单机构</label>
+                    <p className="text-sm text-gray-900">
+                      {pos.basic_info.acquiring_institution || <span className="text-gray-500">待勘察</span>}
+                    </p>
                   </div>
-                )}
-                {pos.basic_info.supports_foreign_cards && (
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span className="text-sm">外卡支持</span>
-                  </div>
-                )}
-                {pos.basic_info.supports_contactless && (
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span className="text-sm">闪付支持</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 结账地点板块 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Settings className="w-5 h-5 text-green-600" />
+                  <span>结账地点</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-900">
+                  {pos.basic_info.checkout_location || <span className="text-gray-500">待勘察</span>}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 备注板块 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <FileText className="w-5 h-5 text-amber-600" />
+                  <span>备注</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-900">
+                  {pos.remarks || <span className="text-gray-500">待勘察</span>}
+                </p>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {/* 自定义字段 */}
@@ -451,13 +672,15 @@ const POSDetail = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>用户评价</CardTitle>
-              <Button
-                onClick={() => setShowReviewModal(true)}
-                size="sm"
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                写评价
-              </Button>
+              {permissions.canAdd && (
+                <Button
+                  onClick={() => setShowReviewModal(true)}
+                  size="sm"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  写评价
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -535,6 +758,37 @@ const POSDetail = () => {
               className="flex-1"
             >
               提交评价
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 删除确认弹窗 */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="确认删除"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            确定要删除POS机 "{pos?.merchant_name}" 吗？此操作无法撤销。
+          </p>
+          
+          <div className="flex space-x-2">
+            <Button
+              onClick={() => setShowDeleteModal(false)}
+              variant="outline"
+              className="flex-1"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleDeletePOS}
+              loading={deleting}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+            >
+              删除
             </Button>
           </div>
         </div>
