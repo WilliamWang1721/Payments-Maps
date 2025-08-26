@@ -1,87 +1,102 @@
 import { Outlet, useLocation, Link } from 'react-router-dom'
-import { Map, List, User, Plus } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Map, List, User, Plus, Building2, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
+import PageTransition from '@/components/PageTransition'
+import { AnimatedBottomNav, AnimatedNavItem, AnimatedTopNav } from '@/components/AnimatedNavigation'
+import { useTranslation } from 'react-i18next'
+import OnboardingDetector from '@/components/OnboardingDetector'
 
 const Layout = () => {
   const location = useLocation()
   const { user } = useAuthStore()
+  const { t } = useTranslation()
 
   const navItems = [
     {
       path: '/map',
       icon: Map,
-      label: '地图',
+      label: t('navigation.map'),
     },
     {
       path: '/list',
       icon: List,
-      label: '列表',
+      label: t('navigation.list'),
+    },
+    {
+      path: '/brands',
+      icon: Building2,
+      label: t('navigation.brands'),
     },
     {
       path: '/add-pos',
       icon: Plus,
-      label: '添加',
+      label: t('navigation.add'),
     },
     {
       path: '/profile',
       icon: User,
-      label: '我的',
+      label: t('navigation.profile'),
     },
   ]
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <OnboardingDetector>
+      <div className="flex flex-col h-screen bg-gray-50 safe-area-padding">
       {/* 顶部导航栏 */}
-      <header className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-50">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">Payments Maps</h1>
-          <div className="flex items-center space-x-2">
-            {user?.user_metadata?.avatar_url && (
-              <img
-                src={user.user_metadata?.avatar_url || '/default-avatar.png'}
-                alt={user.user_metadata?.display_name || user.email || 'User'}
-                className="w-8 h-8 rounded-full"
-              />
-            )}
-            <span className="text-sm text-gray-600">{user?.user_metadata?.display_name || user?.email}</span>
-          </div>
+      <AnimatedTopNav title="Payments Maps" className="nav-top fixed top-0 left-0 right-0 webkit-overflow-scrolling">
+        <div className="flex items-center gap-3">
+          <img src="/web_logo.JPG" alt="Payments Maps Logo" className="w-8 h-8" />
         </div>
-      </header>
+        <div className="flex items-center space-x-2">
+          <Link 
+            to="/help" 
+            className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
+            title={t('navigation.help')}
+          >
+            <HelpCircle className="w-5 h-5" />
+          </Link>
+          {user?.user_metadata?.avatar_url && (
+            <img
+              src={user.user_metadata?.avatar_url || '/default-avatar.png'}
+              alt={user.user_metadata?.display_name || user.email || 'User'}
+              className="w-8 h-8 rounded-full"
+            />
+          )}
+          <span className="text-sm text-gray-600">{user?.user_metadata?.display_name || user?.email}</span>
+        </div>
+      </AnimatedTopNav>
 
       {/* 主内容区域 */}
-      <main className="flex-1 overflow-hidden pt-16 pb-16">
-        <div className="h-full">
+      <main className="flex-1 overflow-hidden pt-16 pb-16 webkit-overflow-scrolling" style={{
+        paddingTop: 'calc(4rem + env(safe-area-inset-top))',
+        paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))'
+      }}>
+        <PageTransition variant="fadeIn">
           <Outlet />
-        </div>
+        </PageTransition>
       </main>
 
       {/* 底部导航栏 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 z-50">
-        <div className="flex items-center justify-around">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = location.pathname === item.path
-            
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  'flex flex-col items-center space-y-1 px-3 py-2 rounded-lg transition-colors',
-                  isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                )}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{item.label}</span>
-              </Link>
-            )
-          })}
-        </div>
-      </nav>
-    </div>
+      <AnimatedBottomNav className="nav-bottom webkit-overflow-scrolling">
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const isActive = location.pathname === item.path
+          
+          return (
+            <Link key={item.path} to={item.path}>
+              <AnimatedNavItem
+                icon={Icon}
+                label={item.label}
+                isActive={isActive}
+                onClick={() => {}}
+                className="relative"
+              />
+            </Link>
+          )
+        })}
+      </AnimatedBottomNav>
+      </div>
+    </OnboardingDetector>
   )
 }
 

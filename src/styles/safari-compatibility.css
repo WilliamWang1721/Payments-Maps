@@ -1,0 +1,285 @@
+/* Safari 兼容性和前缀处理 */
+
+/* Safari 特有的CSS前缀 */
+
+/* Flexbox 兼容性 */
+.flex {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+}
+
+.flex-col {
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -webkit-flex-direction: column;
+  -ms-flex-direction: column;
+  flex-direction: column;
+}
+
+.flex-row {
+  -webkit-box-orient: horizontal;
+  -webkit-box-direction: normal;
+  -webkit-flex-direction: row;
+  -ms-flex-direction: row;
+  flex-direction: row;
+}
+
+.justify-center {
+  -webkit-box-pack: center;
+  -webkit-justify-content: center;
+  -ms-flex-pack: center;
+  justify-content: center;
+}
+
+.justify-between {
+  -webkit-box-pack: justify;
+  -webkit-justify-content: space-between;
+  -ms-flex-pack: justify;
+  justify-content: space-between;
+}
+
+.items-center {
+  -webkit-box-align: center;
+  -webkit-align-items: center;
+  -ms-flex-align: center;
+  align-items: center;
+}
+
+.flex-1 {
+  -webkit-box-flex: 1;
+  -webkit-flex: 1;
+  -ms-flex: 1;
+  flex: 1;
+}
+
+/* Grid 兼容性 */
+.grid {
+  display: -ms-grid;
+  display: grid;
+}
+
+/* Transform 兼容性 */
+.transform {
+  -webkit-transform: translateZ(0);
+  -ms-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.scale-105 {
+  -webkit-transform: scale(1.05);
+  -ms-transform: scale(1.05);
+  transform: scale(1.05);
+}
+
+.scale-95 {
+  -webkit-transform: scale(0.95);
+  -ms-transform: scale(0.95);
+  transform: scale(0.95);
+}
+
+.translate-x-full {
+  -webkit-transform: translateX(100%);
+  -ms-transform: translateX(100%);
+  transform: translateX(100%);
+}
+
+.translate-y-full {
+  -webkit-transform: translateY(100%);
+  -ms-transform: translateY(100%);
+  transform: translateY(100%);
+}
+
+/* Transition 兼容性 */
+.transition {
+  -webkit-transition: all 0.15s ease-in-out;
+  -o-transition: all 0.15s ease-in-out;
+  transition: all 0.15s ease-in-out;
+}
+
+.transition-colors {
+  -webkit-transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+  -o-transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+
+.transition-transform {
+  -webkit-transition: -webkit-transform 0.15s ease-in-out;
+  transition: -webkit-transform 0.15s ease-in-out;
+  -o-transition: transform 0.15s ease-in-out;
+  transition: transform 0.15s ease-in-out;
+  transition: transform 0.15s ease-in-out, -webkit-transform 0.15s ease-in-out;
+}
+
+/* Border Radius 兼容性 */
+.rounded {
+  -webkit-border-radius: 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.rounded-lg {
+  -webkit-border-radius: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+.rounded-full {
+  -webkit-border-radius: 9999px;
+  border-radius: 9999px;
+}
+
+/* Box Shadow 兼容性 */
+.shadow {
+  -webkit-box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.shadow-lg {
+  -webkit-box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Gradient 兼容性 */
+.bg-gradient-to-r {
+  background-image: -webkit-linear-gradient(left, var(--tw-gradient-stops));
+  background-image: -o-linear-gradient(left, var(--tw-gradient-stops));
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+.bg-gradient-to-b {
+  background-image: -webkit-linear-gradient(top, var(--tw-gradient-stops));
+  background-image: -o-linear-gradient(top, var(--tw-gradient-stops));
+  background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
+}
+
+/* Filter 兼容性 */
+.blur {
+  -webkit-filter: blur(8px);
+  filter: blur(8px);
+}
+
+.backdrop-blur {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* User Select 兼容性 */
+.select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Appearance 兼容性 */
+.appearance-none {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Safari 特有的修复 */
+
+/* 修复 Safari 的 position: sticky 问题 */
+.sticky {
+  position: -webkit-sticky;
+  position: sticky;
+}
+
+/* 修复 Safari 的 overflow 滚动问题 */
+.overflow-scroll {
+  overflow: scroll;
+  -webkit-overflow-scrolling: touch;
+}
+
+.overflow-auto {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 修复 Safari 的 text-size-adjust 问题 */
+.text-size-adjust-none {
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  -ms-text-size-adjust: none;
+  text-size-adjust: none;
+}
+
+/* 修复 Safari 的 tap highlight 问题 */
+.tap-highlight-transparent {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 修复 Safari 的 backface-visibility 问题 */
+.backface-hidden {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* 修复 Safari 的 perspective 问题 */
+.perspective-1000 {
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+}
+
+/* 修复 Safari 的 transform-style 问题 */
+.preserve-3d {
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+}
+
+/* Safari 移动端特有的修复 */
+@supports (-webkit-touch-callout: none) {
+  /* 仅在 Safari 移动端应用 */
+  
+  /* 修复输入框缩放问题 */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: 16px !important;
+    -webkit-appearance: none;
+    border-radius: 0;
+  }
+  
+  /* 修复按钮样式 */
+  button {
+    -webkit-appearance: none;
+    border-radius: 0;
+  }
+  
+  /* 修复滚动问题 */
+  .scroll-smooth {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+}
+
+/* Safari 桌面版特有的修复 */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  /* 仅在 Safari 桌面版应用 */
+  
+  /* 修复滚动条样式 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+}

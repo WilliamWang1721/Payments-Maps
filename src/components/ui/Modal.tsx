@@ -61,7 +61,7 @@ const Modal = ({
   }
 
   const modalContent = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="modal-backdrop fixed inset-0 flex items-center justify-center p-4">
       {/* 背景遮罩 */}
       <div
         className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
@@ -71,7 +71,7 @@ const Modal = ({
       {/* 模态框内容 */}
       <div
         className={cn(
-          'relative w-full bg-white rounded-lg shadow-xl',
+          'modal-content relative w-full bg-white rounded-lg shadow-xl safari-z-fix',
           sizes[size],
           className
         )}

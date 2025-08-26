@@ -1,0 +1,149 @@
+/* Z-Index 层级管理 - 统一管理所有组件的层级关系 */
+
+/* 基础层级定义 */
+:root {
+  /* 基础层级 */
+  --z-base: 1;
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-fixed: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-tooltip: 70;
+  --z-notification: 80;
+  --z-loading: 90;
+  --z-maximum: 100;
+}
+
+/* 导航栏层级 */
+.nav-top {
+  z-index: var(--z-fixed); /* 30 */
+}
+
+.nav-bottom {
+  z-index: var(--z-fixed); /* 30 */
+}
+
+/* 搜索栏和筛选器 */
+.search-bar {
+  z-index: 25; /* 略低于导航栏，但高于地图内容 */
+}
+
+.filter-panel {
+  z-index: var(--z-dropdown); /* 10 */
+}
+
+.search-suggestions {
+  z-index: 15; /* 高于筛选面板，低于搜索栏 */
+}
+
+/* 模态框层级 */
+.modal-backdrop {
+  z-index: var(--z-modal-backdrop); /* 40 */
+}
+
+.modal-content {
+  z-index: var(--z-modal); /* 50 */
+}
+
+.version-update-modal {
+  z-index: var(--z-modal); /* 50 */
+}
+
+/* 地图相关层级 */
+.map-container {
+  z-index: var(--z-base); /* 1 */
+}
+
+.map-controls {
+  z-index: 20; /* 高于地图，低于搜索栏 */
+}
+
+.map-popup {
+  z-index: var(--z-popover); /* 60 */
+}
+
+.map-loading-overlay {
+  z-index: var(--z-loading); /* 90 */
+}
+
+/* 下拉菜单和弹出框 */
+.dropdown-menu {
+  z-index: var(--z-dropdown); /* 10 */
+}
+
+.popover {
+  z-index: var(--z-popover); /* 60 */
+}
+
+.tooltip {
+  z-index: var(--z-tooltip); /* 70 */
+}
+
+/* 通知和提示 */
+.toast-notification {
+  z-index: var(--z-notification); /* 80 */
+}
+
+.loading-overlay {
+  z-index: var(--z-loading); /* 90 */
+}
+
+/* 特殊情况处理 */
+.z-maximum {
+  z-index: var(--z-maximum) !important; /* 100 */
+}
+
+/* Safari 特殊处理 */
+@supports (-webkit-appearance: none) {
+  .safari-z-fix {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+}
+
+/* 移动端层级优化 */
+@media (max-width: 768px) {
+  /* 在移动端确保触摸区域不被遮挡 */
+  .mobile-touch-layer {
+    z-index: var(--z-fixed);
+  }
+  
+  /* 移动端模态框层级调整 */
+  .mobile-modal {
+    z-index: calc(var(--z-modal) + 10); /* 60 */
+  }
+}
+
+/* 防止层级冲突的工具类 */
+.z-auto { z-index: auto; }
+.z-0 { z-index: 0; }
+.z-10 { z-index: 10; }
+.z-20 { z-index: 20; }
+.z-30 { z-index: 30; }
+.z-40 { z-index: 40; }
+.z-50 { z-index: 50; }
+.z-60 { z-index: 60; }
+.z-70 { z-index: 70; }
+.z-80 { z-index: 80; }
+.z-90 { z-index: 90; }
+.z-100 { z-index: 100; }
+
+/* 确保层级正确的辅助类 */
+.ensure-above-map {
+  z-index: var(--z-dropdown);
+  position: relative;
+}
+
+.ensure-above-content {
+  z-index: var(--z-sticky);
+  position: relative;
+}
+
+.ensure-above-fixed {
+  z-index: var(--z-modal-backdrop);
+  position: relative;
+}

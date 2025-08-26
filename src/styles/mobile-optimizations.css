@@ -1,0 +1,206 @@
+/* 移动端和Safari优化样式 */
+
+/* 小按钮和图标按钮的触摸区域优化 */
+.mobile-touch-button {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 筛选标签中的关闭按钮优化 */
+.filter-close-button {
+  min-height: 32px;
+  min-width: 32px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  padding: 4px;
+  margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.filter-close-button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* 地图控制按钮优化 */
+.map-control-button {
+  min-height: 48px;
+  min-width: 48px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 模态框关闭按钮优化 */
+.modal-close-button {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.modal-close-button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* 表单元素移动端优化 */
+.mobile-form-element {
+  font-size: 16px; /* 防止iOS Safari缩放 */
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 选择框和下拉菜单优化 */
+.mobile-select {
+  min-height: 44px;
+  font-size: 16px;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="%23666" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  padding-right: 40px;
+}
+
+/* 复选框和单选按钮优化 */
+.mobile-checkbox,
+.mobile-radio {
+  min-height: 20px;
+  min-width: 20px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 标签点击区域优化 */
+.mobile-label {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+/* 链接和可点击文本优化 */
+.mobile-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  padding: 8px 4px;
+}
+
+/* 卡片和列表项优化 */
+.mobile-card,
+.mobile-list-item {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+/* 滚动区域优化 */
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-scrolling: touch;
+}
+
+/* 固定定位元素优化 */
+.mobile-fixed {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* 动画性能优化 */
+.mobile-animation {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* 媒体查询：针对小屏幕设备 */
+@media (max-width: 768px) {
+  /* 增加所有可点击元素的内边距 */
+  button, 
+  [role="button"], 
+  .btn {
+    min-height: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* 增加导航链接的点击区域 */
+  nav a {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+  }
+  
+  /* 优化表格在移动端的显示 */
+  table {
+    font-size: 14px;
+  }
+  
+  th, td {
+    padding: 12px 8px;
+  }
+}
+
+/* 媒体查询：针对iPhone设备 */
+@media (max-width: 414px) {
+  /* iPhone特定优化 */
+  .container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  
+  /* 按钮在小屏幕上的优化 */
+  .btn-group button {
+    flex: 1;
+    min-height: 48px;
+  }
+  
+  /* 表单在小屏幕上的优化 */
+  .form-group {
+    margin-bottom: 20px;
+  }
+  
+  input, 
+  textarea, 
+  select {
+    font-size: 16px;
+    min-height: 48px;
+  }
+}

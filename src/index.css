@@ -1,11 +1,24 @@
+@import './styles/mobile-optimizations.css';
+@import './styles/z-index-layers.css';
+@import './styles/safari-animations.css';
+@import './styles/safari-compatibility.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Safari 兼容性和移动端优化 */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
+  /* Safari 移动端优化 */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  /* 防止 Safari 缩放 */
+  touch-action: manipulation;
+  /* 支持安全区域 */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 :root {
@@ -17,4 +30,66 @@ html, body, #root {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Safari 特有的样式修复 */
+* {
+  /* 防止 Safari 的默认样式覆盖 */
+  -webkit-appearance: none;
+  -webkit-border-radius: 0;
+}
+
+/* 移动端触摸优化 */
+button, [role="button"], input[type="submit"], input[type="button"] {
+  /* 增加触摸区域 */
+  min-height: 44px;
+  min-width: 44px;
+  /* Safari 触摸反馈 */
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+/* 输入框 Safari 优化 */
+input, textarea, select {
+  /* 移除 Safari 默认样式 */
+  -webkit-appearance: none;
+  -webkit-border-radius: 0;
+  /* 防止缩放 */
+  font-size: 16px;
+}
+
+/* 修复 Safari 的 flexbox 问题 */
+.flex {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: flex;
+}
+
+.flex-col {
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -webkit-flex-direction: column;
+  flex-direction: column;
+}
+
+/* 修复 Safari 的 position: fixed 问题 */
+.fixed {
+  position: -webkit-sticky;
+  position: fixed;
+}
+
+/* 防止内容溢出 */
+.overflow-hidden {
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safari 动画优化 */
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
 }
