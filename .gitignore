@@ -26,3 +26,24 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Vercel deployment
+.vercel
+
+# Sensitive files
+*.csv
+*.sql
+*.JPG
+*.jpg
+*.png
+add_remarks_field.sql
+schema.sql
+
+# Debug and setup files
+*DEBUG*.md
+*SETUP*.md
+*OAUTH*.md
+
+# Local documentation
+LinuxDO推广说明.md
+上海地区接受刷卡的商户汇总.csv

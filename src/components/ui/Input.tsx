@@ -21,12 +21,20 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           type={type}
           ref={ref}
           className={cn(
-            'block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400',
+            'block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400',
             'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
+            'min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none',
             error && 'border-red-300 focus:ring-red-500 focus:border-red-500',
             className
           )}
+          style={{
+            WebkitTapHighlightColor: 'transparent',
+            touchAction: 'manipulation',
+            WebkitAppearance: 'none',
+            fontSize: '16px', // 防止iOS Safari缩放
+            ...props.style
+          }}
           {...props}
         />
         {error && (

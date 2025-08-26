@@ -1,34 +1,37 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { type User } from '@/lib/supabase'
-import { signInWithGoogleSupabase, getCurrentSupabaseUser, signOutSupabase, onSupabaseAuthStateChange } from '@/lib/supabase-auth'
+import { type User, supabase } from '@/lib/supabase'
+import { loginWithLinuxDO, getCurrentLinuxDOUser, logoutLinuxDO, refreshLinuxDOUser } from '@/lib/linuxdo-auth'
 
 interface AuthState {
   user: User | null
   loading: boolean
   initialized: boolean
-  loginWithSupabaseGoogle: () => Promise<void>
+  setUser: (user: User | null) => void
+  loginWithLinuxDO: () => void
   logout: () => Promise<void>
   initialize: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(persist(
-  (set, get) => {
-    // 监听 Supabase 认证状态变化
-    let authListener: { data: { subscription: any } } | null = null
-
+  (set) => {
     return {
       user: null,
       loading: false,
       initialized: false,
 
-      loginWithSupabaseGoogle: async () => {
+      setUser: (user: User | null) => {
+        set({ user })
+      },
+
+      loginWithLinuxDO: () => {
         set({ loading: true })
         try {
-          await signInWithGoogleSupabase()
-          // Supabase OAuth 会自动处理重定向和状态更新
+          loginWithLinuxDO()
+          // LinuxDO OAuth 会自动处理重定向
         } catch (error) {
-          console.error('Supabase Google 登录失败:', error)
+          console.error('LinuxDO 登录失败:', error)
           set({ loading: false })
           throw error
         }
@@ -37,7 +40,15 @@ export const useAuthStore = create<AuthState>()(persist(
       logout: async () => {
         set({ loading: true })
         try {
-          await signOutSupabase()
+          // 先尝试登出Supabase
+          const { error: supabaseError } = await supabase.auth.signOut()
+          if (supabaseError) {
+            console.error('Supabase 登出失败:', supabaseError)
+          }
+          
+          // 再尝试登出LinuxDO
+          await logoutLinuxDO()
+          
           set({ 
             user: null,
             loading: false,
@@ -57,25 +68,42 @@ export const useAuthStore = create<AuthState>()(persist(
         set({ loading: true })
         
         try {
-          // 获取当前 Supabase 用户
-          const supabaseUser = await getCurrentSupabaseUser()
+          // 首先检查 Supabase 会话
+          const { data: { session }, error: supabaseError } = await supabase.auth.getSession()
+          
+          if (session?.user && !supabaseError) {
+            // 如果有 Supabase 会话，使用 Supabase 用户
+            const supabaseUser: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              created_at: session.user.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              user_metadata: {
+                display_name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+                avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
+                provider: session.user.app_metadata?.provider || 'google',
+                username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'User',
+                trust_level: session.user.user_metadata?.trust_level || 0,
+                role: session.user.user_metadata?.role || 'user',
+              }
+            }
+            
+            set({ 
+              user: supabaseUser,
+              loading: false,
+              initialized: true
+            })
+            return
+          }
+          
+          // 如果没有 Supabase 会话，尝试获取 LinuxDO 用户
+          const linuxdoUser = getCurrentLinuxDOUser()
           
           set({ 
-            user: supabaseUser,
+            user: linuxdoUser,
             loading: false,
             initialized: true
           })
-
-          // 设置认证状态监听器
-          if (!authListener) {
-            authListener = onSupabaseAuthStateChange((user) => {
-              set({ 
-                user,
-                loading: false,
-                initialized: true
-              })
-            })
-          }
         } catch (error) {
           console.error('初始化失败:', error)
           set({ 
@@ -83,6 +111,40 @@ export const useAuthStore = create<AuthState>()(persist(
             loading: false, 
             initialized: true 
           })
+        }
+      },
+
+      refreshUser: async () => {
+        try {
+          // 首先尝试刷新 Supabase 会话
+          const { data: { session }, error: supabaseError } = await supabase.auth.getSession()
+          
+          if (session?.user && !supabaseError) {
+            // 如果有 Supabase 会话，使用 Supabase 用户
+            const supabaseUser: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              created_at: session.user.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              user_metadata: {
+                display_name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+                avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
+                provider: session.user.app_metadata?.provider || 'google',
+                username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'User',
+                trust_level: session.user.user_metadata?.trust_level || 0,
+                role: session.user.user_metadata?.role || 'user',
+              }
+            }
+            set({ user: supabaseUser })
+            return
+          }
+          
+          // 如果没有 Supabase 会话，尝试刷新 LinuxDO 用户
+          const linuxdoUser = await refreshLinuxDOUser()
+          set({ user: linuxdoUser })
+        } catch (error) {
+          console.error('刷新用户信息失败:', error)
+          throw error
         }
       },
     }

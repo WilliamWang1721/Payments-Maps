@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, Sparkles, Calendar, List } from 'lucide-react'
 import { currentVersion, markVersionAsSeen, type VersionInfo } from '@/lib/version'
-import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 
 interface VersionUpdateModalProps {
@@ -36,12 +35,12 @@ const VersionUpdateModal = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
+      className="version-update-modal fixed inset-0 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
       <div 
         className={`
-          relative w-full max-w-md bg-white rounded-2xl shadow-2xl transform transition-all duration-200
+          modal-content safari-z-fix relative w-full max-w-md bg-white rounded-2xl shadow-2xl transform transition-all duration-200
           ${isClosing ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}
         `}
         onClick={(e) => e.stopPropagation()}

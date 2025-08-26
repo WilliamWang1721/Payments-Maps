@@ -1,0 +1,205 @@
+/* Safari动画优化和兼容性处理 */
+
+/* 硬件加速优化 - 强制GPU渲染 */
+.safari-animation-optimize {
+  -webkit-transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  -webkit-perspective: 1000;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform, opacity;
+}
+
+/* 动画性能优化 */
+.safari-smooth-animation {
+  -webkit-animation-fill-mode: both;
+  animation-fill-mode: both;
+  -webkit-animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 页面切换动画优化 */
+.page-transition {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* 模态框动画优化 */
+.modal-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity, scale;
+}
+
+/* 列表项动画优化 */
+.list-item-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* 按钮动画优化 */
+.button-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* 卡片悬停动画优化 */
+.card-hover-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, box-shadow;
+}
+
+/* 输入框焦点动画优化 */
+.input-focus-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform, border-color;
+}
+
+/* 加载动画优化 */
+.loading-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-animation-iteration-count: infinite;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+/* 旋转动画优化 */
+.rotate-animation {
+  -webkit-transform-origin: center;
+  transform-origin: center;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* 缩放动画优化 */
+.scale-animation {
+  -webkit-transform-origin: center;
+  transform-origin: center;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* 透明度动画优化 */
+.opacity-animation {
+  will-change: opacity;
+}
+
+/* 滑动动画优化 */
+.slide-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* 骨架屏动画优化 */
+.skeleton-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: background-position;
+  background-size: 200% 100%;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+}
+
+/* 导航动画优化 */
+.nav-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, color;
+}
+
+/* 弹出框动画优化 */
+.popover-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* 搜索结果动画优化 */
+.search-results-animation {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* 移动端动画优化 */
+@media (max-width: 768px) {
+  /* 减少移动端动画复杂度 */
+  .mobile-animation-reduce {
+    -webkit-animation-duration: 0.2s !important;
+    animation-duration: 0.2s !important;
+  }
+  
+  /* 移动端禁用某些动画 */
+  .mobile-animation-disable {
+    -webkit-animation: none !important;
+    animation: none !important;
+    -webkit-transition: none !important;
+    transition: none !important;
+  }
+}
+
+/* 低性能设备动画优化 */
+@media (prefers-reduced-motion: reduce) {
+  .respect-motion-preference {
+    -webkit-animation-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    -webkit-animation-iteration-count: 1 !important;
+    animation-iteration-count: 1 !important;
+    -webkit-transition-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Safari特定的动画修复 */
+@supports (-webkit-appearance: none) {
+  .safari-specific-fix {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 3D变换优化 */
+.transform-3d {
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+}
+
+/* 动画容器优化 */
+.animation-container {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  contain: layout style paint;
+  isolation: isolate;
+}

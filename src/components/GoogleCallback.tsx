@@ -40,8 +40,10 @@ const GoogleCallback = () => {
             console.log('✅ Supabase Auth 登录成功')
             // 清除URL中的hash参数
             window.history.replaceState({}, document.title, window.location.pathname)
-            // 重新初始化认证状态
+            // 等待auth store初始化完成
             await initialize()
+            // 稍微延迟以确保状态更新完成
+            await new Promise(resolve => setTimeout(resolve, 500))
             // 登录成功，跳转到主页
             navigate('/', { replace: true })
             return

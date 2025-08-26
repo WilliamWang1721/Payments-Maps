@@ -81,7 +81,8 @@ export const usePermissions = () => {
         // 根据角色设置权限
         const isSuperAdmin = role === 'super_admin';
         const isAdmin = role === 'admin' || isSuperAdmin;
-        const canModify = role === 'super_admin' || role === 'admin' || role === 'beta';
+        // 修改权限：regular用户现在也可以添加、编辑自己的信息
+        const canModify = role === 'super_admin' || role === 'admin' || role === 'beta' || role === 'regular';
         
         const newPermissions: PermissionState = {
           role,

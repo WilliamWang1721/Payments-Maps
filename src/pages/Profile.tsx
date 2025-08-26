@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Heart, MapPin, Settings, LogOut, Edit, Star, Shield, Crown, Users } from 'lucide-react'
+import { User, Heart, MapPin, Settings, LogOut, Edit, Star, Shield, Crown, Users, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import Button from '@/components/ui/Button'
 import Loading from '@/components/ui/Loading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
-import Modal from '@/components/ui/Modal'
+import AnimatedModal from '@/components/ui/AnimatedModal'
 import Input from '@/components/ui/Input'
+import { BetaActivationModal } from '@/components/BetaActivationModal'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 
 interface UserStats {
@@ -23,7 +24,9 @@ interface FavoritePOS {
     id: string
     merchant_name: string
     address: string
-    average_rating?: number
+    basic_info?: {
+      acquiring_institution?: string
+    }
   } | null
 }
 
@@ -37,6 +40,7 @@ const Profile = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editForm, setEditForm] = useState({ display_name: '', bio: '' })
   const [updating, setUpdating] = useState(false)
+  const [showActivationModal, setShowActivationModal] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -74,6 +78,7 @@ const Profile = () => {
               id,
               merchant_name,
               address,
+              basic_info,
               reviews (
                 rating
               )
@@ -93,10 +98,6 @@ const Profile = () => {
       // 设置收藏数据
       const formattedFavorites: FavoritePOS[] = (favoritesResult.data || []).map(fav => {
         const posMachine = fav.pos_machines as any
-        const reviews = posMachine?.reviews || []
-        const avgRating = reviews.length > 0 
-          ? reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / reviews.length
-          : 0
         
         return {
           id: fav.id,
@@ -104,7 +105,7 @@ const Profile = () => {
             id: posMachine?.id,
             merchant_name: posMachine?.merchant_name,
             address: posMachine?.address,
-            average_rating: avgRating
+            basic_info: posMachine?.basic_info
           }
         }
       })
@@ -166,6 +167,13 @@ const Profile = () => {
       console.error('退出登录失败:', error)
       toast.error('退出失败，请重试')
     }
+  }
+
+  const handleActivationSuccess = async () => {
+    // 重新加载用户数据和权限
+    await loadUserData()
+    // 刷新页面以更新权限状态
+    window.location.reload()
   }
 
   const removeFavorite = async (favoriteId: string) => {
@@ -373,14 +381,9 @@ const Profile = () => {
                         <h4 className="font-medium text-gray-900">{favorite.pos_machines.merchant_name}</h4>
                         <p className="text-sm text-gray-600">{favorite.pos_machines.merchant_name}</p>
                         <p className="text-xs text-gray-500 mt-1">{favorite.pos_machines.address}</p>
-                        {favorite.pos_machines.average_rating && (
-                          <div className="flex items-center space-x-1 mt-1">
-                            <div className="flex">
-                              {renderStars(Math.round(favorite.pos_machines.average_rating))}
-                            </div>
-                            <span className="text-xs text-gray-600">
-                              {favorite.pos_machines.average_rating.toFixed(1)}
-                            </span>
+                        {favorite.pos_machines.basic_info?.acquiring_institution && (
+                          <div className="text-xs text-gray-600 mt-1">
+                            收单机构：{favorite.pos_machines.basic_info.acquiring_institution}
                           </div>
                         )}
                       </div>
@@ -428,6 +431,18 @@ const Profile = () => {
               </Button>
             )}
             
+            {/* Beta权益激活按钮 - 仅对普通用户显示 */}
+            {!permissions.isLoading && permissions.role === 'regular' && (
+              <Button
+                onClick={() => setShowActivationModal(true)}
+                variant="outline"
+                className="w-full justify-start text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <Zap className="w-4 h-4 mr-3" />
+                激活Beta权益
+              </Button>
+            )}
+            
             <Button
               onClick={() => navigate('/my-pos')}
               variant="outline"
@@ -438,6 +453,24 @@ const Profile = () => {
             </Button>
             
             <Button
+              onClick={() => navigate('/favorites')}
+              variant="outline"
+              className="w-full justify-start"
+            >
+              <Heart className="w-4 h-4 mr-3" />
+              我的收藏
+            </Button>
+            
+            <Button
+              onClick={() => navigate('/history')}
+              variant="outline"
+              className="w-full justify-start"
+            >
+              <MapPin className="w-4 h-4 mr-3" />
+              浏览历史
+            </Button>
+            
+            <Button
               onClick={() => navigate('/settings')}
               variant="outline"
               className="w-full justify-start"
@@ -445,6 +478,34 @@ const Profile = () => {
               <Settings className="w-4 h-4 mr-3" />
               设置
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* 致谢板块 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Heart className="w-5 h-5 mr-2 text-red-500" />
+              致谢
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-gray-600 space-y-3">
+              <div>
+                <p className="font-medium text-gray-800 mb-1">🙏 感谢开源社区</p>
+                <p>感谢所有开源项目的贡献者，让我们能够站在巨人的肩膀上构建这个应用。特别感谢 React、Vite、Tailwind CSS、Supabase 等优秀的开源项目。</p>
+              </div>
+              
+              <div>
+                <p className="font-medium text-gray-800 mb-1">❤️ 感谢用户支持</p>
+                <p>感谢每一位用户的使用、反馈和建议，你们的支持是我们不断改进的动力。每一条评价、每一个收藏都让这个平台变得更好。</p>
+              </div>
+              
+              <div>
+                <p className="font-medium text-gray-800 mb-1">🚀 项目愿景</p>
+                <p>我们致力于为大家提供最准确、最实用的支付终端信息，让每一次支付都更加便捷。感谢所有为此目标贡献力量的朋友们！</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -464,7 +525,7 @@ const Profile = () => {
       </div>
 
       {/* 编辑个人信息弹窗 */}
-      <Modal
+      <AnimatedModal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         title="编辑个人信息"
@@ -508,7 +569,14 @@ const Profile = () => {
             </Button>
           </div>
         </div>
-      </Modal>
+      </AnimatedModal>
+
+      {/* Beta权益激活弹窗 */}
+      <BetaActivationModal
+        isOpen={showActivationModal}
+        onClose={() => setShowActivationModal(false)}
+        onSuccess={handleActivationSuccess}
+      />
     </div>
   )
 }

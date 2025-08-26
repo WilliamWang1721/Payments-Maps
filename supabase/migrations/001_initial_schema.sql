@@ -95,7 +95,11 @@ ALTER TABLE external_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 
 -- 用户表策略
-CREATE POLICY "Users can view all profiles" ON users FOR SELECT USING (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can view all profiles') THEN
+    CREATE POLICY "Users can view all profiles" ON users FOR SELECT USING (true);
+  END IF;
+END $$;
 CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users can insert own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
 
