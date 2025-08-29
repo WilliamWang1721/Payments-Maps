@@ -69,31 +69,35 @@ export const useAuthStore = create<AuthState>()(persist(
         
         try {
           // 首先检查 Supabase 会话
-          const { data: { session }, error: supabaseError } = await supabase.auth.getSession()
-          
-          if (session?.user && !supabaseError) {
-            // 如果有 Supabase 会话，使用 Supabase 用户
-            const supabaseUser: User = {
-              id: session.user.id,
-              email: session.user.email || '',
-              created_at: session.user.created_at || new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              user_metadata: {
-                display_name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-                avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
-                provider: session.user.app_metadata?.provider || 'google',
-                username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'User',
-                trust_level: session.user.user_metadata?.trust_level || 0,
-                role: session.user.user_metadata?.role || 'user',
-              }
-            }
+          try {
+            const { data: { session }, error: supabaseError } = await supabase.auth.getSession()
             
-            set({ 
-              user: supabaseUser,
-              loading: false,
-              initialized: true
-            })
-            return
+            if (session?.user && !supabaseError) {
+              // 如果有 Supabase 会话，使用 Supabase 用户
+              const supabaseUser: User = {
+                id: session.user.id,
+                email: session.user.email || '',
+                created_at: session.user.created_at || new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                user_metadata: {
+                  display_name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+                  avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
+                  provider: session.user.app_metadata?.provider || 'google',
+                  username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'User',
+                  trust_level: session.user.user_metadata?.trust_level || 0,
+                  role: session.user.user_metadata?.role || 'user',
+                }
+              }
+              
+              set({ 
+                user: supabaseUser,
+                loading: false,
+                initialized: true
+              })
+              return
+            }
+          } catch (supabaseError) {
+            console.warn('Supabase session check failed:', supabaseError)
           }
           
           // 如果没有 Supabase 会话，尝试获取 LinuxDO 用户
