@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { toast } from 'sonner'
-import { loadAMap, DEFAULT_MAP_CONFIG } from '@/lib/amap'
+import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 
 interface SimpleMapPickerProps {
   isOpen: boolean
@@ -26,6 +26,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   
   const [isMapReady, setIsMapReady] = useState(false)
   const [selectedPos, setSelectedPos] = useState({ lat: initialLat, lng: initialLng, address: '' })
+  const [isLocating, setIsLocating] = useState(false)
 
   useEffect(() => {
     if (!isOpen) {
@@ -116,6 +117,24 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
     onClose()
   }
 
+  const handleLocateMe = async () => {
+    if (!isMapReady) return
+    if (isLocating) return
+
+    setIsLocating(true)
+    const toastId = toast.loading('正在获取当前位置...')
+    try {
+      const { longitude, latitude } = await locationUtils.getCurrentPosition(3)
+      placeMarker(longitude, latitude)
+      toast.success('已定位到当前位置', { id: toastId })
+    } catch (err: any) {
+      console.error('获取当前位置失败:', err)
+      toast.error('获取当前位置失败，请手动选择位置', { id: toastId })
+    } finally {
+      setIsLocating(false)
+    }
+  }
+
   // 使用 React Portal 确保脱离父级层叠上下文，并锁定页面滚动
   useEffect(() => {
     if (isOpen) {
@@ -143,7 +162,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
       />
       
       {/* 弹窗内容 */}
-      <div className="relative bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+      <div className="relative bg-white rounded-xl shadow-2xl max-w-4xl w-full max_h-[90vh] max-h-[90vh] overflow-hidden">
         {/* 标题栏 */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold">选择位置</h3>
@@ -164,6 +183,25 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
         
         {/* 地图容器 */}
         <div className="relative">
+          {/* 获取当前位置按钮（悬浮于地图右上角）*/}
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLocateMe() }}
+            className="absolute top-3 right-3 z-10 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow hover:bg-gray-50 active:scale-[0.98] transition flex items-center space-x-2"
+            aria-label="获取当前位置"
+          >
+            {isLocating ? (
+              <svg className="w-4 h-4 animate-spin text-gray-600" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <span className="text-sm text-gray-700">获取当前位置</span>
+          </button>
+
           <div 
             ref={containerRef}
             className="w-full"

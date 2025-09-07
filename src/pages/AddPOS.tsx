@@ -929,22 +929,6 @@ const AddPOS = () => {
         </AnimatedButton>
       </div>
 
-      {/* 调试信息 */}
-      <div className="fixed top-20 right-4 bg-red-500 text-white p-2 rounded-lg z-[10000] space-y-2">
-        <div>showLocationModal: {showLocationModal ? 'true' : 'false'}</div>
-        <button 
-          onClick={() => {
-            console.log('测试按钮点击前:', showLocationModal)
-            const newValue = !showLocationModal
-            setShowLocationModal(newValue)
-            console.log('设置新值为:', newValue)
-          }}
-          className="bg-white text-red-500 px-2 py-1 rounded text-sm"
-        >
-          测试切换状态
-        </button>
-      </div>
-
       {/* 地图选择位置组件 */}
       <SimpleMapPicker
         isOpen={showLocationModal}
