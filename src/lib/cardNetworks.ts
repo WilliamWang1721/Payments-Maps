@@ -1,13 +1,14 @@
 // 支持的卡组织类型
 export const CARD_NETWORKS = [
-  { value: 'visa', label: 'Visa' },
   { value: 'mastercard', label: 'Mastercard' },
-  { value: 'amex_cn', label: 'AMEX CN' },
-  { value: 'amex', label: 'AMEX' },
-  { value: 'maestro', label: '万事网联' },
+  { value: 'visa', label: 'Visa' },
+  { value: 'unionpay', label: 'UnionPay 银联' },
+  { value: 'amex_cn', label: 'American Express CN' },
+  { value: 'amex', label: 'American Express GL' },
+  { value: 'mastercard_cn', label: 'Mastercard CN 万事网联' },
   { value: 'jcb', label: 'JCB' },
   { value: 'discover', label: 'Discover' },
-  { value: 'unionpay', label: '银联' }
+  { value: 'diners', label: 'Diners Club' }
 ] as const
 
 // 卡组织类型

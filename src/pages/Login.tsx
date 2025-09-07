@@ -14,7 +14,7 @@ const Login = () => {
 
   // 如果用户已登录，重定向到首页
   if (user) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/app/map" replace />
   }
 
   const handleGoogleLogin = async () => {

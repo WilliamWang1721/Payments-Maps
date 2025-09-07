@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, User, Bell, MapPin, Shield, Trash2, Save, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, User, Bell, MapPin, Shield, Trash2, Save, Eye, EyeOff, RotateCcw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedInput from '@/components/ui/AnimatedInput'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
+import { useOnboardingTour } from '@/hooks/useOnboardingTour'
 
 interface UserSettings {
   id?: string
@@ -27,6 +28,7 @@ const Settings: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { t } = useTranslation()
+  const { resetTour } = useOnboardingTour()
   const [settings, setSettings] = useState<UserSettings>({
     user_id: user?.id || '',
     default_search_radius: 2000,
@@ -421,6 +423,26 @@ const Settings: React.FC = () => {
                     <option value="auto">{t('settings.autoMode')}</option>
                   </select>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 引导设置 */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">引导设置</h2>
+              <div className="space-y-4">
+                <AnimatedButton
+                  onClick={() => {
+                    resetTour()
+                    toast.success('新手引导已重置，返回地图页面将重新开始')
+                    setTimeout(() => navigate('/app/map'), 1000)
+                  }}
+                  className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  <span>重新开始新手引导</span>
+                </AnimatedButton>
               </div>
             </div>
           </div>

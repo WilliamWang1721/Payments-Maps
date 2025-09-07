@@ -40,7 +40,7 @@ const MicrosoftCallback = () => {
         toast.success('Microsoft登录成功！')
         
         // 重定向到首页
-        navigate('/', { replace: true })
+        navigate('/app/map', { replace: true })
         
       } catch (error) {
         console.error('❌ Microsoft OAuth回调处理失败:', error)

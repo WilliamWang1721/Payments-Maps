@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180">
+  <!-- JCB official colors: Blue #0E4C96, Red #CC0000, Green #61B24A -->
+  <g>
+    <!-- Background -->
+    <rect x="0" y="0" width="300" height="180" rx="8" fill="#0E4C96"/>
+    
+    <!-- JCB Letters -->
+    <text x="75" y="110" text-anchor="middle" fill="white" font-family="Arial Black, Arial" font-size="48" font-weight="900">J</text>
+    <text x="150" y="110" text-anchor="middle" fill="white" font-family="Arial Black, Arial" font-size="48" font-weight="900">C</text>
+    <text x="225" y="110" text-anchor="middle" fill="white" font-family="Arial Black, Arial" font-size="48" font-weight="900">B</text>
+    
+    <!-- Vertical separator lines -->
+    <rect x="112" y="70" width="2" height="60" fill="white" opacity="0.7"/>
+    <rect x="118" y="70" width="2" height="60" fill="white" opacity="0.7"/>
+    <rect x="124" y="70" width="2" height="60" fill="white" opacity="0.7"/>
+    
+    <rect x="176" y="70" width="2" height="60" fill="white" opacity="0.7"/>
+    <rect x="182" y="70" width="2" height="60" fill="white" opacity="0.7"/>
+    <rect x="188" y="70" width="2" height="60" fill="white" opacity="0.7"/>
+    
+    <!-- Top accent bar -->
+    <rect x="40" y="30" width="220" height="4" fill="white" opacity="0.8"/>
+    
+    <!-- Bottom text -->
+    <text x="150" y="155" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="12" font-weight="normal" opacity="0.9">INTERNATIONAL</text>
+  </g>
+</svg>

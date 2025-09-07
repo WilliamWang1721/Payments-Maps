@@ -139,13 +139,13 @@ const SmartWelcome: React.FC = () => {
         handleStartOnboarding()
         break
       case 'explore-map':
-        navigate('/map')
+        navigate('/app/map')
         break
       case 'language-settings':
         setShowLanguageSelection(true)
         break
       case 'join-community':
-        navigate('/help')
+        navigate('/app/help')
         break
       default:
         break
@@ -362,7 +362,7 @@ const SmartWelcome: React.FC = () => {
               {t('smartWelcome.actions.startOnboarding')}
             </button>
             <button
-              onClick={() => navigate('/map')}
+              onClick={() => navigate('/app/map')}
               className="px-8 py-3 bg-white text-blue-600 border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium"
             >
               {t('smartWelcome.actions.exploreNow')}

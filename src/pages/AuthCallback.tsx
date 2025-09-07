@@ -12,10 +12,10 @@ const AuthCallback = () => {
       try {
         // 由于已禁用登录，直接跳转到地图页面
         toast.success('自动登录成功！')
-        navigate('/map')
+        navigate('/app/map')
       } catch (error) {
         console.error('处理认证回调失败:', error)
-        navigate('/map') // 即使出错也跳转到地图页面
+        navigate('/app/map') // 即使出错也跳转到地图页面
       }
     }
 

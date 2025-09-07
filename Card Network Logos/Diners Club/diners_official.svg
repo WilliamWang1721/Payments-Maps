@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 120">
+  <!-- Diners Club official blue: #0079BE -->
+  <g>
+    <!-- Background -->
+    <rect x="0" y="0" width="300" height="120" rx="6" fill="#0079BE"/>
+    
+    <!-- Left circle -->
+    <circle cx="80" cy="60" r="35" fill="white"/>
+    
+    <!-- Right circle -->
+    <circle cx="220" cy="60" r="35" fill="white"/>
+    
+    <!-- Center rectangle connecting circles -->
+    <rect x="80" y="25" width="140" height="70" fill="white"/>
+    
+    <!-- DINERS CLUB text -->
+    <text x="150" y="50" text-anchor="middle" fill="#0079BE" font-family="Arial, sans-serif" font-size="16" font-weight="bold" letter-spacing="1px">DINERS</text>
+    <text x="150" y="72" text-anchor="middle" fill="#0079BE" font-family="Arial, sans-serif" font-size="16" font-weight="bold" letter-spacing="1px">CLUB</text>
+    
+    <!-- International text -->
+    <text x="150" y="88" text-anchor="middle" fill="#0079BE" font-family="Arial, sans-serif" font-size="10" font-weight="normal" opacity="0.8">INTERNATIONAL</text>
+  </g>
+</svg>

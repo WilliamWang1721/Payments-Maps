@@ -29,6 +29,7 @@ const Settings = React.lazy(() => import('@/pages/Settings'))
 const OnboardingFlow = React.lazy(() => import('@/components/OnboardingFlow'))
 const SmartWelcome = React.lazy(() => import('@/components/SmartWelcome'))
 const HelpCenter = React.lazy(() => import('@/pages/HelpCenter'))
+const LandingPage = React.lazy(() => import('@/pages/LandingPage'))
 
 // Fallback component for Suspense
 const Loading = () => <div>Loading...</div>
@@ -36,6 +37,10 @@ const Loading = () => <div>Loading...</div>
 export const router = createBrowserRouter([
   {
     path: '/',
+    element: <Suspense fallback={<Loading />}><LandingPage /></Suspense>,
+  },
+  {
+    path: '/app',
     element: (
       <ProtectedRoute>
         <Layout />
@@ -44,7 +49,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/map" replace />,
+        element: <Navigate to="/app/map" replace />,
       },
       {
         path: 'home',

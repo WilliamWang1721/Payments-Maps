@@ -45,7 +45,7 @@ const GoogleCallback = () => {
             // 稍微延迟以确保状态更新完成
             await new Promise(resolve => setTimeout(resolve, 500))
             // 登录成功，跳转到主页
-            navigate('/', { replace: true })
+            navigate('/app/map', { replace: true })
             return
           }
         }
@@ -65,7 +65,7 @@ const GoogleCallback = () => {
           // 重新初始化认证状态
           await initialize()
           // 登录成功，跳转到主页
-          navigate('/', { replace: true })
+          navigate('/app/map', { replace: true })
         } else {
           console.log('ℹ️ 未找到有效会话，可能是首次访问')
           // 没有会话，跳转到登录页

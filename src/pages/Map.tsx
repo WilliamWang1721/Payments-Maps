@@ -16,6 +16,8 @@ import PaymentIcon from '@/components/icons/PaymentIcon'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import { usePermissions } from '@/hooks/usePermissions'
 import { SearchSuggestions } from '@/components/SearchSuggestions'
+import { useOnboardingTour } from '@/hooks/useOnboardingTour'
+import OnboardingTour from '@/components/OnboardingTour'
 
 const Map = () => {
   const navigate = useNavigate()
@@ -28,6 +30,9 @@ const Map = () => {
   
   // 搜索历史功能
   const { searchHistory, addSearchHistory, clearSearchHistory, removeSearchHistory } = useSearchHistory()
+  
+  // 新手引导
+  const { showTour, completeTour } = useOnboardingTour()
   
   const {
     mapInstance,
@@ -289,7 +294,7 @@ const Map = () => {
       navigate('/login')
       return
     }
-    navigate('/add-pos')
+    navigate('/app/add-pos')
   }
 
   // 获取当前位置
@@ -304,6 +309,11 @@ const Map = () => {
 
   return (
     <div className="w-full h-full relative"> 
+      {/* 新手引导 */}
+      <OnboardingTour 
+        isOpen={showTour} 
+        onComplete={completeTour}
+      /> 
 
 
       {/* 加载遮罩 */}
@@ -346,7 +356,7 @@ const Map = () => {
               <Button
                 onClick={handleSearch}
                 size="sm"
-                className="px-3"
+                className="search-button px-3"
               >
                 <Search className="w-4 h-4" />
               </Button>
@@ -355,7 +365,7 @@ const Map = () => {
               onClick={() => setShowFilters(true)}
               variant="outline"
               size="sm"
-              className="bg-white shadow-lg"
+              className="filter-button bg-white shadow-lg"
             >
               <Filter className="w-4 h-4" />
             </Button>
@@ -794,7 +804,7 @@ const Map = () => {
                 <Button
                   onClick={() => {
                     console.log('点击查看详情按钮，POS ID:', selectedPOSMachine.id)
-                    navigate(`/pos/${selectedPOSMachine.id}`)
+                    navigate(`/app/pos/${selectedPOSMachine.id}`)
                   }}
                   className="flex-1"
                 >

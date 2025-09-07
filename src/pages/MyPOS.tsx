@@ -132,7 +132,7 @@ const MyPOS: React.FC = () => {
               <h1 className="text-xl font-semibold text-gray-900">我的POS机</h1>
             </div>
             <button
-              onClick={() => navigate('/add-pos')}
+              onClick={() => navigate('/app/add-pos')}
               className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -151,7 +151,7 @@ const MyPOS: React.FC = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">还没有添加POS机</h3>
               <p className="text-gray-600 mb-6">开始添加您的第一台POS机吧</p>
               <button
-                onClick={() => navigate('/add-pos')}
+                onClick={() => navigate('/app/add-pos')}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 添加POS机
@@ -171,7 +171,7 @@ const MyPOS: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => navigate(`/edit-pos/${pos.id}`)}
+                        onClick={() => navigate(`/app/edit-pos/${pos.id}`)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="编辑"
                       >
@@ -221,7 +221,7 @@ const MyPOS: React.FC = () => {
 
                   {/* View Details Button */}
                   <button
-                    onClick={() => navigate(`/pos/${pos.id}`)}
+                    onClick={() => navigate(`/app/pos/${pos.id}`)}
                     className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     查看详情

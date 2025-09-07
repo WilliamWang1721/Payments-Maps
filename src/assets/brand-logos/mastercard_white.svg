@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60">
+  <!-- Mastercard interlocking circles in white for dark backgrounds -->
+  <g fill="white">
+    <!-- Left circle (originally red) -->
+    <circle cx="25" cy="30" r="22" />
+    <!-- Right circle (originally yellow) -->  
+    <circle cx="55" cy="30" r="22" />
+    <!-- Intersection area -->
+    <path d="M40 15 A22 22 0 0 0 40 45 A22 22 0 0 0 40 15 Z" fill="white" fill-opacity="0.8" />
+  </g>
+  <!-- Mastercard text -->
+  <text x="80" y="35" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="8" font-weight="bold">MC</text>
+</svg>

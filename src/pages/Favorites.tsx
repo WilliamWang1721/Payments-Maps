@@ -171,7 +171,7 @@ const Favorites: React.FC = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">还没有收藏的POS机</h3>
               <p className="text-gray-600 mb-6">在POS机详情页点击收藏按钮来添加收藏</p>
               <button
-                onClick={() => navigate('/map')}
+                onClick={() => navigate('/app/map')}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 去发现POS机
@@ -231,7 +231,7 @@ const Favorites: React.FC = () => {
 
                     {/* View Details Button */}
                     <button
-                      onClick={() => navigate(`/pos/${pos.id}`)}
+                      onClick={() => navigate(`/app/pos/${pos.id}`)}
                       className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                     >
                       查看详情
