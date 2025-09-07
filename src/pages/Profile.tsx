@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Heart, MapPin, Settings, LogOut, Edit, Star, Shield, Crown, Users, Zap } from 'lucide-react'
+import { User, Heart, MapPin, Settings, LogOut, Edit, Star, Shield, Crown, Users, Zap, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -442,6 +442,15 @@ const Profile = () => {
                 激活Beta权益
               </Button>
             )}
+            
+            <Button
+              onClick={() => navigate('/app/mcp-settings')}
+              variant="outline"
+              className="w-full justify-start text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+            >
+              <Terminal className="w-4 h-4 mr-3" />
+              MCP 设置
+            </Button>
             
             <Button
               onClick={() => navigate('/app/my-pos')}

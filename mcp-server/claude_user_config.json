@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "payments-maps": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-fetch", 
+        "https://your-mcp-server-domain.com/mcp"
+      ],
+      "env": {
+        "MCP_SERVER_URL": "https://your-mcp-server-domain.com"
+      }
+    }
+  }
+}

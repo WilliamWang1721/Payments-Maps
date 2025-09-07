@@ -67,10 +67,14 @@ const Layout = () => {
       </AnimatedTopNav>
 
       {/* 主内容区域 */}
-      <main className="flex-1 overflow-hidden pt-16 pb-16 webkit-overflow-scrolling" style={{
-        paddingTop: 'calc(4rem + env(safe-area-inset-top))',
-        paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))'
-      }}>
+      <main
+        className="flex-1 overflow-x-hidden overflow-y-auto pt-16 pb-16"
+        style={{
+          paddingTop: 'calc(4rem + env(safe-area-inset-top))',
+          paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
         <PageTransition variant="fadeIn">
           <Outlet />
         </PageTransition>

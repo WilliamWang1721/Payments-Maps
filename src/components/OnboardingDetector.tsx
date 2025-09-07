@@ -20,8 +20,7 @@ const OnboardingDetector: React.FC<OnboardingDetectorProps> = ({ children }) => 
     const checkOnboardingStatus = () => {
       try {
         // 检查当前路径是否已经在引导流程中
-        const isInOnboardingFlow = location.pathname.startsWith('/onboarding') || 
-                                  location.pathname === '/welcome'
+        const isInOnboardingFlow = location.pathname.startsWith('/onboarding')
         
         // 如果已经在引导流程中，不需要重定向
         if (isInOnboardingFlow) {
@@ -31,28 +30,21 @@ const OnboardingDetector: React.FC<OnboardingDetectorProps> = ({ children }) => 
 
         // 如果用户已登录，跳过新手引导
         if (user) {
-          console.log('User is logged in, skipping onboarding')
           setHasChecked(true)
           return
         }
 
-        // 未登录用户的处理逻辑
+        // 未登录用户：不再跳到 /welcome；如果需要仍可跳转到 /onboarding
         const onboardingCompleted = localStorage.getItem('onboardingCompleted')
         const hasVisited = localStorage.getItem('hasVisited')
         const languageSelected = localStorage.getItem('languageSelected')
-        
-        // 检查是否是新用户
         const isNewUser = !hasVisited || !onboardingCompleted
-        
-        // 如果是新用户且未选择语言，先进行语言选择
-        if (isNewUser) {
-          if (!languageSelected) {
-            // 显示语言选择页面（可以是智能欢迎页面的一部分）
-            navigate('/welcome', { replace: true })
-          } else {
-            // 语言已选择，进行新手引导
-            navigate('/onboarding', { replace: true })
-          }
+
+        if (isNewUser && languageSelected) {
+          // 可选：保留新手引导
+          navigate('/onboarding', { replace: true })
+          setHasChecked(true)
+          return
         }
         
         setHasChecked(true)
@@ -68,7 +60,7 @@ const OnboardingDetector: React.FC<OnboardingDetectorProps> = ({ children }) => 
     return () => clearTimeout(timer)
   }, [user, navigate, location.pathname, i18n.language, hasChecked])
 
-  // 在检查完成前显示加载状态
+  // 在检查完成前显示加载状态（仅当已登录用户）
   if (!hasChecked && user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">

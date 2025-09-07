@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "payments-maps": {
+      "command": "node",
+      "args": ["./mcp-server/build/index.js"],
+      "env": {
+        "SUPABASE_URL": "your_supabase_url_here",
+        "SUPABASE_SERVICE_KEY": "your_supabase_service_key_here",
+        "GOOGLE_CLIENT_ID": "your_google_client_id",
+        "GOOGLE_CLIENT_SECRET": "your_google_client_secret",
+        "GITHUB_CLIENT_ID": "your_github_client_id",
+        "GITHUB_CLIENT_SECRET": "your_github_client_secret",
+        "MICROSOFT_CLIENT_ID": "your_microsoft_client_id",
+        "MICROSOFT_CLIENT_SECRET": "your_microsoft_client_secret",
+        "LINUXDO_CLIENT_ID": "your_linuxdo_client_id",
+        "LINUXDO_CLIENT_SECRET": "your_linuxdo_client_secret"
+      }
+    }
+  }
+}

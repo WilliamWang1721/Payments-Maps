@@ -65,6 +65,11 @@ const Login = () => {
     }
   }
 
+  const handleGuestBrowse = () => {
+    // 游客模式：直接进入只读地图页
+    navigate('/app/map')
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
@@ -127,6 +132,26 @@ const Login = () => {
               <span>{loading || isLoading ? '登录中...' : '使用 LinuxDO 登录'}</span>
             </Button>
           </div>
+
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-2 text-xs text-gray-400">或</span>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleGuestBrowse}
+            disabled={loading || isLoading}
+            className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 flex items-center justify-center gap-3 py-3 px-4 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm-.25 5.5a1.25 1.25 0 110 2.5 1.25 1.25 0 010-2.5zM11 11h2v6h-2v-6z"/>
+            </svg>
+            <span>以游客身份继续（仅浏览）</span>
+          </Button>
           
           <div className="text-center">
             <p className="text-xs text-gray-500">
@@ -134,6 +159,9 @@ const Login = () => {
             </p>
             <p className="text-xs text-gray-400 mt-1">
               登录即表示您同意我们的服务条款和隐私政策
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              游客模式仅支持浏览现有信息，无法新增或编辑信息
             </p>
           </div>
         </CardContent>

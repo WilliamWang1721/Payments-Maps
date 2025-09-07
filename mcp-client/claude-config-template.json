@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "payments-maps": {
+      "command": "payments-maps-mcp",
+      "args": [],
+      "env": {
+        "PAYMENTS_MAPS_SERVER": "https://your-mcp-server.com"
+      }
+    }
+  }
+}

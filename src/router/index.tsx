@@ -27,9 +27,10 @@ const Favorites = React.lazy(() => import('@/pages/Favorites'))
 const History = React.lazy(() => import('@/pages/History'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
 const OnboardingFlow = React.lazy(() => import('@/components/OnboardingFlow'))
-const SmartWelcome = React.lazy(() => import('@/components/SmartWelcome'))
+// const SmartWelcome = React.lazy(() => import('@/components/SmartWelcome')) // removed
 const HelpCenter = React.lazy(() => import('@/pages/HelpCenter'))
 const LandingPage = React.lazy(() => import('@/pages/LandingPage'))
+const MCPSettings = React.lazy(() => import('@/pages/MCPSettings'))
 
 // Fallback component for Suspense
 const Loading = () => <div>Loading...</div>
@@ -84,6 +85,10 @@ export const router = createBrowserRouter([
         element: <Suspense fallback={<Loading />}><Profile /></Suspense>,
       },
       {
+        path: 'mcp-settings',
+        element: <Suspense fallback={<Loading />}><MCPSettings /></Suspense>,
+      },
+      {
         path: 'role-management',
         element: <Suspense fallback={<Loading />}><RoleManagement /></Suspense>,
       },
@@ -121,10 +126,7 @@ export const router = createBrowserRouter([
     path: '/onboarding',
     element: <Suspense fallback={<Loading />}><OnboardingFlow /></Suspense>,
   },
-  {
-    path: '/welcome',
-    element: <Suspense fallback={<Loading />}><SmartWelcome /></Suspense>,
-  },
+  // removed: /welcome route for SmartWelcome
   {
     path: '/login',
     element: <Suspense fallback={<Loading />}><Login /></Suspense>,

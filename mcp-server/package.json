@@ -1,0 +1,33 @@
+{
+  "name": "payments-maps-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for Payments Maps POS management",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "payments-maps-mcp": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc && node build/index.js",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "zod": "^3.22.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.0",
+    "@types/cors": "^2.8.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": ["mcp", "payments", "pos", "maps"],
+  "author": "Payments Maps Team",
+  "license": "MIT"
+}
