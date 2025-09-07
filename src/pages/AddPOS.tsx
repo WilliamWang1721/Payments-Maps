@@ -1,24 +1,24 @@
-import { useEffect, useState, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, Smartphone, Settings, FileText, Link, Plus, Trash2, Building, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
-import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedInput from '@/components/ui/AnimatedInput'
 import Loading from '@/components/ui/Loading'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import AnimatedModal from '@/components/ui/AnimatedModal'
-import MultiSelect from '@/components/ui/MultiSelect'
+import ThreeStateSelector, { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
+import CardNetworkSelector from '@/components/ui/CardNetworkSelector'
 import RadioGroup from '@/components/ui/RadioGroup'
 import BrandSelector from '@/components/BrandSelector'
-import Select from '@/components/ui/Select'
+import SystemSelect from '@/components/ui/SystemSelect'
 import { CARD_NETWORKS, CardNetwork, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { AnimatedTopNav } from '@/components/AnimatedNavigation'
 import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType } from '@/types/fees'
 import { formatFeeDisplay } from '@/utils/feeUtils'
+import SimpleMapPicker from '@/components/SimpleMapPicker'
 
 interface FormData {
   merchant_name: string
@@ -35,10 +35,10 @@ interface FormData {
   basic_info: {
     model?: string
     acquiring_institution?: string
-    supports_apple_pay?: boolean
-    supports_google_pay?: boolean
-    supports_contactless?: boolean
-    supports_hce_simulation?: boolean
+    supports_apple_pay?: ThreeStateValue
+    supports_google_pay?: ThreeStateValue
+    supports_contactless?: ThreeStateValue
+    supports_hce_simulation?: ThreeStateValue
     min_amount_no_pin?: number
     supported_card_networks?: string[]
     checkout_location?: '自助收银' | '人工收银'
@@ -76,25 +76,14 @@ const AddPOS = () => {
   const { user: _ } = useAuthStore()
   const { addPOSMachine } = useMapStore()
   const _permissions = usePermissions()
-  const mapContainerRef = useRef<HTMLDivElement>(null)
   
-  const mapInstanceRef = useRef<any>(null)
-  const markerRef = useRef<any>(null)
   const [loading, setLoading] = useState(false)
-  const [mapLoading, setMapLoading] = useState(false)
-  const [locationLoading, setLocationLoading] = useState(false)
-
-  // 防止body滚动，只允许页面内容区域滚动
-  useEffect(() => {
-    // 禁用body滚动
-    document.body.style.overflow = 'hidden'
-    
-    // 组件卸载时恢复body滚动
-    return () => {
-      document.body.style.overflow = 'auto'
-    }
-  }, [])
   const [showLocationModal, setShowLocationModal] = useState(false)
+  
+  // 调试：监听状态变化
+  useEffect(() => {
+    console.log('showLocationModal 状态变化:', showLocationModal)
+  }, [showLocationModal])
   
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
@@ -109,10 +98,10 @@ const AddPOS = () => {
     basic_info: {
       model: '',
       acquiring_institution: '',
-      supports_apple_pay: false,
-      supports_google_pay: false,
-      supports_contactless: false,
-      supports_hce_simulation: false,
+      supports_apple_pay: 'unknown',
+      supports_google_pay: 'unknown',
+      supports_contactless: 'unknown',
+      supports_hce_simulation: 'unknown',
       min_amount_no_pin: 0,
       supported_card_networks: [],
       checkout_location: undefined,
@@ -223,123 +212,15 @@ const AddPOS = () => {
     return true
   }
 
-  // 地图初始化
-  useEffect(() => {
-    if (!showLocationModal || !mapContainerRef.current) return
-
-    let isCancelled = false
-    setMapLoading(true)
-
-    const initMap = async () => {
-      if (!mapContainerRef.current || isCancelled) return
-
-      try {
-        const AMap = await loadAMap()
-        if (isCancelled) return
-
-        const map = new AMap.Map(mapContainerRef.current, {
-          ...DEFAULT_MAP_CONFIG,
-          zoom: 16,
-          center: [formData.longitude || 116.4074, formData.latitude || 39.9042]
-        })
-        mapInstanceRef.current = map
-
-        map.addControl(new AMap.Scale())
-        map.addControl(new AMap.ToolBar())
-
-        map.on('click', (e: any) => {
-          updateLocation(e.lnglat.getLng(), e.lnglat.getLat())
-        })
-
-        // 如果已有位置，显示标记
-        if (formData.latitude && formData.longitude) {
-          updateLocation(formData.longitude, formData.latitude)
-        }
-
-      } catch (error) {
-        console.error('Map initialization failed:', error)
-        toast.error('地图加载失败，请刷新页面重试')
-      } finally {
-        if (!isCancelled) {
-          setMapLoading(false)
-        }
-      }
-    }
-
-    const timerId = setTimeout(initMap, 150)
-
-    return () => {
-      isCancelled = true
-      clearTimeout(timerId)
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.destroy()
-        mapInstanceRef.current = null
-      }
-    }
-  }, [showLocationModal, formData.latitude, formData.longitude])
-
-  // 更新位置标记
-  const updateLocation = (lng: number, lat: number) => {
-    if (!mapInstanceRef.current) return
-    const AMap = window.AMap
-
-    if (markerRef.current) {
-      mapInstanceRef.current.remove(markerRef.current)
-    }
-
-    markerRef.current = new AMap.Marker({
-      position: [lng, lat],
-      draggable: true,
-    })
-
-    markerRef.current.on('dragend', (e: any) => {
-      const currentPos = e.lnglat
-      updateFormLocation(currentPos.getLng(), currentPos.getLat())
-    })
-
-    mapInstanceRef.current.add(markerRef.current)
-    updateFormLocation(lng, lat)
-  }
-
-  // 更新表单位置信息
-  const updateFormLocation = async (lng: number, lat: number) => {
-    setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }))
-
-    try {
-      const address = await locationUtils.getAddress(lng, lat)
-      setFormData(prev => ({ ...prev, address }))
-    } catch (error) {
-      console.warn('Failed to get address:', error)
-      const fallbackAddress = `位置: ${lat.toFixed(6)}, ${lng.toFixed(6)} (请手动输入详细地址)`
-      setFormData(prev => ({ ...prev, address: fallbackAddress }))
-      toast.error('地址解析失败，请手动输入详细地址')
-    }
-  }
-
-  // 获取当前位置
-  const handleGetLocation = async () => {
-    if (!mapInstanceRef.current) {
-      toast.error('地图未加载完成')
-      return
-    }
-
-    setLocationLoading(true)
-    try {
-      const { getCurrentLocation } = useMapStore.getState()
-      await getCurrentLocation()
-      const { currentLocation } = useMapStore.getState()
-      if (currentLocation) {
-        const { longitude: lng, latitude: lat } = currentLocation
-        mapInstanceRef.current.setCenter([lng, lat])
-        updateLocation(lng, lat)
-        toast.success('定位成功')
-      }
-    } catch (error) {
-      console.error('定位失败:', error)
-      toast.error('定位失败，请检查定位权限')
-    } finally {
-      setLocationLoading(false)
-    }
+  // 处理地图选择的位置
+  const handleLocationConfirm = (latitude: number, longitude: number, address?: string) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude,
+      longitude,
+      address: address || prev.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+    }))
+    toast.success('位置选择成功')
   }
 
   const handleSubmit = async () => {
@@ -367,6 +248,14 @@ const AddPOS = () => {
         addPOSMachine({
           ...formData,
           status: 'active',
+          // 转换 ThreeStateValue 到 boolean 以保持数据库兼容性
+          basic_info: {
+            ...formData.basic_info,
+            supports_apple_pay: formData.basic_info.supports_apple_pay === 'supported',
+            supports_google_pay: formData.basic_info.supports_google_pay === 'supported',
+            supports_contactless: formData.basic_info.supports_contactless === 'supported',
+            supports_hce_simulation: formData.basic_info.supports_hce_simulation === 'supported',
+          }
         }),
         timeoutPromise,
       ])
@@ -377,7 +266,7 @@ const AddPOS = () => {
       
       // 延迟跳转，让用户看到成功提示
       setTimeout(() => {
-        navigate('/map')
+        navigate('/app/map')
       }, 500)
       
     } catch (error: any) {
@@ -406,19 +295,19 @@ const AddPOS = () => {
   }
 
   return (
-    <div className="h-full bg-gray-50 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* 顶部导航栏 */}
       <AnimatedTopNav title="添加POS机" className="flex-shrink-0">
         <AnimatedButton onClick={() => navigate(-1)} variant="ghost" size="sm" className="p-2">
           <ArrowLeft className="w-5 h-5" />
         </AnimatedButton>
-        <AnimatedButton onClick={handleSubmit} loading={loading} disabled={loading}>
+        <AnimatedButton onClick={handleSubmit} loading={loading} disabled={loading} className="min-w-[80px] touch-manipulation">
           保存
         </AnimatedButton>
       </AnimatedTopNav>
 
       {/* 主要内容区域 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 p-4 space-y-4 pb-20 sm:pb-4">
         {/* 基本信息 */}
         <Card>
           <CardHeader>
@@ -443,7 +332,16 @@ const AddPOS = () => {
               placeholder="请选择所属品牌（可选）"
             />
             <AnimatedButton 
-              onClick={() => setShowLocationModal(true)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log('点击了地图选择按钮')
+                // 延迟到当前事件循环结束后再打开，避免同一次点击事件触发遮罩 onClick 导致立刻关闭
+                setTimeout(() => {
+                  setShowLocationModal(true)
+                  console.log('showLocationModal 已设置为 true')
+                }, 0)
+              }}
               variant="outline" 
               className="w-full"
             >
@@ -498,48 +396,33 @@ const AddPOS = () => {
               placeholder="请输入POS机型号"
             />
             
-            <Select
+            <SystemSelect
+              dataType="acquiring_institution"
               label="收单机构"
               value={formData.basic_info.acquiring_institution || ''}
               onChange={value => handleInputChange('basic_info.acquiring_institution', value)}
-              options={[
-                { value: '银联商务', label: '银联商务' },
-                { value: '拉卡拉', label: '拉卡拉' },
-                { value: '收钱吧', label: '收钱吧' },
-                { value: '美团', label: '美团' },
-                { value: '富友支付', label: '富友支付' },
-                { value: '通联支付', label: '通联支付' },
-                { value: '汇付天下', label: '汇付天下' },
-                { value: '随行付', label: '随行付' },
-                { value: '新大陆', label: '新大陆' },
-                { value: '海科融通', label: '海科融通' },
-                { value: '其他', label: '其他' }
-              ]}
               placeholder="请选择收单机构"
+              showDescription={true}
+              allowCustom={true}
+              customPlaceholder="输入自定义收单机构名称"
             />
 
-            <Select
+            <SystemSelect
+              dataType="device_status"
               label="设备状态"
               value={formData.status || 'active'}
               onChange={value => handleInputChange('status', value)}
-              options={[
-                { value: 'active', label: '正常运行' },
-                { value: 'inactive', label: '暂时不可用' },
-                { value: 'maintenance', label: '维修中' },
-                { value: 'disabled', label: '已停用' }
-              ]}
               placeholder="请选择设备状态"
+              showDescription={true}
             />
 
-            <RadioGroup
-              name="checkout_location"
+            <SystemSelect
+              dataType="checkout_locations"
               label="收银位置"
-              options={[
-                { value: '自助收银', label: '自助收银' },
-                { value: '人工收银', label: '人工收银' }
-              ]}
               value={formData.basic_info.checkout_location || ''}
               onChange={value => handleInputChange('basic_info.checkout_location', value)}
+              placeholder="请选择收银位置"
+              showDescription={true}
             />
 
             <div className="space-y-3">
@@ -605,15 +488,11 @@ const AddPOS = () => {
               </div>
             </div>
 
-            <MultiSelect
+            <CardNetworkSelector
               label="支持的卡组织"
-              options={CARD_NETWORKS.map(network => ({
-                value: network.value,
-                label: getCardNetworkLabel(network.value as CardNetwork)
-              }))}
               value={formData.basic_info.supported_card_networks || []}
               onChange={value => handleInputChange('basic_info.supported_card_networks', value)}
-              placeholder="请选择支持的卡组织"
+              allowSelectAll={true}
             />
 
 
@@ -629,78 +508,38 @@ const AddPOS = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => handleInputChange('basic_info.supports_contactless', !formData.basic_info.supports_contactless)}
-                  className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-                    formData.basic_info.supports_contactless
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full ${
-                      formData.basic_info.supports_contactless ? 'bg-blue-500' : 'bg-gray-300'
-                    }`} />
-                    <span className="font-medium">实体卡 Contactless</span>
-                  </div>
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={() => handleInputChange('basic_info.supports_apple_pay', !formData.basic_info.supports_apple_pay)}
-                  className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-                    formData.basic_info.supports_apple_pay
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full ${
-                      formData.basic_info.supports_apple_pay ? 'bg-blue-500' : 'bg-gray-300'
-                    }`} />
-                    <span className="font-medium">Apple Pay</span>
-                  </div>
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => handleInputChange('basic_info.supports_google_pay', !formData.basic_info.supports_google_pay)}
-                  className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-                    formData.basic_info.supports_google_pay
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full ${
-                      formData.basic_info.supports_google_pay ? 'bg-blue-500' : 'bg-gray-300'
-                    }`} />
-                    <span className="font-medium">Google Pay</span>
-                  </div>
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={() => handleInputChange('basic_info.supports_hce_simulation', !formData.basic_info.supports_hce_simulation)}
-                  className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-                    formData.basic_info.supports_hce_simulation
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full ${
-                      formData.basic_info.supports_hce_simulation ? 'bg-blue-500' : 'bg-gray-300'
-                    }`} />
-                    <span className="font-medium">HCE模拟</span>
-                  </div>
-                </button>
-              </div>
+            <div className="grid grid-cols-1 gap-6">
+              {/* 实体卡 Contactless */}
+              <ThreeStateSelector
+                value={formData.basic_info.supports_contactless || 'unknown'}
+                onChange={value => handleInputChange('basic_info.supports_contactless', value)}
+                label="实体卡 Contactless"
+                icon={<CreditCard className="w-5 h-5" />}
+              />
+
+              {/* Apple Pay */}
+              <ThreeStateSelector
+                value={formData.basic_info.supports_apple_pay || 'unknown'}
+                onChange={value => handleInputChange('basic_info.supports_apple_pay', value)}
+                label="Apple Pay"
+                icon={<Smartphone className="w-5 h-5" />}
+              />
+
+              {/* Google Pay */}
+              <ThreeStateSelector
+                value={formData.basic_info.supports_google_pay || 'unknown'}
+                onChange={value => handleInputChange('basic_info.supports_google_pay', value)}
+                label="Google Pay"
+                icon={<Smartphone className="w-5 h-5" />}
+              />
+
+              {/* HCE模拟 */}
+              <ThreeStateSelector
+                value={formData.basic_info.supports_hce_simulation || 'unknown'}
+                onChange={value => handleInputChange('basic_info.supports_hce_simulation', value)}
+                label="HCE模拟"
+                icon={<Settings className="w-5 h-5" />}
+              />
             </div>
           </CardContent>
         </Card>
@@ -719,15 +558,11 @@ const AddPOS = () => {
               <h4 className="font-medium text-gray-900">小额免密</h4>
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
-                  <MultiSelect
-                     label="支持的卡组织"
-                     options={CARD_NETWORKS.map(network => ({
-                       value: network.value,
-                       label: getCardNetworkLabel(network.value as CardNetwork)
-                     }))}
+                  <CardNetworkSelector
+                     label="支持小额免密的卡组织"
                      value={formData.verification_modes.small_amount_no_pin || []}
                      onChange={value => handleInputChange('verification_modes.small_amount_no_pin', value)}
-                     placeholder="请选择支持小额免密的卡组织"
+                     maxSelections={10}
                    />
                 </div>
                 <div className="flex flex-col space-y-2">
@@ -762,15 +597,11 @@ const AddPOS = () => {
               <h4 className="font-medium text-gray-900">需要密码</h4>
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
-                  <MultiSelect
-                     label="支持的卡组织"
-                     options={CARD_NETWORKS.map(network => ({
-                       value: network.value,
-                       label: getCardNetworkLabel(network.value as CardNetwork)
-                     }))}
+                  <CardNetworkSelector
+                     label="需要密码验证的卡组织"
                      value={formData.verification_modes.requires_password || []}
                      onChange={value => handleInputChange('verification_modes.requires_password', value)}
-                     placeholder="请选择需要密码的卡组织"
+                     maxSelections={10}
                    />
                 </div>
                 <div className="flex flex-col space-y-2">
@@ -805,15 +636,11 @@ const AddPOS = () => {
               <h4 className="font-medium text-gray-900">需要签名</h4>
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
-                  <MultiSelect
-                     label="支持的卡组织"
-                     options={CARD_NETWORKS.map(network => ({
-                       value: network.value,
-                       label: getCardNetworkLabel(network.value as CardNetwork)
-                     }))}
+                  <CardNetworkSelector
+                     label="需要签名验证的卡组织"
                      value={formData.verification_modes.requires_signature || []}
                      onChange={value => handleInputChange('verification_modes.requires_signature', value)}
-                     placeholder="请选择需要签名的卡组织"
+                     maxSelections={10}
                    />
                 </div>
                 <div className="flex flex-col space-y-2">
@@ -877,7 +704,7 @@ const AddPOS = () => {
               为不同卡组织设置手续费率，支持百分比和固定金额两种模式
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {CARD_NETWORKS.map(network => {
                 const fee = formData.fees?.[network.value] || {
                   network: network.value,
@@ -967,26 +794,20 @@ const AddPOS = () => {
                         <div className="flex space-x-2">
                           {fee.type === FeeType.FIXED && (
                             <div className="w-20">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                货币
-                              </label>
-                              <select
+                              <SystemSelect
+                                dataType="currency"
+                                label="货币"
                                 value={fee.currency || '$'}
-                                onChange={e => {
+                                onChange={(value) => {
                                   const newFees = { ...formData.fees }
                                   newFees[network.value] = {
                                     ...fee,
-                                    currency: e.target.value
+                                    currency: value
                                   }
                                   handleInputChange('fees', newFees)
                                 }}
-                                className="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              >
-                                <option value="$">$</option>
-                                <option value="¥">¥</option>
-                                <option value="€">€</option>
-                                <option value="£">£</option>
-                              </select>
+                                className="w-20"
+                              />
                             </div>
                           )}
                           <div className="flex-1">
@@ -1095,70 +916,49 @@ const AddPOS = () => {
         </Card>
       </div>
 
-      {/* 地图选择位置模态框 */}
-      <AnimatedModal
+      {/* 移动端固定保存按钮 */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 sm:hidden z-10 pb-safe-bottom">
+        <AnimatedButton 
+          onClick={handleSubmit} 
+          loading={loading} 
+          disabled={loading}
+          className="w-full h-12 text-base font-medium touch-manipulation"
+          size="lg"
+        >
+          保存POS机信息
+        </AnimatedButton>
+      </div>
+
+      {/* 调试信息 */}
+      <div className="fixed top-20 right-4 bg-red-500 text-white p-2 rounded-lg z-[10000] space-y-2">
+        <div>showLocationModal: {showLocationModal ? 'true' : 'false'}</div>
+        <button 
+          onClick={() => {
+            console.log('测试按钮点击前:', showLocationModal)
+            const newValue = !showLocationModal
+            setShowLocationModal(newValue)
+            console.log('设置新值为:', newValue)
+          }}
+          className="bg-white text-red-500 px-2 py-1 rounded text-sm"
+        >
+          测试切换状态
+        </button>
+      </div>
+
+      {/* 地图选择位置组件 */}
+      <SimpleMapPicker
         isOpen={showLocationModal}
-        onClose={() => setShowLocationModal(false)}
-        title="选择位置"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="text-sm text-gray-600">
-            点击地图选择POS机位置，可拖拽标记调整位置
-          </div>
-          
-          <div className="w-full h-96 rounded-lg relative">
-            {mapLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10 rounded-lg">
-                <Loading text="正在加载地图..." />
-              </div>
-            )}
-            <div ref={mapContainerRef} className="w-full h-full rounded-lg" />
-            
-            {/* 定位按钮 */}
-            <AnimatedButton
-              onClick={handleGetLocation}
-              disabled={locationLoading || mapLoading}
-              className="absolute right-4 bottom-4 w-12 h-12 rounded-full shadow-lg bg-white hover:bg-gray-50 text-blue-600 border border-gray-200 p-0 flex items-center justify-center"
-              variant="ghost"
-            >
-              {locationLoading ? (
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <MapPin className="w-4 h-4" />
-              )}
-            </AnimatedButton>
-          </div>
-          
-          {formData.latitude !== 0 && formData.longitude !== 0 && (
-            <div className="text-sm text-gray-600">
-              当前坐标: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
-            </div>
-          )}
-          
-          <div className="flex justify-end space-x-2">
-            <AnimatedButton
-              onClick={() => setShowLocationModal(false)}
-              variant="outline"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={() => {
-                if (formData.latitude === 0 || formData.longitude === 0) {
-                  toast.error('请先选择位置')
-                  return
-                }
-                setShowLocationModal(false)
-                toast.success('位置选择成功')
-              }}
-              disabled={formData.latitude === 0 || formData.longitude === 0}
-            >
-              确认选择
-            </AnimatedButton>
-          </div>
-        </div>
-      </AnimatedModal>
+        onClose={() => {
+          console.log('关闭地图选择器')
+          setShowLocationModal(false)
+        }}
+        onConfirm={(lat, lng, address) => {
+          console.log('确认位置:', lat, lng, address)
+          handleLocationConfirm(lat, lng, address)
+        }}
+        initialLat={formData.latitude || 39.9042}
+        initialLng={formData.longitude || 116.4074}
+      />
     </div>
   )
 }

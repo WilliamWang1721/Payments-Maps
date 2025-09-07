@@ -60,7 +60,7 @@ export default function LinuxDOCallback() {
         
         // Redirect to main app
         setTimeout(() => {
-          navigate('/', { replace: true })
+          navigate('/app/map', { replace: true })
         }, 1500)
         
       } catch (error) {

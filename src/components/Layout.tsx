@@ -13,27 +13,27 @@ const Layout = () => {
 
   const navItems = [
     {
-      path: '/map',
+      path: '/app/map',
       icon: Map,
       label: t('navigation.map'),
     },
     {
-      path: '/list',
+      path: '/app/list',
       icon: List,
       label: t('navigation.list'),
     },
     {
-      path: '/brands',
+      path: '/app/brands',
       icon: Building2,
       label: t('navigation.brands'),
     },
     {
-      path: '/add-pos',
+      path: '/app/add-pos',
       icon: Plus,
       label: t('navigation.add'),
     },
     {
-      path: '/profile',
+      path: '/app/profile',
       icon: User,
       label: t('navigation.profile'),
     },
@@ -44,12 +44,12 @@ const Layout = () => {
       <div className="flex flex-col h-screen bg-gray-50 safe-area-padding">
       {/* 顶部导航栏 */}
       <AnimatedTopNav title="Payments Maps" className="nav-top fixed top-0 left-0 right-0 webkit-overflow-scrolling">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <img src="/web_logo.JPG" alt="Payments Maps Logo" className="w-8 h-8" />
-        </div>
+        </Link>
         <div className="flex items-center space-x-2">
           <Link 
-            to="/help" 
+            to="/app/help" 
             className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
             title={t('navigation.help')}
           >

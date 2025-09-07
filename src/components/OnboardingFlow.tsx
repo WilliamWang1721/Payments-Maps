@@ -387,13 +387,13 @@ const OnboardingFlow: React.FC = () => {
         </div>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
-            onClick={() => navigate('/map')}
+            onClick={() => navigate('/app/map')}
             className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             {t('onboardingFlow.complete.startExploring')}
           </button>
           <button
-            onClick={() => navigate('/help')}
+            onClick={() => navigate('/app/help')}
             className="px-8 py-3 bg-white text-blue-600 border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium"
           >
             {t('onboardingFlow.complete.visitHelpCenter')}
@@ -429,7 +429,7 @@ const OnboardingFlow: React.FC = () => {
   const handleFinish = () => {
     localStorage.setItem('onboardingCompleted', 'true')
     localStorage.setItem('userPreferences', JSON.stringify(userSelections))
-    navigate('/map')
+    navigate('/app/map')
   }
 
   // 保存进度

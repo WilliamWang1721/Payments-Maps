@@ -82,7 +82,7 @@ const EditPOS = () => {
           if (error || !data) {
             console.error('查询POS机数据失败:', error)
             toast.error('未找到该POS机信息')
-            navigate('/map')
+            navigate('/app/map')
             return
           }
           
@@ -96,7 +96,7 @@ const EditPOS = () => {
         // 权限检查
         if (!permissions.isLoading && !permissions.canEditItem(posData.created_by)) {
           toast.error('您没有权限编辑此POS机')
-          navigate('/map')
+          navigate('/app/map')
           return
         }
         
@@ -110,7 +110,7 @@ const EditPOS = () => {
       } catch (error) {
         console.error('加载POS机数据失败:', error)
         toast.error('加载数据失败，请重试')
-        navigate('/map')
+        navigate('/app/map')
       } finally {
         setLoading(false)
       }
@@ -252,7 +252,7 @@ const EditPOS = () => {
       
       // 延迟跳转，让用户看到成功提示
       setTimeout(() => {
-        navigate('/map')
+        navigate('/app/map')
       }, 500)
       
     } catch (error: any) {
@@ -337,7 +337,7 @@ const EditPOS = () => {
     try {
       await deletePOSMachine(id)
       toast.success('POS机删除成功')
-      navigate('/map')
+      navigate('/app/map')
     } catch (error) {
       console.error('删除POS机失败:', error)
       toast.error('删除失败，请重试')
@@ -421,7 +421,7 @@ const EditPOS = () => {
       <div className="h-full flex items-center justify-center text-center">
         <div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">POS机数据加载失败或不存在</h3>
-          <AnimatedButton onClick={() => navigate('/map')}>返回地图</AnimatedButton>
+          <AnimatedButton onClick={() => navigate('/app/map')}>返回地图</AnimatedButton>
         </div>
       </div>
     )

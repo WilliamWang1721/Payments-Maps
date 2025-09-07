@@ -33,20 +33,38 @@ export interface FeeDisplayInfo {
 
 // 默认手续费配置
 export const DEFAULT_FEES_CONFIG: FeesConfiguration = {
-  visa: {
-    network: 'visa',
-    type: FeeType.PERCENTAGE,
-    value: 0,
-    enabled: false
-  },
   mastercard: {
     network: 'mastercard',
     type: FeeType.PERCENTAGE,
     value: 0,
     enabled: false
   },
+  visa: {
+    network: 'visa',
+    type: FeeType.PERCENTAGE,
+    value: 0,
+    enabled: false
+  },
+  unionpay: {
+    network: 'unionpay',
+    type: FeeType.PERCENTAGE,
+    value: 0,
+    enabled: false
+  },
+  amex_cn: {
+    network: 'amex_cn',
+    type: FeeType.PERCENTAGE,
+    value: 0,
+    enabled: false
+  },
   amex: {
     network: 'amex',
+    type: FeeType.PERCENTAGE,
+    value: 0,
+    enabled: false
+  },
+  mastercard_cn: {
+    network: 'mastercard_cn',
     type: FeeType.PERCENTAGE,
     value: 0,
     enabled: false
@@ -63,8 +81,8 @@ export const DEFAULT_FEES_CONFIG: FeesConfiguration = {
     value: 0,
     enabled: false
   },
-  unionpay: {
-    network: 'unionpay',
+  diners: {
+    network: 'diners',
     type: FeeType.PERCENTAGE,
     value: 0,
     enabled: false

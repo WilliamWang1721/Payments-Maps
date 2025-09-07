@@ -40,7 +40,7 @@ export default function GitHubCallback() {
           })
 
           toast.success('GitHub登录成功！')
-          navigate('/')
+          navigate('/app/map')
         } else {
           console.error('GitHub认证失败：未获取到用户信息')
           toast.error('GitHub登录失败')

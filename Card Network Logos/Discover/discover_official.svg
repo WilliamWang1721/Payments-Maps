@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 120">
+  <!-- Discover official orange: #FF6000 -->
+  <g>
+    <!-- Background -->
+    <rect x="0" y="0" width="300" height="120" rx="6" fill="#FF6000"/>
+    
+    <!-- DISCOVER text -->
+    <text x="150" y="70" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="bold" letter-spacing="1px">DISCOVER</text>
+    
+    <!-- Discover network symbol (stylized globe) -->
+    <circle cx="250" cy="35" r="20" fill="white" opacity="0.9"/>
+    <path d="M230 35 A20 20 0 0 1 270 35" fill="none" stroke="#FF6000" stroke-width="3"/>
+    <path d="M240 25 A15 15 0 0 1 260 45" fill="none" stroke="#FF6000" stroke-width="2"/>
+    <path d="M240 45 A15 15 0 0 1 260 25" fill="none" stroke="#FF6000" stroke-width="2"/>
+    <circle cx="250" cy="35" r="3" fill="#FF6000"/>
+    
+    <!-- Bottom accent line -->
+    <rect x="30" y="95" width="240" height="3" fill="white" opacity="0.8"/>
+  </g>
+</svg>

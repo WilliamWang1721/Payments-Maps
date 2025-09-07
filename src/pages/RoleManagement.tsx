@@ -46,7 +46,7 @@ const RoleManagement = () => {
     // 检查权限
     if (!permissions.isLoading && !permissions.canManageRoles) {
       toast.error('您没有权限访问此页面')
-      navigate('/profile')
+      navigate('/app/profile')
       return
     }
 

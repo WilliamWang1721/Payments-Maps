@@ -14,6 +14,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import Input from '@/components/ui/Input'
 import AnimatedInput from '@/components/ui/AnimatedInput'
+import ContactlessDisplay from '@/components/ui/ContactlessDisplay'
+import CardNetworkIcon from '@/components/ui/CardNetworkIcon'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import { getVerificationModeLabel, getResultLabel, getPaymentMethodLabel } from '@/lib/utils'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -714,7 +716,7 @@ const POSDetail = () => {
           
           {permissions.canEditItem(pos.created_by) && (
             <AnimatedButton
-              onClick={() => navigate(`/edit-pos/${pos.id}`)}
+              onClick={() => navigate(`/app/edit-pos/${pos.id}`)}
               variant="ghost"
               size="sm"
               className="p-2 hover:bg-gray-100"
@@ -856,92 +858,90 @@ const POSDetail = () => {
         {/* 支付信息 */}
         {pos.basic_info && Object.keys(pos.basic_info).length > 0 && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* 卡组织支持 */}
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
-                <CardContent className="p-4">
-                  <div className="flex items-center mb-3">
-                    <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
-                    <h3 className="font-semibold text-gray-900">卡组织支持</h3>
-                  </div>
-                  {pos.basic_info.supported_card_networks && pos.basic_info.supported_card_networks.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {pos.basic_info.supported_card_networks.map((network) => (
-                        <span
-                          key={network}
-                          className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800"
-                        >
+            {/* 卡组织支持 - 重新设计为更显著的展示 */}
+            <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <CardContent className="p-6">
+                <div className="flex items-center mb-6">
+                  <CreditCard className="w-6 h-6 mr-3 text-blue-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">支持的卡组织</h3>
+                </div>
+                {pos.basic_info.supported_card_networks && pos.basic_info.supported_card_networks.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {pos.basic_info.supported_card_networks.map((network) => (
+                      <div
+                        key={network}
+                        className="flex flex-col items-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 hover:border-blue-200 transition-all duration-200 hover:shadow-md"
+                      >
+                        <div className="w-16 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mb-3 shadow-sm">
+                          <CardNetworkIcon network={network} className="w-12 h-8" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-700 text-center leading-tight">
                           {getCardNetworkLabel(network)}
                         </span>
-                      ))}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center p-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    <div className="text-center">
+                      <CreditCard className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">暂无卡组织信息</p>
+                      <p className="text-gray-400 text-xs mt-1">待勘察</p>
                     </div>
-                  ) : (
-                    <p className="text-gray-500 text-sm">待勘察</p>
-                  )}
-                </CardContent>
-              </AnimatedCard>
+                  </div>
+                )}
+              </CardContent>
+            </AnimatedCard>
 
+            {/* Contactless 支持和验证模式 - 并排显示 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Contactless 支持 */}
               <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
-                <CardContent className="p-4">
-                  <div className="flex items-center mb-3">
-                    <Smartphone className="w-5 h-5 mr-2 text-green-600" />
-                    <h3 className="font-semibold text-gray-900">Contactless 支持</h3>
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <Smartphone className="w-6 h-6 mr-3 text-green-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">Contactless 支持</h3>
                   </div>
-                  {(pos.basic_info.supports_apple_pay || pos.basic_info.supports_google_pay || pos.basic_info.supports_contactless || pos.basic_info.supports_hce_simulation) ? (
-                    <div className="space-y-2">
-                      {pos.basic_info.supports_contactless && (
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-700">实体卡 Contactless</span>
-                        </div>
-                      )}
-                      {pos.basic_info.supports_apple_pay && (
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-700">Apple Pay</span>
-                        </div>
-                      )}
-                      {pos.basic_info.supports_google_pay && (
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-700">Google Pay</span>
-                        </div>
-                      )}
-                      {pos.basic_info.supports_hce_simulation && (
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-700">HCE模拟</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-sm">待勘察</p>
-                  )}
+                  <ContactlessDisplay
+                    supports_contactless={pos.basic_info.supports_contactless}
+                    supports_apple_pay={pos.basic_info.supports_apple_pay}
+                    supports_google_pay={pos.basic_info.supports_google_pay}
+                    supports_hce_simulation={pos.basic_info.supports_hce_simulation}
+                  />
                 </CardContent>
               </AnimatedCard>
 
               {/* 验证模式 */}
               <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
-                <CardContent className="p-4">
-                  <div className="flex items-center mb-3">
-                    <Shield className="w-5 h-5 mr-2 text-purple-600" />
-                    <h3 className="font-semibold text-gray-900">验证模式详情</h3>
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <Shield className="w-6 h-6 mr-3 text-purple-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">验证模式详情</h3>
                   </div>
                   
                   {/* 验证模式概览 */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-1 gap-3 mb-4">
                     <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
                       <div className="flex items-center">
                         <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
                         <span className="text-sm font-medium text-gray-700">小额免密</span>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        pos.verification_modes?.small_amount_no_pin
+                        pos.verification_modes?.small_amount_no_pin_unsupported
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : pos.verification_modes?.small_amount_no_pin_uncertain
+                          ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                          : pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0
                           ? 'bg-green-100 text-green-800 border border-green-200'
                           : 'bg-gray-100 text-gray-800 border border-gray-200'
                       }`}>
-                        {pos.verification_modes?.small_amount_no_pin ? '✓ 支持' : '? 未确定'}
+                        {pos.verification_modes?.small_amount_no_pin_unsupported 
+                          ? '✗ 不支持' 
+                          : pos.verification_modes?.small_amount_no_pin_uncertain
+                          ? '? 未确定'
+                          : pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0
+                          ? '✓ 支持'
+                          : '? 未确定'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200">
@@ -950,11 +950,21 @@ const POSDetail = () => {
                         <span className="text-sm font-medium text-gray-700">PIN验证</span>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        pos.verification_modes?.requires_password
+                        pos.verification_modes?.requires_password_unsupported
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : pos.verification_modes?.requires_password_uncertain
+                          ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                          : pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0
                           ? 'bg-green-100 text-green-800 border border-green-200'
                           : 'bg-gray-100 text-gray-800 border border-gray-200'
                       }`}>
-                        {pos.verification_modes?.requires_password ? '✓ 支持' : '? 未确定'}
+                        {pos.verification_modes?.requires_password_unsupported 
+                          ? '✗ 不支持' 
+                          : pos.verification_modes?.requires_password_uncertain
+                          ? '? 未确定'
+                          : pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0
+                          ? '✓ 支持'
+                          : '? 未确定'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border border-orange-200">
@@ -963,20 +973,33 @@ const POSDetail = () => {
                         <span className="text-sm font-medium text-gray-700">签名验证</span>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        pos.verification_modes?.requires_signature
+                        pos.verification_modes?.requires_signature_unsupported
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : pos.verification_modes?.requires_signature_uncertain
+                          ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                          : pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0
                           ? 'bg-green-100 text-green-800 border border-green-200'
                           : 'bg-gray-100 text-gray-800 border border-gray-200'
                       }`}>
-                        {pos.verification_modes?.requires_signature ? '✓ 支持' : '? 未确定'}
+                        {pos.verification_modes?.requires_signature_unsupported 
+                          ? '✗ 不支持' 
+                          : pos.verification_modes?.requires_signature_uncertain
+                          ? '? 未确定'
+                          : pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0
+                          ? '✓ 支持'
+                          : '? 未确定'}
                       </span>
                     </div>
                   </div>
 
                   {/* 详细信息 */}
-                  {(pos.verification_modes?.small_amount_no_pin || pos.verification_modes?.requires_password || pos.verification_modes?.requires_signature || pos.basic_info?.min_amount_no_pin) && (
+                  {((pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0) || 
+                    (pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0) || 
+                    (pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0) || 
+                    pos.basic_info?.min_amount_no_pin) && (
                     <div className="space-y-3">
                       {/* 小额免密详情 */}
-                      {pos.verification_modes?.small_amount_no_pin && (
+                      {(pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0) && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                           <h4 className="text-sm font-semibold text-blue-900 mb-2 flex items-center">
                             <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
@@ -989,12 +1012,19 @@ const POSDetail = () => {
                                 (最低免密金额: ¥{pos.basic_info.min_amount_no_pin})
                               </span>
                             )}
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {pos.verification_modes.small_amount_no_pin.map((network, index) => (
+                                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                  {network}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
 
                       {/* PIN验证详情 */}
-                      {pos.verification_modes?.requires_password && (
+                      {(pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0) && (
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <h4 className="text-sm font-semibold text-purple-900 mb-2 flex items-center">
                             <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
@@ -1002,12 +1032,19 @@ const POSDetail = () => {
                           </h4>
                           <div className="text-sm text-gray-700">
                             支持PIN密码验证
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {pos.verification_modes.requires_password.map((network, index) => (
+                                <span key={index} className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                                  {network}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
 
                       {/* 签名验证详情 */}
-                      {pos.verification_modes?.requires_signature && (
+                      {(pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0) && (
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                           <h4 className="text-sm font-semibold text-orange-900 mb-2 flex items-center">
                             <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
@@ -1015,141 +1052,196 @@ const POSDetail = () => {
                           </h4>
                           <div className="text-sm text-gray-700">
                             支持签名验证
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {pos.verification_modes.requires_signature.map((network, index) => (
+                                <span key={index} className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                                  {network}
+                                </span>
+                              ))}
+                            </div>
                           </div>
+                        </div>
+                      )}
+
+                      {/* 不支持状态显示 */}
+                      {pos.verification_modes?.small_amount_no_pin_unsupported && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <h4 className="text-sm font-semibold text-red-900 mb-2 flex items-center">
+                            <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                            小额免密
+                          </h4>
+                          <div className="text-sm text-gray-700">不支持小额免密支付</div>
+                        </div>
+                      )}
+
+                      {pos.verification_modes?.requires_password_unsupported && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <h4 className="text-sm font-semibold text-red-900 mb-2 flex items-center">
+                            <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                            PIN验证
+                          </h4>
+                          <div className="text-sm text-gray-700">不支持PIN密码验证</div>
+                        </div>
+                      )}
+
+                      {pos.verification_modes?.requires_signature_unsupported && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <h4 className="text-sm font-semibold text-red-900 mb-2 flex items-center">
+                            <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                            签名验证
+                          </h4>
+                          <div className="text-sm text-gray-700">不支持签名验证</div>
                         </div>
                       )}
                     </div>
                   )}
                   
-                  {!(pos.verification_modes?.small_amount_no_pin || pos.verification_modes?.requires_password || pos.verification_modes?.requires_signature) && (
+                  {!((pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0) || 
+                     (pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0) || 
+                     (pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0) || 
+                     pos.verification_modes?.small_amount_no_pin_unsupported || 
+                     pos.verification_modes?.requires_password_unsupported || 
+                     pos.verification_modes?.requires_signature_unsupported || 
+                     pos.verification_modes?.small_amount_no_pin_uncertain || 
+                     pos.verification_modes?.requires_password_uncertain || 
+                     pos.verification_modes?.requires_signature_uncertain) && (
                     <p className="text-gray-500 text-sm">待勘察</p>
                   )}
                 </CardContent>
               </AnimatedCard>
             </div>
 
-            {/* 商家信息 */}
+            {/* 商家信息和设备支持 - 并排显示 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 商家信息 */}
+              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <Building className="w-6 h-6 mr-3 text-orange-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">商家信息</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-100">
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        商户交易名称
+                      </label>
+                      <p className="text-base text-gray-900 font-medium">
+                        {pos.merchant_info?.transaction_name || <span className="text-gray-500">待勘察</span>}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-100">
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        商户交易类型
+                      </label>
+                      <p className="text-base text-gray-900 font-medium">
+                        {pos.merchant_info?.transaction_type || <span className="text-gray-500">待勘察</span>}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </AnimatedCard>
+
+              {/* 设备支持 */}
+              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <Settings className="w-6 h-6 mr-3 text-gray-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">设备支持</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-100">
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          POS机型号
+                        </label>
+                        <p className="text-base text-gray-900 font-medium">
+                          {pos.basic_info.model || <span className="text-gray-500">待勘察</span>}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-100">
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          收单机构
+                        </label>
+                        <p className="text-base text-gray-900 font-medium">
+                          {pos.basic_info.acquiring_institution || <span className="text-gray-500">待勘察</span>}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-100">
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          收银位置
+                        </label>
+                        <p className="text-base text-gray-900 font-medium">
+                          {pos.basic_info.checkout_location || <span className="text-gray-500">待勘察</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </AnimatedCard>
+            </div>
+
+            {/* 收单模式支持 - 独立板块 */}
             <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
               <CardContent className="p-6">
                 <div className="flex items-center mb-4">
-                  <Building className="w-5 h-5 mr-2 text-orange-600" />
-                  <h3 className="font-semibold text-gray-900">商家信息</h3>
+                  <Settings className="w-6 h-6 mr-3 text-indigo-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">收单模式支持</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">
-                      商户交易名称
-                    </label>
-                    <p className="text-sm text-gray-900">
-                      {pos.merchant_info?.transaction_name || <span className="text-gray-500">待勘察</span>}
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-100">
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900 mb-1">DCC</div>
+                      <div className="text-sm text-gray-600">Dynamic Currency Conversion</div>
+                    </div>
+                    <div className="flex items-center">
+                      <div className={`w-4 h-4 rounded-full mr-2 ${
+                        pos.basic_info.supports_dcc ? 'bg-green-500' : 'bg-gray-300'
+                      }`} />
+                      <span className={`text-sm font-medium ${
+                        pos.basic_info.supports_dcc ? 'text-green-700' : 'text-gray-500'
+                      }`}>
+                        {pos.basic_info.supports_dcc ? '支持' : '不支持'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-100">
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900 mb-1">EDC</div>
+                      <div className="text-sm text-gray-600">Electronic Data Capture</div>
+                    </div>
+                    <div className="flex items-center">
+                      <div className={`w-4 h-4 rounded-full mr-2 ${
+                        pos.basic_info.supports_edc ? 'bg-green-500' : 'bg-gray-300'
+                      }`} />
+                      <span className={`text-sm font-medium ${
+                        pos.basic_info.supports_edc ? 'text-green-700' : 'text-gray-500'
+                      }`}>
+                        {pos.basic_info.supports_edc ? '支持' : '不支持'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </AnimatedCard>
+
+
+
+            {/* 备注信息 - 如果有内容则显示 */}
+            {pos.remarks && (
+              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <FileText className="w-6 h-6 mr-3 text-slate-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">备注信息</h3>
+                  </div>
+                  <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border border-slate-100">
+                    <p className="text-base text-gray-900 leading-relaxed">
+                      {pos.remarks}
                     </p>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">
-                      商户交易类型
-                    </label>
-                    <p className="text-sm text-gray-900">
-                      {pos.merchant_info?.transaction_type || <span className="text-gray-500">待勘察</span>}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </AnimatedCard>
-
-            {/* 设备支持 */}
-            <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
-              <CardContent className="p-6">
-                <div className="flex items-center mb-4">
-                  <Settings className="w-5 h-5 mr-2 text-gray-600" />
-                  <h3 className="font-semibold text-gray-900">设备支持</h3>
-                </div>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">
-                        POS机型号
-                      </label>
-                      <p className="text-sm text-gray-900">
-                        {pos.basic_info.model || <span className="text-gray-500">待勘察</span>}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">
-                        收单机构
-                      </label>
-                      <p className="text-sm text-gray-900">
-                        {pos.basic_info.acquiring_institution || <span className="text-gray-500">待勘察</span>}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">
-                        收银位置
-                      </label>
-                      <p className="text-sm text-gray-900">
-                        {pos.basic_info.checkout_location || <span className="text-gray-500">待勘察</span>}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* 收单模式支持 */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-3 block">收单模式支持</label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">DCC</div>
-                          <div className="text-xs text-gray-500">Dynamic Currency Conversion</div>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${
-                          pos.basic_info.supports_dcc ? 'bg-green-500' : 'bg-gray-300'
-                        }`} />
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">EDC</div>
-                          <div className="text-xs text-gray-500">Electronic Data Capture</div>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${
-                           pos.basic_info.supports_edc ? 'bg-green-500' : 'bg-gray-300'
-                         }`} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </AnimatedCard>
-
-
-
-            {/* 结账地点 */}
-            <AnimatedCard variant="elevated" hoverable>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <MapPin className="w-5 h-5 mr-2" />
-                  结账地点
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-900">
-                  {pos.basic_info.checkout_location || <span className="text-gray-500">待勘察</span>}
-                </p>
-              </CardContent>
-            </AnimatedCard>
-
-            {/* 备注板块 */}
-            <AnimatedCard variant="elevated" hoverable>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <FileText className="w-5 h-5 mr-2" />
-                  备注
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-900">
-                  {pos.remarks || <span className="text-gray-500">待勘察</span>}
-                </p>
-              </CardContent>
-            </AnimatedCard>
+                </CardContent>
+              </AnimatedCard>
+            )}
 
             {/* 付款手续费 */}
             {pos.fees && (
@@ -1173,9 +1265,12 @@ const POSDetail = () => {
                                 {network === 'unionpay' ? '银联' : 
                                  network === 'visa' ? 'VISA' :
                                  network === 'mastercard' ? 'MC' :
-                                 network === 'amex' ? 'AMEX' :
+                                 network === 'amex_cn' ? 'AMEX CN' :
+                                 network === 'amex' ? 'AMEX GL' :
+                                 network === 'mastercard_cn' ? 'MC CN' :
                                  network === 'jcb' ? 'JCB' :
-                                 network === 'discover' ? 'DISC' : network.toUpperCase()}
+                                 network === 'discover' ? 'DISC' :
+                                 network === 'diners' ? 'DINERS' : network.toUpperCase()}
                               </span>
                             </div>
                             <div>
@@ -1510,12 +1605,6 @@ const POSDetail = () => {
         size="md"
       >
         <div className="space-y-6">
-          <div className="p-4 border rounded-lg">
-            <p className="text-gray-700">
-              为 "{pos?.merchant_name}" 记录支付尝试结果
-            </p>
-          </div>
-          
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

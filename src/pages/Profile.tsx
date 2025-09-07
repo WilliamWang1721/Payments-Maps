@@ -342,7 +342,7 @@ const Profile = () => {
               <CardTitle>我的收藏</CardTitle>
               {favorites.length > 0 && (
                 <Button
-                  onClick={() => navigate('/favorites')}
+                  onClick={() => navigate('/app/favorites')}
                   variant="outline"
                   size="sm"
                 >
@@ -357,7 +357,7 @@ const Profile = () => {
                 <Heart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">还没有收藏任何POS机</p>
                 <Button
-                  onClick={() => navigate('/map')}
+                  onClick={() => navigate('/app/map')}
                   className="mt-4"
                   size="sm"
                 >
@@ -376,7 +376,7 @@ const Profile = () => {
                     >
                       <div
                         className="flex-1 cursor-pointer"
-                        onClick={() => navigate(`/pos/${favorite.pos_machines!.id}`)}
+                        onClick={() => navigate(`/app/pos/${favorite.pos_machines!.id}`)}
                       >
                         <h4 className="font-medium text-gray-900">{favorite.pos_machines.merchant_name}</h4>
                         <p className="text-sm text-gray-600">{favorite.pos_machines.merchant_name}</p>
@@ -411,7 +411,7 @@ const Profile = () => {
           <CardContent className="space-y-3">
             {permissions.canAdd && (
               <Button
-                onClick={() => navigate('/add-pos')}
+                onClick={() => navigate('/app/add-pos')}
                 variant="outline"
                 className="w-full justify-start"
               >
@@ -444,7 +444,7 @@ const Profile = () => {
             )}
             
             <Button
-              onClick={() => navigate('/my-pos')}
+              onClick={() => navigate('/app/my-pos')}
               variant="outline"
               className="w-full justify-start"
             >
@@ -453,7 +453,7 @@ const Profile = () => {
             </Button>
             
             <Button
-              onClick={() => navigate('/favorites')}
+              onClick={() => navigate('/app/favorites')}
               variant="outline"
               className="w-full justify-start"
             >
@@ -462,7 +462,7 @@ const Profile = () => {
             </Button>
             
             <Button
-              onClick={() => navigate('/history')}
+              onClick={() => navigate('/app/history')}
               variant="outline"
               className="w-full justify-start"
             >
@@ -471,7 +471,7 @@ const Profile = () => {
             </Button>
             
             <Button
-              onClick={() => navigate('/settings')}
+              onClick={() => navigate('/app/settings')}
               variant="outline"
               className="w-full justify-start"
             >

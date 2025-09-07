@@ -231,7 +231,7 @@ const History: React.FC = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">还没有浏览历史</h3>
               <p className="text-gray-600 mb-6">访问POS机详情页后会自动记录浏览历史</p>
               <button
-                onClick={() => navigate('/map')}
+                onClick={() => navigate('/app/map')}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 去发现POS机
@@ -295,7 +295,7 @@ const History: React.FC = () => {
                           <Trash2 className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => navigate(`/pos/${pos.id}`)}
+                          onClick={() => navigate(`/app/pos/${pos.id}`)}
                           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                         >
                           查看详情

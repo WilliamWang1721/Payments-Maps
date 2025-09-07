@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60">
+  <!-- Mastercard CN (万事网联) interlocking circles in white -->
+  <g fill="white">
+    <!-- Left circle -->
+    <circle cx="20" cy="30" r="18" />
+    <!-- Right circle -->
+    <circle cx="50" cy="30" r="18" />
+    <!-- Intersection area -->
+    <path d="M35 18 A18 18 0 0 0 35 42 A18 18 0 0 0 35 18 Z" fill="white" fill-opacity="0.8" />
+  </g>
+  <!-- Chinese text for 万事网联 -->
+  <text x="85" y="25" text-anchor="middle" fill="white" font-family="SimHei, Arial" font-size="6" font-weight="bold">万事</text>
+  <text x="85" y="35" text-anchor="middle" fill="white" font-family="SimHei, Arial" font-size="6" font-weight="bold">网联</text>
+</svg>

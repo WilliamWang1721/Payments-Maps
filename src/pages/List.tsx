@@ -493,7 +493,7 @@ const List = () => {
             <h3 className="text-lg font-medium text-gray-900 mb-2">暂无POS机数据</h3>
             <p className="text-gray-600 mb-4">附近还没有POS机信息，快来添加第一个吧！</p>
             {user && (
-              <Button onClick={() => navigate('/add-pos')}>
+              <Button onClick={() => navigate('/app/add-pos')}>
                 <Plus className="w-4 h-4 mr-2" />
                 添加POS机
               </Button>
@@ -507,7 +507,7 @@ const List = () => {
               direction="up"
               onClick={() => {
                 console.log('点击POS卡片，ID:', pos.id)
-                navigate(`/pos/${pos.id}`)
+                navigate(`/app/pos/${pos.id}`)
               }}
             >
               <Card
