@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "payments-maps": {
+      "command": "node",
+      "args": ["{HOME}/.payments-maps-mcp/mcp-client/dist/index.js"],
+      "env": {
+        "PAYMENTS_MAPS_SERVER": "https://www.payments-maps.asia"
+      }
+    }
+  }
+}
+
+<!-- 使用说明：
+1. 将 {HOME} 替换为你的用户主目录绝对路径
+2. 例如: /Users/williamwang/.payments-maps-mcp/mcp-client/dist/index.js
+3. 保存到 Claude Desktop 配置文件中
+-->
