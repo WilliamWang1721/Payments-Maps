@@ -84,11 +84,11 @@ start_mcp() {
     
     echo "🌟 Starting Payments Maps MCP Client..." >&2
     echo "📱 Server: ${PAYMENTS_MAPS_SERVER:-https://www.payments-maps.asia}" >&2
-    echo "🔐 Authentication will open browser on first tool use" >&2
+    echo "🛠️ Available tools: search_pos_machines, get_pos_details, add_pos_machine" >&2
     echo "✨ Ready for Claude Desktop connection!" >&2
     
     # 启动 MCP 客户端
-    exec node dist/index.js
+    exec node dist/simple-client.js
 }
 
 # 主流程
