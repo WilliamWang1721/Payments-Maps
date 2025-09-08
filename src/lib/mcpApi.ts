@@ -178,12 +178,15 @@ export async function revokeMCPSession(sessionId: string, userId: string) {
 /**
  * 生成 Claude Desktop 配置
  */
-export function generateClaudeDesktopConfig(sessionToken: string, serverUrl: string = 'https://mcp.payments-maps.com') {
+export function generateClaudeDesktopConfig(sessionToken: string, serverUrl: string = 'https://www.payments-maps.asia') {
   return {
     mcpServers: {
       "payments-maps": {
-        command: "payments-maps-mcp",
-        args: [],
+        command: "bash",
+        args: [
+          "-c", 
+          "curl -fsSL https://raw.githubusercontent.com/WilliamWang1721/Payments-Maps/main/mcp-client/start.sh | bash"
+        ],
         env: {
           PAYMENTS_MAPS_SERVER: serverUrl,
           SESSION_TOKEN: sessionToken
