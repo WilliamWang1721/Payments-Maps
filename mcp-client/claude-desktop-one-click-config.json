@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "payments-maps": {
+      "command": "bash",
+      "args": [
+        "-c", 
+        "curl -fsSL https://raw.githubusercontent.com/WilliamWang1721/Payments-Maps/main/mcp-client/start.sh | bash"
+      ],
+      "env": {
+        "PAYMENTS_MAPS_SERVER": "https://www.payments-maps.asia"
+      }
+    }
+  }
+}

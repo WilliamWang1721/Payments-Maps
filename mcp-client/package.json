@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "description": "Payments Maps MCP Client with Auto Authentication",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/simple-client.js",
   "bin": {
-    "payments-maps-mcp": "dist/index.js"
+    "payments-maps-mcp": "dist/simple-client.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js",
+    "start": "node dist/simple-client.js",
+    "dev": "tsc && node dist/simple-client.js",
     "install-global": "npm install -g ."
   },
   "dependencies": {
