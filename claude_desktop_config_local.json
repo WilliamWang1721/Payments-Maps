@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "payments-maps": {
+      "command": "node",
+      "args": ["/Users/williamwang/Downloads/Payments Maps/mcp-client/dist/index.js"],
+      "env": {
+        "PAYMENTS_MAPS_SERVER": "https://www.payments-maps.asia"
+      }
+    }
+  }
+}

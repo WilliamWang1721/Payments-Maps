@@ -17,7 +17,7 @@ class PaymentsMapsClient {
   constructor() {
     this.server = new Server(
       {
-        name: "payments-maps-client",
+        name: "payments-maps",
         version: "1.0.0",
       },
       {
@@ -231,10 +231,10 @@ class PaymentsMapsClient {
   }
 
   async start() {
-    console.error("🚀 Payments Maps MCP Client 启动中...");
+    console.error("🚀 Payments Maps MCP Server 启动中...");
     console.error("📱 服务器: https://www.payments-maps.asia");  
     console.error("🛠️ 可用工具: search_pos_machines, get_pos_details, add_pos_machine");
-    console.error("✨ MCP Client 已就绪，等待连接...");
+    console.error("✨ MCP Server 已就绪，等待客户端连接...");
     
     const transport = new StdioServerTransport();
     await this.server.connect(transport);

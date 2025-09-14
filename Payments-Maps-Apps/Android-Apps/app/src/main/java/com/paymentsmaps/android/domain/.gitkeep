@@ -1,0 +1,3 @@
+# Domain Layer
+# Contains business logic, use cases, and domain models
+# Independent of external frameworks and UI
