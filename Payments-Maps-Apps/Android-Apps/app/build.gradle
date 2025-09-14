@@ -153,8 +153,8 @@ dependencies {
     implementation "androidx.work:work-runtime-ktx:$work_version"
     implementation "androidx.hilt:hilt-work:1.1.0"
     
-    // Image Loading
-    implementation "io.coil-kt:coil-compose:$coil_version"
+    // Browser Support for OAuth
+    implementation 'androidx.browser:browser:1.7.0'
     
     // Maps & Location - 高德地图
     implementation "com.amap.api:3dmap:latest.integration"

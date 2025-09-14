@@ -399,7 +399,7 @@ private fun SocialLoginSection(
         }
         
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Google 登录
             SocialLoginButton(
@@ -415,6 +415,15 @@ private fun SocialLoginSection(
                 onClick = onGithubLogin,
                 icon = Icons.Default.Code, // 临时图标
                 label = "GitHub",
+                enabled = !isLoading,
+                modifier = Modifier.weight(1f)
+            )
+            
+            // Microsoft 登录
+            SocialLoginButton(
+                onClick = { viewModel.signInWithMicrosoft() },
+                icon = Icons.Default.Business, // 临时图标
+                label = "Microsoft",
                 enabled = !isLoading,
                 modifier = Modifier.weight(1f)
             )

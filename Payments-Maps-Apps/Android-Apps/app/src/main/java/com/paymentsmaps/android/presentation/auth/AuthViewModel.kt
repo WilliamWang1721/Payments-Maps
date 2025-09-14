@@ -10,6 +10,10 @@ import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import io.github.jan.supabase.gotrue.providers.Google
 import io.github.jan.supabase.gotrue.providers.GitHub
+import io.github.jan.supabase.gotrue.providers.Microsoft
+import com.paymentsmaps.android.data.auth.OAuthManager
+import com.paymentsmaps.android.data.auth.OAuthResult
+import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +26,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val supabaseClient: SupabaseClient,
+    private val oAuthManager: OAuthManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -124,16 +129,25 @@ class AuthViewModel @Inject constructor(
      */
     fun signInWithGoogle() {
         viewModelScope.launch {
-            try {
-                _authState.value = AuthState.Loading
-                
-                // TODO: 实现Google OAuth登录
-                // 这里需要配置Google OAuth客户端ID和重定向URI
-                supabaseClient.auth.signInWith(Google)
-                
-                _authState.value = AuthState.Authenticated
-            } catch (e: Exception) {
-                _authState.value = AuthState.Error("Google登录暂时不可用: ${e.message}")
+            oAuthManager.signInWithGoogle().collect { result ->
+                when (result) {
+                    is OAuthResult.Loading -> {
+                        _authState.value = AuthState.Loading
+                    }
+                    
+                    is OAuthResult.RedirectStarted -> {
+                        // 已启动浏览器重定向，等待回调
+                        Timber.d("Google OAuth redirect started")
+                    }
+                    
+                    is OAuthResult.Success -> {
+                        _authState.value = AuthState.Authenticated
+                    }
+                    
+                    is OAuthResult.Error -> {
+                        _authState.value = AuthState.Error(result.message)
+                    }
+                }
             }
         }
     }
@@ -143,15 +157,53 @@ class AuthViewModel @Inject constructor(
      */
     fun signInWithGitHub() {
         viewModelScope.launch {
-            try {
-                _authState.value = AuthState.Loading
-                
-                // TODO: 实现GitHub OAuth登录
-                supabaseClient.auth.signInWith(GitHub)
-                
-                _authState.value = AuthState.Authenticated
-            } catch (e: Exception) {
-                _authState.value = AuthState.Error("GitHub登录暂时不可用: ${e.message}")
+            oAuthManager.signInWithGitHub().collect { result ->
+                when (result) {
+                    is OAuthResult.Loading -> {
+                        _authState.value = AuthState.Loading
+                    }
+                    
+                    is OAuthResult.RedirectStarted -> {
+                        // 已启动浏览器重定向，等待回调
+                        Timber.d("GitHub OAuth redirect started")
+                    }
+                    
+                    is OAuthResult.Success -> {
+                        _authState.value = AuthState.Authenticated
+                    }
+                    
+                    is OAuthResult.Error -> {
+                        _authState.value = AuthState.Error(result.message)
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Microsoft 登录
+     */
+    fun signInWithMicrosoft() {
+        viewModelScope.launch {
+            oAuthManager.signInWithMicrosoft().collect { result ->
+                when (result) {
+                    is OAuthResult.Loading -> {
+                        _authState.value = AuthState.Loading
+                    }
+                    
+                    is OAuthResult.RedirectStarted -> {
+                        // 已启动浏览器重定向，等待回调
+                        Timber.d("Microsoft OAuth redirect started")
+                    }
+                    
+                    is OAuthResult.Success -> {
+                        _authState.value = AuthState.Authenticated
+                    }
+                    
+                    is OAuthResult.Error -> {
+                        _authState.value = AuthState.Error(result.message)
+                    }
+                }
             }
         }
     }
@@ -213,4 +265,30 @@ class AuthViewModel @Inject constructor(
      * 获取当前用户
      */
     fun getCurrentUser() = supabaseClient.auth.currentUserOrNull()
+    
+    /**
+     * OAuth 登录成功回调
+     */
+    fun onOAuthSuccess(userId: String, email: String) {
+        viewModelScope.launch {
+            try {
+                // 验证用户会话
+                val session = supabaseClient.auth.currentSessionOrNull()
+                if (session != null) {
+                    _authState.value = AuthState.Authenticated
+                    Timber.d("OAuth login completed successfully for: $email")
+                } else {
+                    _authState.value = AuthState.Error("OAuth 登录验证失败")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "OAuth success callback failed")
+                _authState.value = AuthState.Error("OAuth 登录处理失败: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 获取支持的 OAuth 提供商
+     */
+    fun getSupportedOAuthProviders() = oAuthManager.getSupportedProviders()
 }

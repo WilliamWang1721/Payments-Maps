@@ -47,3 +47,58 @@ schema.sql
 # Local documentation
 LinuxDO推广说明.md
 上海地区接受刷卡的商户汇总.csv
+
+# Temporary and test files
+temp-*
+*temp*
+*.tmp
+*.test.*
+test-*
+*-test.*
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+__MACOSX/
+
+# Development tools
+.trae/
+.claude/
+*.zip
+*.gz
+*.tar
+
+# Debug files
+*debug*
+*DEBUG*
+*Debug*
+
+# Local config files
+*local*.json
+claude_desktop_config_local.json
+
+# IDE and editor files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+*.apk
+*.ipa
+
+# Android specific (for Payments-Maps-Apps/Android-Apps/)
+local.properties
+*.iml
+.gradle/
+.android/
+
+# iOS specific (for future iOS app)
+*.xcworkspace/
+*.xcuserdata/
+*.mobileprovision
+
+# Documentation that shouldn't be in main repo
+各类独有名词规范使用书.txt

@@ -1,0 +1,26 @@
+package com.paymentsmaps.android.presentation.auth
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
+import dagger.hilt.android.AndroidEntryPoint
+import com.paymentsmaps.android.data.auth.OAuthManager
+import com.paymentsmaps.android.data.auth.OAuthResult
+import com.paymentsmaps.android.presentation.theme.PaymentsMapsTheme
+import kotlinx.coroutines.launch
+import timber.log.Timber
+import javax.inject.Inject
+
+/**\n * OAuth 回调处理 Activity\n * 处理从社交登录提供商返回的回调\n */\n@AndroidEntryPoint\nclass OAuthCallbackActivity : ComponentActivity() {\n    \n    @Inject\n    lateinit var oAuthManager: OAuthManager\n    \n    private val authViewModel: AuthViewModel by viewModels()\n    \n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        \n        setContent {\n            PaymentsMapsTheme {\n                OAuthCallbackScreen(\n                    onResult = { success ->\n                        if (success) {\n                            // 登录成功，跳转到主页面\n                            navigateToMain()\n                        } else {\n                            // 登录失败，返回登录页面\n                            navigateToLogin()\n                        }\n                    }\n                )\n            }\n        }\n        \n        // 处理 OAuth 回调\n        handleOAuthCallback()\n    }\n    \n    /**\n     * 处理 OAuth 回调\n     */\n    private fun handleOAuthCallback() {\n        val uri = intent.data\n        if (uri != null && oAuthManager.isOAuthCallback(uri)) {\n            lifecycleScope.launch {\n                try {\n                    val result = oAuthManager.handleOAuthCallback(uri)\n                    when (result) {\n                        is OAuthResult.Success -> {\n                            Timber.d(\"OAuth callback successful: ${result.email}\")\n                            // 通知 AuthViewModel 认证成功\n                            authViewModel.onOAuthSuccess(result.userId, result.email)\n                            navigateToMain()\n                        }\n                        \n                        is OAuthResult.Error -> {\n                            Timber.e(\"OAuth callback error: ${result.message}\")\n                            authViewModel.showError(result.message)\n                            navigateToLogin()\n                        }\n                        \n                        else -> {\n                            Timber.w(\"Unexpected OAuth result: $result\")\n                            navigateToLogin()\n                        }\n                    }\n                } catch (e: Exception) {\n                    Timber.e(e, \"Failed to handle OAuth callback\")\n                    authViewModel.showError(\"登录处理失败: ${e.message}\")\n                    navigateToLogin()\n                }\n            }\n        } else {\n            Timber.w(\"Invalid OAuth callback URI: $uri\")\n            navigateToLogin()\n        }\n    }\n    \n    /**\n     * 跳转到主页面\n     */\n    private fun navigateToMain() {\n        val intent = Intent(this, MainActivity::class.java).apply {\n            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK\n        }\n        startActivity(intent)\n        finish()\n    }\n    \n    /**\n     * 返回登录页面\n     */\n    private fun navigateToLogin() {\n        // 这里应该返回到登录页面或关闭当前Activity\n        finish()\n    }\n}\n\n/**\n * OAuth 回调处理界面\n */\n@Composable\nprivate fun OAuthCallbackScreen(\n    onResult: (Boolean) -> Unit\n) {\n    val context = LocalContext.current\n    \n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .background(MaterialTheme.colorScheme.background)\n            .padding(32.dp),\n        horizontalAlignment = Alignment.CenterHorizontally,\n        verticalArrangement = Arrangement.Center\n    ) {\n        CircularProgressIndicator(\n            modifier = Modifier.size(64.dp),\n            color = MaterialTheme.colorScheme.primary,\n            strokeWidth = 4.dp\n        )\n        \n        Spacer(modifier = Modifier.height(24.dp))\n        \n        Text(\n            text = \"正在处理登录信息...\",\n            style = MaterialTheme.typography.titleLarge,\n            color = MaterialTheme.colorScheme.onBackground,\n            textAlign = TextAlign.Center\n        )\n        \n        Spacer(modifier = Modifier.height(16.dp))\n        \n        Text(\n            text = \"请稍候，我们正在验证您的身份\",\n            style = MaterialTheme.typography.bodyLarge,\n            color = MaterialTheme.colorScheme.onSurfaceVariant,\n            textAlign = TextAlign.Center\n        )\n    }\n}\n\n// 临时的 MainActivity 类引用，实际应该从正确的包导入\nclass MainActivity : ComponentActivity()
