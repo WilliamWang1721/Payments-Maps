@@ -11,6 +11,9 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.storage.Storage
 import com.paymentsmaps.android.BuildConfig
+import com.paymentsmaps.android.data.auth.OAuthManager
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
 import javax.inject.Singleton
 
 /**
@@ -66,5 +69,14 @@ object SupabaseModule {
     @Singleton
     fun provideSupabaseRealtime(supabaseClient: SupabaseClient): Realtime {
         return supabaseClient.realtime
+    }
+    
+    @Provides
+    @Singleton
+    fun provideOAuthManager(
+        supabaseClient: SupabaseClient,
+        @ApplicationContext context: Context
+    ): OAuthManager {
+        return OAuthManager(supabaseClient, context)
     }
 }
