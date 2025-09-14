@@ -1,0 +1,3 @@
+# Data Layer
+# Contains repositories, data sources, and data models
+# Handles data persistence and network operations

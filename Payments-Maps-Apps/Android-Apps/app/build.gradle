@@ -1,0 +1,199 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.google.dagger.hilt.android'
+    id 'com.google.devtools.ksp'
+}
+
+// 读取 local.properties
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+
+android {
+    namespace 'com.paymentsmaps.android'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.paymentsmaps.android"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary true
+        }
+        
+        // Supabase配置
+        buildConfigField "String", "SUPABASE_URL", "\"${localProperties.getProperty('SUPABASE_URL', 'https://ytzmqzxspcuclffegazk.supabase.co')}\""
+        buildConfigField "String", "SUPABASE_ANON_KEY", "\"${localProperties.getProperty('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0em1xenhzcGN1Y2xmZmVnYXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4MTQ4NzEsImV4cCI6MjA3MDM5MDg3MX0.nQrkNNYG4nUsJlMe5zuOp0xwsHhkkRcWCq8x4arN2Co')}\""
+        
+        // 地图配置
+        manifestPlaceholders = [
+            AMAP_API_KEY: localProperties.getProperty('AMAP_API_KEY', '9af61060f28f4a7b3096372b1384257f'),
+            GOOGLE_MAPS_API_KEY: localProperties.getProperty('GOOGLE_MAPS_API_KEY', 'AIzaSyAnIznwe2grePNXQw8amIJ2cWdRB96o2IM')
+        ]
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            minifyEnabled false
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+        coreLibraryDesugaringEnabled true
+    }
+    
+    kotlinOptions {
+        jvmTarget = '11'
+        freeCompilerArgs += [
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-opt-in=androidx.compose.animation.ExperimentalAnimationApi",
+            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "-opt-in=kotlinx.serialization.ExperimentalSerializationApi"
+        ]
+    }
+    
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8'
+    }
+    
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+    
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
+}
+
+dependencies {
+    // Core Android
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+    
+    // Material Design Components
+    implementation 'com.google.android.material:material:1.11.0'
+    
+    // Compose BOM
+    implementation platform("androidx.compose:compose-bom:$compose_bom_version")
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.compose.animation:animation'
+    implementation 'androidx.compose.foundation:foundation'
+    
+    // Navigation
+    implementation "androidx.navigation:navigation-compose:$navigation_version"
+    implementation "androidx.hilt:hilt-navigation-compose:1.1.0"
+    
+    // Lifecycle
+    implementation "androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle_version"
+    implementation "androidx.lifecycle:lifecycle-runtime-compose:$lifecycle_version"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
+    
+    // Dependency Injection
+    implementation "com.google.dagger:hilt-android:$hilt_version"
+    ksp "com.google.dagger:hilt-compiler:$hilt_version"
+    
+    // Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:$coroutines_version"
+    
+    // Serialization
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:$serialization_version"
+    
+    // Supabase
+    implementation "io.github.jan-tennert.supabase:postgrest-kt:2.6.0"
+    implementation "io.github.jan-tennert.supabase:gotrue-kt:2.6.0"
+    implementation "io.github.jan-tennert.supabase:realtime-kt:2.6.0"
+    implementation "io.github.jan-tennert.supabase:storage-kt:2.6.0"
+    
+    // Ktor (Supabase dependency)
+    implementation "io.ktor:ktor-client-android:$ktor_version"
+    implementation "io.ktor:ktor-client-content-negotiation:$ktor_version"
+    implementation "io.ktor:ktor-serialization-kotlinx-json:$ktor_version"
+    implementation "io.ktor:ktor-client-logging:$ktor_version"
+    
+    // DataStore
+    implementation "androidx.datastore:datastore-preferences:$datastore_version"
+    
+    // WorkManager
+    implementation "androidx.work:work-runtime-ktx:$work_version"
+    implementation "androidx.hilt:hilt-work:1.1.0"
+    
+    // Image Loading
+    implementation "io.coil-kt:coil-compose:$coil_version"
+    
+    // Maps & Location - 高德地图
+    implementation "com.amap.api:3dmap:latest.integration"
+    
+    // Camera
+    implementation "androidx.camera:camera-camera2:$camera_version"
+    implementation "androidx.camera:camera-lifecycle:$camera_version"
+    implementation "androidx.camera:camera-view:$camera_version"
+    
+    // QR Code
+    implementation "com.google.zxing:core:3.5.2"
+    implementation "com.journeyapps:zxing-android-embedded:4.3.0"
+    
+    // Animation
+    implementation "com.airbnb.android:lottie-compose:$lottie_version"
+    
+    // Logging
+    implementation "com.jakewharton.timber:timber:$timber_version"
+    
+    // Desugaring
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+    
+    // Debug
+    debugImplementation "com.squareup.leakcanary:leakcanary-android:$leakcanary_version"
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+    
+    // Testing
+    testImplementation "junit:junit:$junit_version"
+    testImplementation "io.mockk:mockk:$mockk_version"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines_version"
+    testImplementation "app.cash.turbine:turbine:$turbine_version"
+    testImplementation "com.google.dagger:hilt-android-testing:$hilt_version"
+    kspTest "com.google.dagger:hilt-compiler:$hilt_version"
+    
+    androidTestImplementation "androidx.test.ext:junit:$androidx_test_version"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$espresso_version"
+    androidTestImplementation platform("androidx.compose:compose-bom:$compose_bom_version")
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    androidTestImplementation "com.google.dagger:hilt-android-testing:$hilt_version"
+    kspAndroidTest "com.google.dagger:hilt-compiler:$hilt_version"
+}

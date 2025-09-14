@@ -1,0 +1,70 @@
+package com.paymentsmaps.android.data.remote
+
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.gotrue.Auth
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.storage.Storage
+import com.paymentsmaps.android.BuildConfig
+import javax.inject.Singleton
+
+/**
+ * Supabase 依赖注入模块
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+object SupabaseModule {
+    
+    @Provides
+    @Singleton
+    fun provideSupabaseClient(): SupabaseClient {
+        return createSupabaseClient(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            supabaseKey = BuildConfig.SUPABASE_ANON_KEY
+        ) {
+            install(Auth) {
+                // 配置认证选项
+                autoRefreshToken = true
+                autoSaveSession = true
+            }
+            install(Postgrest) {
+                // 配置数据库操作选项
+            }
+            install(Storage) {
+                // 配置文件存储选项
+            }
+            install(Realtime) {
+                // 配置实时订阅选项
+            }
+        }
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSupabaseAuth(supabaseClient: SupabaseClient): Auth {
+        return supabaseClient.auth
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSupabasePostgrest(supabaseClient: SupabaseClient): Postgrest {
+        return supabaseClient.postgrest
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSupabaseStorage(supabaseClient: SupabaseClient): Storage {
+        return supabaseClient.storage
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSupabaseRealtime(supabaseClient: SupabaseClient): Realtime {
+        return supabaseClient.realtime
+    }
+}
