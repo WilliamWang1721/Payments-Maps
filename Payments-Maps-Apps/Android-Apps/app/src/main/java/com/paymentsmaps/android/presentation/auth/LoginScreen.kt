@@ -201,7 +201,7 @@ fun LoginScreen(
                         label = { Text("确认密码") },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.LockOutline,
+                                imageVector = Icons.Default.Lock,
                                 contentDescription = "确认密码"
                             )
                         },

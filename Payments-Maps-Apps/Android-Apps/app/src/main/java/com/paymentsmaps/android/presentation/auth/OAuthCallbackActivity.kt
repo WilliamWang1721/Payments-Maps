@@ -23,4 +23,135 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
-/**\n * OAuth 回调处理 Activity\n * 处理从社交登录提供商返回的回调\n */\n@AndroidEntryPoint\nclass OAuthCallbackActivity : ComponentActivity() {\n    \n    @Inject\n    lateinit var oAuthManager: OAuthManager\n    \n    private val authViewModel: AuthViewModel by viewModels()\n    \n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        \n        setContent {\n            PaymentsMapsTheme {\n                OAuthCallbackScreen(\n                    onResult = { success ->\n                        if (success) {\n                            // 登录成功，跳转到主页面\n                            navigateToMain()\n                        } else {\n                            // 登录失败，返回登录页面\n                            navigateToLogin()\n                        }\n                    }\n                )\n            }\n        }\n        \n        // 处理 OAuth 回调\n        handleOAuthCallback()\n    }\n    \n    /**\n     * 处理 OAuth 回调\n     */\n    private fun handleOAuthCallback() {\n        val uri = intent.data\n        if (uri != null && oAuthManager.isOAuthCallback(uri)) {\n            lifecycleScope.launch {\n                try {\n                    val result = oAuthManager.handleOAuthCallback(uri)\n                    when (result) {\n                        is OAuthResult.Success -> {\n                            Timber.d(\"OAuth callback successful: ${result.email}\")\n                            // 通知 AuthViewModel 认证成功\n                            authViewModel.onOAuthSuccess(result.userId, result.email)\n                            navigateToMain()\n                        }\n                        \n                        is OAuthResult.Error -> {\n                            Timber.e(\"OAuth callback error: ${result.message}\")\n                            authViewModel.showError(result.message)\n                            navigateToLogin()\n                        }\n                        \n                        else -> {\n                            Timber.w(\"Unexpected OAuth result: $result\")\n                            navigateToLogin()\n                        }\n                    }\n                } catch (e: Exception) {\n                    Timber.e(e, \"Failed to handle OAuth callback\")\n                    authViewModel.showError(\"登录处理失败: ${e.message}\")\n                    navigateToLogin()\n                }\n            }\n        } else {\n            Timber.w(\"Invalid OAuth callback URI: $uri\")\n            navigateToLogin()\n        }\n    }\n    \n    /**\n     * 跳转到主页面\n     */\n    private fun navigateToMain() {\n        val intent = Intent(this, MainActivity::class.java).apply {\n            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK\n        }\n        startActivity(intent)\n        finish()\n    }\n    \n    /**\n     * 返回登录页面\n     */\n    private fun navigateToLogin() {\n        // 这里应该返回到登录页面或关闭当前Activity\n        finish()\n    }\n}\n\n/**\n * OAuth 回调处理界面\n */\n@Composable\nprivate fun OAuthCallbackScreen(\n    onResult: (Boolean) -> Unit\n) {\n    val context = LocalContext.current\n    \n    Column(\n        modifier = Modifier\n            .fillMaxSize()\n            .background(MaterialTheme.colorScheme.background)\n            .padding(32.dp),\n        horizontalAlignment = Alignment.CenterHorizontally,\n        verticalArrangement = Arrangement.Center\n    ) {\n        CircularProgressIndicator(\n            modifier = Modifier.size(64.dp),\n            color = MaterialTheme.colorScheme.primary,\n            strokeWidth = 4.dp\n        )\n        \n        Spacer(modifier = Modifier.height(24.dp))\n        \n        Text(\n            text = \"正在处理登录信息...\",\n            style = MaterialTheme.typography.titleLarge,\n            color = MaterialTheme.colorScheme.onBackground,\n            textAlign = TextAlign.Center\n        )\n        \n        Spacer(modifier = Modifier.height(16.dp))\n        \n        Text(\n            text = \"请稍候，我们正在验证您的身份\",\n            style = MaterialTheme.typography.bodyLarge,\n            color = MaterialTheme.colorScheme.onSurfaceVariant,\n            textAlign = TextAlign.Center\n        )\n    }\n}\n\n// 临时的 MainActivity 类引用，实际应该从正确的包导入\nclass MainActivity : ComponentActivity()
+/**
+ * OAuth 回调处理 Activity
+ * 处理从社交登录提供商返回的回调
+ */
+@AndroidEntryPoint
+class OAuthCallbackActivity : ComponentActivity() {
+    
+    @Inject
+    lateinit var oAuthManager: OAuthManager
+    
+    private val authViewModel: AuthViewModel by viewModels()
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        setContent {
+            PaymentsMapsTheme {
+                OAuthCallbackScreen(
+                    onResult = { success ->
+                        if (success) {
+                            // 登录成功，跳转到主页面
+                            navigateToMain()
+                        } else {
+                            // 登录失败，返回登录页面
+                            navigateToLogin()
+                        }
+                    }
+                )
+            }
+        }
+        
+        // 处理 OAuth 回调
+        handleOAuthCallback()
+    }
+    
+    /**
+     * 处理 OAuth 回调
+     */
+    private fun handleOAuthCallback() {
+        val uri = intent.data
+        if (uri != null && oAuthManager.isOAuthCallback(uri)) {
+            lifecycleScope.launch {
+                try {
+                    val result = oAuthManager.handleOAuthCallback(uri)
+                    when (result) {
+                        is OAuthResult.Success -> {
+                            Timber.d("OAuth callback successful: ${result.email}")
+                            // 通知 AuthViewModel 认证成功
+                            authViewModel.onOAuthSuccess(result.userId, result.email)
+                            navigateToMain()
+                        }
+                        
+                        is OAuthResult.Error -> {
+                            Timber.e("OAuth callback error: ${result.message}")
+                            authViewModel.showError(result.message)
+                            navigateToLogin()
+                        }
+                        
+                        else -> {
+                            Timber.w("Unexpected OAuth result: $result")
+                            navigateToLogin()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to handle OAuth callback")
+                    authViewModel.showError("登录处理失败: ${e.message}")
+                    navigateToLogin()
+                }
+            }
+        } else {
+            Timber.w("Invalid OAuth callback URI: $uri")
+            navigateToLogin()
+        }
+    }
+    
+    /**
+     * 跳转到主页面
+     */
+    private fun navigateToMain() {
+        // 这里应该跳转到实际的主 Activity
+        finish()
+    }
+    
+    /**
+     * 返回登录页面
+     */
+    private fun navigateToLogin() {
+        // 这里应该返回到登录页面或关闭当前Activity
+        finish()
+    }
+}
+
+/**
+ * OAuth 回调处理界面
+ */
+@Composable
+private fun OAuthCallbackScreen(
+    onResult: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(64.dp),
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 4.dp
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Text(
+            text = "正在处理登录信息...",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "请稍候，我们正在验证您的身份",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}

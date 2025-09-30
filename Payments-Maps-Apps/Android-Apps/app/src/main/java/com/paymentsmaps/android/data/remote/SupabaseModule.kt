@@ -32,8 +32,6 @@ object SupabaseModule {
         ) {
             install(Auth) {
                 // 配置认证选项
-                autoRefreshToken = true
-                autoSaveSession = true
             }
             install(Postgrest) {
                 // 配置数据库操作选项
@@ -50,25 +48,25 @@ object SupabaseModule {
     @Provides
     @Singleton
     fun provideSupabaseAuth(supabaseClient: SupabaseClient): Auth {
-        return supabaseClient.auth
+        return supabaseClient.pluginManager.getPlugin(Auth)
     }
     
     @Provides
     @Singleton
     fun provideSupabasePostgrest(supabaseClient: SupabaseClient): Postgrest {
-        return supabaseClient.postgrest
+        return supabaseClient.pluginManager.getPlugin(Postgrest)
     }
     
     @Provides
     @Singleton
     fun provideSupabaseStorage(supabaseClient: SupabaseClient): Storage {
-        return supabaseClient.storage
+        return supabaseClient.pluginManager.getPlugin(Storage)
     }
     
     @Provides
     @Singleton
     fun provideSupabaseRealtime(supabaseClient: SupabaseClient): Realtime {
-        return supabaseClient.realtime
+        return supabaseClient.pluginManager.getPlugin(Realtime)
     }
     
     @Provides

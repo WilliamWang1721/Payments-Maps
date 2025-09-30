@@ -66,4 +66,177 @@ class NetworkConnectivityObserver @Inject constructor(
                     super.onLost(network)
                     Timber.d("Network lost: $network")
                     
-                    ProcessLifecycleOwner.get().lifecycleScope.launch {\n                        val stillConnected = isNetworkAvailable()\n                        _isConnected.value = stillConnected\n                        _connectionType.value = if (stillConnected) {\n                            getCurrentConnectionType()\n                        } else {\n                            ConnectionType.NONE\n                        }\n                    }\n                }\n                \n                override fun onCapabilitiesChanged(\n                    network: Network,\n                    networkCapabilities: NetworkCapabilities\n                ) {\n                    super.onCapabilitiesChanged(network, networkCapabilities)\n                    \n                    ProcessLifecycleOwner.get().lifecycleScope.launch {\n                        val hasInternet = networkCapabilities.hasCapability(\n                            NetworkCapabilities.NET_CAPABILITY_INTERNET\n                        ) && networkCapabilities.hasCapability(\n                            NetworkCapabilities.NET_CAPABILITY_VALIDATED\n                        )\n                        \n                        _isConnected.value = hasInternet\n                        _connectionType.value = if (hasInternet) {\n                            getCurrentConnectionType()\n                        } else {\n                            ConnectionType.NONE\n                        }\n                    }\n                }\n            }\n            \n            connectivityManager.registerNetworkCallback(request, networkCallback!!)\n            \n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to register network callback\")\n        }\n    }\n    \n    /**\n     * 检查网络是否可用\n     */\n    private fun isNetworkAvailable(): Boolean {\n        return try {\n            val network = connectivityManager.activeNetwork ?: return false\n            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false\n            \n            networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&\n            networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)\n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to check network availability\")\n            false\n        }\n    }\n    \n    /**\n     * 获取当前连接类型\n     */\n    private fun getCurrentConnectionType(): ConnectionType {\n        return try {\n            val network = connectivityManager.activeNetwork ?: return ConnectionType.NONE\n            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return ConnectionType.NONE\n            \n            when {\n                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {\n                    ConnectionType.WIFI\n                }\n                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {\n                    ConnectionType.CELLULAR\n                }\n                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> {\n                    ConnectionType.ETHERNET\n                }\n                else -> {\n                    ConnectionType.OTHER\n                }\n            }\n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to get connection type\")\n            ConnectionType.UNKNOWN\n        }\n    }\n    \n    /**\n     * 获取网络连接强度（仅WiFi和蜂窝网络）\n     */\n    fun getConnectionStrength(): ConnectionStrength {\n        return try {\n            val network = connectivityManager.activeNetwork ?: return ConnectionStrength.UNKNOWN\n            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return ConnectionStrength.UNKNOWN\n            \n            when {\n                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {\n                    // WiFi 信号强度检测\n                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {\n                        val signalStrength = networkCapabilities.signalStrength\n                        when {\n                            signalStrength >= -50 -> ConnectionStrength.EXCELLENT\n                            signalStrength >= -60 -> ConnectionStrength.GOOD\n                            signalStrength >= -70 -> ConnectionStrength.FAIR\n                            else -> ConnectionStrength.POOR\n                        }\n                    } else {\n                        ConnectionStrength.GOOD // 默认值\n                    }\n                }\n                \n                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {\n                    // 蜂窝网络强度检测\n                    ConnectionStrength.GOOD // 简化实现\n                }\n                \n                else -> ConnectionStrength.UNKNOWN\n            }\n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to get connection strength\")\n            ConnectionStrength.UNKNOWN\n        }\n    }\n    \n    /**\n     * 检查是否为计费连接\n     */\n    fun isMeteredConnection(): Boolean {\n        return try {\n            val network = connectivityManager.activeNetwork ?: return false\n            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false\n            \n            !networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)\n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to check metered connection\")\n            false\n        }\n    }\n    \n    /**\n     * 停止网络监听\n     */\n    fun stopNetworkCallback() {\n        try {\n            networkCallback?.let { callback ->\n                connectivityManager.unregisterNetworkCallback(callback)\n                networkCallback = null\n            }\n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to unregister network callback\")\n        }\n    }\n}\n\n/**\n * 连接类型枚举\n */\nenum class ConnectionType {\n    NONE,       // 无连接\n    WIFI,       // WiFi\n    CELLULAR,   // 蜂窝网络\n    ETHERNET,   // 以太网\n    OTHER,      // 其他类型\n    UNKNOWN     // 未知\n}\n\n/**\n * 连接强度枚举\n */\nenum class ConnectionStrength {\n    EXCELLENT,  // 优秀\n    GOOD,       // 良好\n    FAIR,       // 一般\n    POOR,       // 较差\n    UNKNOWN     // 未知\n}
+                    ProcessLifecycleOwner.get().lifecycleScope.launch {
+                        val stillConnected = isNetworkAvailable()
+                        _isConnected.value = stillConnected
+                        _connectionType.value = if (stillConnected) {
+                            getCurrentConnectionType()
+                        } else {
+                            ConnectionType.NONE
+                        }
+                    }
+                }
+                
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    networkCapabilities: NetworkCapabilities
+                ) {
+                    super.onCapabilitiesChanged(network, networkCapabilities)
+                    
+                    ProcessLifecycleOwner.get().lifecycleScope.launch {
+                        val hasInternet = networkCapabilities.hasCapability(
+                            NetworkCapabilities.NET_CAPABILITY_INTERNET
+                        ) && networkCapabilities.hasCapability(
+                            NetworkCapabilities.NET_CAPABILITY_VALIDATED
+                        )
+                        
+                        _isConnected.value = hasInternet
+                        _connectionType.value = if (hasInternet) {
+                            getCurrentConnectionType()
+                        } else {
+                            ConnectionType.NONE
+                        }
+                    }
+                }
+            }
+            
+            connectivityManager.registerNetworkCallback(request, networkCallback!!)
+            
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to register network callback")
+        }
+    }
+    
+    /**
+     * 检查网络是否可用
+     */
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val network = connectivityManager.activeNetwork ?: return false
+            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            
+            networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to check network availability")
+            false
+        }
+    }
+    
+    /**
+     * 获取当前连接类型
+     */
+    private fun getCurrentConnectionType(): ConnectionType {
+        return try {
+            val network = connectivityManager.activeNetwork ?: return ConnectionType.NONE
+            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return ConnectionType.NONE
+            
+            when {
+                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
+                    ConnectionType.WIFI
+                }
+                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                    ConnectionType.CELLULAR
+                }
+                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> {
+                    ConnectionType.ETHERNET
+                }
+                else -> {
+                    ConnectionType.OTHER
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get connection type")
+            ConnectionType.UNKNOWN
+        }
+    }
+    
+    /**
+     * 获取网络连接强度（仅WiFi和蜂窝网络）
+     */
+    fun getConnectionStrength(): ConnectionStrength {
+        return try {
+            val network = connectivityManager.activeNetwork ?: return ConnectionStrength.UNKNOWN
+            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return ConnectionStrength.UNKNOWN
+            
+            when {
+                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
+                    // WiFi 信号强度检测
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val signalStrength = networkCapabilities.signalStrength
+                        when {
+                            signalStrength >= -50 -> ConnectionStrength.EXCELLENT
+                            signalStrength >= -60 -> ConnectionStrength.GOOD
+                            signalStrength >= -70 -> ConnectionStrength.FAIR
+                            else -> ConnectionStrength.POOR
+                        }
+                    } else {
+                        ConnectionStrength.GOOD // 默认值
+                    }
+                }
+                
+                networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                    // 蜂窝网络强度检测
+                    ConnectionStrength.GOOD // 简化实现
+                }
+                
+                else -> ConnectionStrength.UNKNOWN
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get connection strength")
+            ConnectionStrength.UNKNOWN
+        }
+    }
+    
+    /**
+     * 检查是否为计费连接
+     */
+    fun isMeteredConnection(): Boolean {
+        return try {
+            val network = connectivityManager.activeNetwork ?: return false
+            val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            
+            !networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to check metered connection")
+            false
+        }
+    }
+    
+    /**
+     * 停止网络监听
+     */
+    fun stopNetworkCallback() {
+        try {
+            networkCallback?.let { callback ->
+                connectivityManager.unregisterNetworkCallback(callback)
+                networkCallback = null
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to unregister network callback")
+        }
+    }
+}
+
+/**
+ * 连接类型枚举
+ */
+enum class ConnectionType {
+    NONE,       // 无连接
+    WIFI,       // WiFi
+    CELLULAR,   // 蜂窝网络
+    ETHERNET,   // 以太网
+    OTHER,      // 其他类型
+    UNKNOWN     // 未知
+}
+
+/**
+ * 连接强度枚举
+ */
+enum class ConnectionStrength {
+    EXCELLENT,  // 优秀
+    GOOD,       // 良好
+    FAIR,       // 一般
+    POOR,       // 较差
+    UNKNOWN     // 未知
+}

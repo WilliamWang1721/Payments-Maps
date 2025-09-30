@@ -106,4 +106,90 @@ class EditProfileViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to save profile")
-                _uiState.value = EditProfileUiState.Error("保存失败: ${e.message}")\n            }\n        }\n    }\n    \n    /**\n     * 更新用户资料\n     */\n    private fun updateUserProfile(\n        userId: String,\n        profile: UserProfile,\n        preferences: UserPreferences\n    ) {\n        viewModelScope.launch {\n            try {\n                // 更新用户资料\n                userManagementUseCase.updateUserProfile(userId, profile).collect { profileResult ->\n                    when (profileResult) {\n                        is Result.Success -> {\n                            // 资料更新成功，继续更新偏好设置\n                            updateUserPreferences(userId, preferences)\n                        }\n                        \n                        is Result.Error -> {\n                            Timber.e(profileResult.exception, \"Failed to update profile\")\n                            _uiState.value = EditProfileUiState.Error(\n                                profileResult.exception.message ?: \"更新个人资料失败\"\n                            )\n                        }\n                        \n                        is Result.Loading -> {\n                            // 保持加载状态\n                        }\n                    }\n                }\n            } catch (e: Exception) {\n                Timber.e(e, \"Failed to update user profile\")\n                _uiState.value = EditProfileUiState.Error(\"更新个人资料失败: ${e.message}\")\n            }\n        }\n    }\n    \n    /**\n     * 更新用户偏好设置\n     */\n    private fun updateUserPreferences(userId: String, preferences: UserPreferences) {\n        viewModelScope.launch {\n            try {\n                userManagementUseCase.updateUserPreferences(userId, preferences).collect { preferencesResult ->\n                    when (preferencesResult) {\n                        is Result.Success -> {\n                            // 全部更新成功\n                            _uiState.value = EditProfileUiState.SaveSuccess\n                        }\n                        \n                        is Result.Error -> {\n                            Timber.e(preferencesResult.exception, \"Failed to update preferences\")\n                            _uiState.value = EditProfileUiState.Error(\n                                preferencesResult.exception.message ?: \"更新偏好设置失败\"\n                            )\n                        }\n                        \n                        is Result.Loading -> {\n                            // 保持加载状态\n                        }\n                    }\n                }\n            } catch (e: Exception) {\n                Timber.e(e, \"Failed to update user preferences\")\n                _uiState.value = EditProfileUiState.Error(\"更新偏好设置失败: ${e.message}\")\n            }\n        }\n    }\n    \n    /**\n     * 清除错误状态\n     */\n    fun clearError() {\n        if (_uiState.value is EditProfileUiState.Error) {\n            currentUser?.let { user ->\n                _uiState.value = EditProfileUiState.Success(user)\n            } ?: run {\n                _uiState.value = EditProfileUiState.Initial\n            }\n        }\n    }\n}
+                _uiState.value = EditProfileUiState.Error("保存失败: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 更新用户资料
+     */
+    private fun updateUserProfile(
+        userId: String,
+        profile: UserProfile,
+        preferences: UserPreferences
+    ) {
+        viewModelScope.launch {
+            try {
+                // 更新用户资料
+                userManagementUseCase.updateUserProfile(userId, profile).collect { profileResult ->
+                    when (profileResult) {
+                        is Result.Success -> {
+                            // 资料更新成功，继续更新偏好设置
+                            updateUserPreferences(userId, preferences)
+                        }
+                        
+                        is Result.Error -> {
+                            Timber.e(profileResult.exception, "Failed to update profile")
+                            _uiState.value = EditProfileUiState.Error(
+                                profileResult.exception.message ?: "更新个人资料失败"
+                            )
+                        }
+                        
+                        is Result.Loading -> {
+                            // 保持加载状态
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to update user profile")
+                _uiState.value = EditProfileUiState.Error("更新个人资料失败: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 更新用户偏好设置
+     */
+    private fun updateUserPreferences(userId: String, preferences: UserPreferences) {
+        viewModelScope.launch {
+            try {
+                userManagementUseCase.updateUserPreferences(userId, preferences).collect { preferencesResult ->
+                    when (preferencesResult) {
+                        is Result.Success -> {
+                            // 全部更新成功
+                            _uiState.value = EditProfileUiState.SaveSuccess
+                        }
+                        
+                        is Result.Error -> {
+                            Timber.e(preferencesResult.exception, "Failed to update preferences")
+                            _uiState.value = EditProfileUiState.Error(
+                                preferencesResult.exception.message ?: "更新偏好设置失败"
+                            )
+                        }
+                        
+                        is Result.Loading -> {
+                            // 保持加载状态
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to update user preferences")
+                _uiState.value = EditProfileUiState.Error("更新偏好设置失败: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 清除错误状态
+     */
+    fun clearError() {
+        if (_uiState.value is EditProfileUiState.Error) {
+            currentUser?.let { user ->
+                _uiState.value = EditProfileUiState.Success(user)
+            } ?: run {
+                _uiState.value = EditProfileUiState.Initial
+            }
+        }
+    }
+}

@@ -9,8 +9,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import io.github.jan.supabase.gotrue.providers.Google
-import io.github.jan.supabase.gotrue.providers.GitHub
-import io.github.jan.supabase.gotrue.providers.Microsoft
+import io.github.jan.supabase.gotrue.providers.Github
+import io.github.jan.supabase.gotrue.providers.Azure
 import com.paymentsmaps.android.data.auth.OAuthManager
 import com.paymentsmaps.android.data.auth.OAuthResult
 import timber.log.Timber
