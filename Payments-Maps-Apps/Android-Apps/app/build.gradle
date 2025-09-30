@@ -30,13 +30,13 @@ android {
         }
         
         // Supabase配置
-        buildConfigField "String", "SUPABASE_URL", "\"${localProperties.getProperty('SUPABASE_URL', 'https://ytzmqzxspcuclffegazk.supabase.co')}\""
-        buildConfigField "String", "SUPABASE_ANON_KEY", "\"${localProperties.getProperty('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0em1xenhzcGN1Y2xmZmVnYXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4MTQ4NzEsImV4cCI6MjA3MDM5MDg3MX0.nQrkNNYG4nUsJlMe5zuOp0xwsHhkkRcWCq8x4arN2Co')}\""
+        buildConfigField "String", "SUPABASE_URL", "\"${localProperties.getProperty('SUPABASE_URL', 'YOUR_SUPABASE_URL')}\""
+        buildConfigField "String", "SUPABASE_ANON_KEY", "\"${localProperties.getProperty('SUPABASE_ANON_KEY', 'YOUR_SUPABASE_ANON_KEY')}\""
         
         // 地图配置
         manifestPlaceholders = [
-            AMAP_API_KEY: localProperties.getProperty('AMAP_API_KEY', '9af61060f28f4a7b3096372b1384257f'),
-            GOOGLE_MAPS_API_KEY: localProperties.getProperty('GOOGLE_MAPS_API_KEY', 'AIzaSyAnIznwe2grePNXQw8amIJ2cWdRB96o2IM')
+            AMAP_API_KEY: localProperties.getProperty('AMAP_API_KEY', 'YOUR_AMAP_API_KEY'),
+            GOOGLE_MAPS_API_KEY: localProperties.getProperty('GOOGLE_MAPS_API_KEY', 'YOUR_GOOGLE_MAPS_API_KEY')
         ]
     }
 
@@ -155,6 +155,9 @@ dependencies {
     
     // Browser Support for OAuth
     implementation 'androidx.browser:browser:1.7.0'
+    
+    // Image Loading - Coil
+    implementation "io.coil-kt:coil-compose:2.5.0"
     
     // Maps & Location - 高德地图
     implementation "com.amap.api:3dmap:latest.integration"

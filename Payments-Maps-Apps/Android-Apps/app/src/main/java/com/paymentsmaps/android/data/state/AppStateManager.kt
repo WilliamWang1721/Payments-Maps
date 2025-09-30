@@ -162,4 +162,144 @@ class AppStateManager @Inject constructor(
     }
     
     /**
-     * 用户登出\n     */\n    suspend fun onUserLoggedOut() {\n        try {\n            // 清除用户信息\n            userPreferencesManager.clearUserInfo()\n            \n            // 重置状态\n            _currentUser.value = null\n            _appState.value = AppState.UNAUTHENTICATED\n            \n            Timber.d(\"User logged out successfully\")\n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to handle user logout\")\n        }\n    }\n    \n    /**\n     * 更新用户信息\n     */\n    fun updateCurrentUser(user: User) {\n        _currentUser.value = user\n        \n        // 异步更新偏好设置\n        ProcessLifecycleOwner.get().lifecycleScope.launch {\n            try {\n                userPreferencesManager.saveUserInfo(\n                    userId = user.id,\n                    email = user.email,\n                    name = user.displayName,\n                    avatar = user.avatar\n                )\n            } catch (e: Exception) {\n                Timber.e(e, \"Failed to update user preferences\")\n            }\n        }\n    }\n    \n    /**\n     * 设置网络状态\n     */\n    fun setNetworkState(isOnline: Boolean) {\n        _isOnline.value = isOnline\n        \n        // 在线时触发同步\n        if (isOnline && _appState.value == AppState.AUTHENTICATED) {\n            syncUserData()\n        }\n    }\n    \n    /**\n     * 同步用户数据\n     */\n    private fun syncUserData() {\n        ProcessLifecycleOwner.get().lifecycleScope.launch {\n            try {\n                // 重新加载用户信息\n                loadCurrentUser()\n                \n                // 更新同步时间\n                userPreferencesManager.updateLastSyncTime()\n                _lastSyncTime.value = System.currentTimeMillis()\n                \n            } catch (e: Exception) {\n                Timber.e(e, \"Failed to sync user data\")\n            }\n        }\n    }\n    \n    /**\n     * 标记首次运行完成\n     */\n    suspend fun completeFirstRun() {\n        userPreferencesManager.markFirstRunCompleted()\n        _appState.value = AppState.ONBOARDING\n    }\n    \n    /**\n     * 标记引导完成\n     */\n    suspend fun completeOnboarding() {\n        userPreferencesManager.markOnboardingCompleted()\n        \n        // 检查登录状态决定下一步\n        val loggedIn = isLoggedIn.first()\n        _appState.value = if (loggedIn) {\n            AppState.AUTHENTICATED\n        } else {\n            AppState.UNAUTHENTICATED\n        }\n    }\n    \n    /**\n     * 重置应用状态\n     */\n    suspend fun resetAppState() {\n        try {\n            // 清除所有状态\n            _currentUser.value = null\n            _appState.value = AppState.INITIALIZING\n            _isLoading.value = false\n            _lastSyncTime.value = 0L\n            \n            // 清除偏好设置\n            userPreferencesManager.clearAll()\n            \n            // 重新初始化\n            initializeAppState()\n            \n        } catch (e: Exception) {\n            Timber.e(e, \"Failed to reset app state\")\n            _appState.value = AppState.ERROR\n        }\n    }\n    \n    /**\n     * 获取用户ID\n     */\n    suspend fun getCurrentUserId(): String? {\n        return _currentUser.value?.id ?: userPreferencesManager.getUserId()\n    }\n    \n    /**\n     * 获取用户邮箱\n     */\n    suspend fun getCurrentUserEmail(): String? {\n        return _currentUser.value?.email ?: userPreferencesManager.getUserEmail()\n    }\n}\n\n/**\n * 应用状态枚举\n */\nenum class AppState {\n    INITIALIZING,    // 初始化中\n    FIRST_RUN,       // 首次运行\n    ONBOARDING,      // 引导阶段\n    UNAUTHENTICATED, // 未认证\n    AUTHENTICATED,   // 已认证\n    ERROR            // 错误状态\n}
+     * 用户登出
+     */
+    suspend fun onUserLoggedOut() {
+        try {
+            // 清除用户信息
+            userPreferencesManager.clearUserInfo()
+            
+            // 重置状态
+            _currentUser.value = null
+            _appState.value = AppState.UNAUTHENTICATED
+            
+            Timber.d("User logged out successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to handle user logout")
+        }
+    }
+    
+    /**
+     * 更新用户信息
+     */
+    fun updateCurrentUser(user: User) {
+        _currentUser.value = user
+        
+        // 异步更新偏好设置
+        ProcessLifecycleOwner.get().lifecycleScope.launch {
+            try {
+                userPreferencesManager.saveUserInfo(
+                    userId = user.id,
+                    email = user.email,
+                    name = user.displayName,
+                    avatar = user.avatar
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to update user preferences")
+            }
+        }
+    }
+    
+    /**
+     * 设置网络状态
+     */
+    fun setNetworkState(isOnline: Boolean) {
+        _isOnline.value = isOnline
+        
+        // 在线时触发同步
+        if (isOnline && _appState.value == AppState.AUTHENTICATED) {
+            syncUserData()
+        }
+    }
+    
+    /**
+     * 同步用户数据
+     */
+    private fun syncUserData() {
+        ProcessLifecycleOwner.get().lifecycleScope.launch {
+            try {
+                // 重新加载用户信息
+                loadCurrentUser()
+                
+                // 更新同步时间
+                userPreferencesManager.updateLastSyncTime()
+                _lastSyncTime.value = System.currentTimeMillis()
+                
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to sync user data")
+            }
+        }
+    }
+    
+    /**
+     * 标记首次运行完成
+     */
+    suspend fun completeFirstRun() {
+        userPreferencesManager.markFirstRunCompleted()
+        _appState.value = AppState.ONBOARDING
+    }
+    
+    /**
+     * 标记引导完成
+     */
+    suspend fun completeOnboarding() {
+        userPreferencesManager.markOnboardingCompleted()
+        
+        // 检查登录状态决定下一步
+        val loggedIn = isLoggedIn.first()
+        _appState.value = if (loggedIn) {
+            AppState.AUTHENTICATED
+        } else {
+            AppState.UNAUTHENTICATED
+        }
+    }
+    
+    /**
+     * 重置应用状态
+     */
+    suspend fun resetAppState() {
+        try {
+            // 清除所有状态
+            _currentUser.value = null
+            _appState.value = AppState.INITIALIZING
+            _isLoading.value = false
+            _lastSyncTime.value = 0L
+            
+            // 清除偏好设置
+            userPreferencesManager.clearAll()
+            
+            // 重新初始化
+            initializeAppState()
+            
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to reset app state")
+            _appState.value = AppState.ERROR
+        }
+    }
+    
+    /**
+     * 获取用户ID
+     */
+    suspend fun getCurrentUserId(): String? {
+        return _currentUser.value?.id ?: userPreferencesManager.getUserId()
+    }
+    
+    /**
+     * 获取用户邮箱
+     */
+    suspend fun getCurrentUserEmail(): String? {
+        return _currentUser.value?.email ?: userPreferencesManager.getUserEmail()
+    }
+}
+
+/**
+ * 应用状态枚举
+ */
+enum class AppState {
+    INITIALIZING,    // 初始化中
+    FIRST_RUN,       // 首次运行
+    ONBOARDING,      // 引导阶段
+    UNAUTHENTICATED, // 未认证
+    AUTHENTICATED,   // 已认证
+    ERROR            // 错误状态
+}
