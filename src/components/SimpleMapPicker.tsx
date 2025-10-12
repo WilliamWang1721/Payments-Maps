@@ -37,7 +37,9 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
           mapRef.current = null
           markerRef.current = null
           setIsMapReady(false)
-        } catch (e) {}
+        } catch (error) {
+          console.warn('[SimpleMapPicker] Failed to destroy map instance:', error)
+        }
       }
       return
     }
