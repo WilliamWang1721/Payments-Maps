@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, User, Bell, MapPin, Shield, Trash2, Save, Eye, EyeOff, RotateCcw } from 'lucide-react'
+import {
+  ArrowLeft,
+  User,
+  Bell,
+  MapPin,
+  Shield,
+  Trash2,
+  Save,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  ShieldCheck,
+  FileDown,
+  History,
+  Undo2,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from 'sonner'
@@ -27,7 +42,7 @@ interface UserSettings {
 const Settings: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { resetTour } = useOnboardingTour()
   const [settings, setSettings] = useState<UserSettings>({
     user_id: user?.id || '',
@@ -47,6 +62,42 @@ const Settings: React.FC = () => {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const initialPrivacyPreferences = {
+    locationHistory: true,
+    usageAnalytics: true,
+    personalization: true,
+    marketing: false,
+    dataSharing: false,
+  }
+  type PrivacyPreferenceKey = keyof typeof initialPrivacyPreferences
+  type ConsentHistoryEntry = {
+    key: PrivacyPreferenceKey | 'all'
+    action: 'granted' | 'revoked'
+    timestamp: string
+  }
+  const [privacyPreferences, setPrivacyPreferences] = useState(initialPrivacyPreferences)
+  const [dataRetention, setDataRetention] = useState<'3' | '6' | '12' | '24'>('12')
+  const [privacyLastUpdated, setPrivacyLastUpdated] = useState(new Date())
+  const [downloadingPrivacyReport, setDownloadingPrivacyReport] = useState(false)
+  const [consentHistory, setConsentHistory] = useState<ConsentHistoryEntry[]>([
+    {
+      key: 'usageAnalytics',
+      action: 'granted',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+    },
+    {
+      key: 'locationHistory',
+      action: 'granted',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
+    },
+  ])
+  const privacyLabelMap: Record<PrivacyPreferenceKey, string> = {
+    locationHistory: 'settings.privacyLocationHistory',
+    usageAnalytics: 'settings.privacyUsageAnalytics',
+    personalization: 'settings.privacyPersonalization',
+    marketing: 'settings.privacyMarketing',
+    dataSharing: 'settings.privacyDataSharing',
+  }
 
   useEffect(() => {
     if (user) {
@@ -185,6 +236,60 @@ const Settings: React.FC = () => {
       console.error('退出登录失败:', error)
       toast.error('退出登录失败，请重试')
     }
+  }
+
+  const appendConsentHistory = (entry: ConsentHistoryEntry) => {
+    setConsentHistory((prev) => [entry, ...prev].slice(0, 10))
+  }
+
+  const handlePrivacyToggle = (key: PrivacyPreferenceKey) => {
+    setPrivacyPreferences((prev) => {
+      const updated = { ...prev, [key]: !prev[key] }
+      const action: ConsentHistoryEntry['action'] = updated[key] ? 'granted' : 'revoked'
+      appendConsentHistory({ key, action, timestamp: new Date().toISOString() })
+      setPrivacyLastUpdated(new Date())
+      toast.success(t('settings.privacyPreferenceUpdated'))
+      return updated
+    })
+  }
+
+  const handleRetentionChange = (value: '3' | '6' | '12' | '24') => {
+    setDataRetention(value)
+    setPrivacyLastUpdated(new Date())
+    toast.success(t('settings.privacyPreferenceUpdated'))
+  }
+
+  const handleDownloadPrivacyReport = async () => {
+    if (downloadingPrivacyReport) return
+    setDownloadingPrivacyReport(true)
+    toast.info(t('settings.privacyDownloadPreparing'))
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    setDownloadingPrivacyReport(false)
+    toast.success(t('settings.privacyDownloadReady'))
+  }
+
+  const handleRevokeAllConsents = () => {
+    setPrivacyPreferences({
+      locationHistory: false,
+      usageAnalytics: false,
+      personalization: false,
+      marketing: false,
+      dataSharing: false,
+    })
+    appendConsentHistory({ key: 'all', action: 'revoked', timestamp: new Date().toISOString() })
+    setPrivacyLastUpdated(new Date())
+    toast.success(t('settings.privacyRevokeSuccess'))
+  }
+
+  const formatDateTime = (value: Date | string) => {
+    const date = typeof value === 'string' ? new Date(value) : value
+    return new Intl.DateTimeFormat(i18n.language, {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date)
   }
 
   if (loading) {
@@ -328,6 +433,137 @@ const Settings: React.FC = () => {
                     />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Privacy Center */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="p-6 space-y-6">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <ShieldCheck className="h-5 w-5 text-gray-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">{t('settings.privacyCenter')}</h2>
+                  </div>
+                  <p className="text-sm text-gray-500">{t('settings.privacyCenterDescription')}</p>
+                </div>
+                <div className="text-xs text-gray-500 flex items-center space-x-2">
+                  <History className="h-4 w-4" />
+                  <span>{t('settings.privacyLastUpdated', { date: formatDateTime(privacyLastUpdated) })}</span>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {(
+                  [
+                    'locationHistory',
+                    'usageAnalytics',
+                    'personalization',
+                    'marketing',
+                    'dataSharing',
+                  ] as PrivacyPreferenceKey[]
+                ).map((key) => (
+                  <div key={key} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-gray-900">{t(privacyLabelMap[key])}</p>
+                      <p className="text-sm text-gray-500">{t(`${privacyLabelMap[key]}Description`)}</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer self-end sm:self-center">
+                      <input
+                        type="checkbox"
+                        checked={privacyPreferences[key]}
+                        onChange={() => handlePrivacyToggle(key)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-gray-100 pt-6 space-y-6">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-900">{t('settings.privacyRetentionTitle')}</p>
+                  <p className="text-sm text-gray-500">{t('settings.privacyRetentionDescription')}</p>
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.privacyRetentionPeriod')}</label>
+                    <select
+                      value={dataRetention}
+                      onChange={(event) => handleRetentionChange(event.target.value as '3' | '6' | '12' | '24')}
+                      className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="3">{t('settings.privacyRetentionOption3')}</option>
+                      <option value="6">{t('settings.privacyRetentionOption6')}</option>
+                      <option value="12">{t('settings.privacyRetentionOption12')}</option>
+                      <option value="24">{t('settings.privacyRetentionOption24')}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <AnimatedButton
+                    onClick={handleDownloadPrivacyReport}
+                    disabled={downloadingPrivacyReport}
+                    className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    <FileDown className="h-4 w-4" />
+                    <span>
+                      {downloadingPrivacyReport
+                        ? t('settings.privacyDownloadPreparing')
+                        : t('settings.privacyDownloadReport')}
+                    </span>
+                  </AnimatedButton>
+                  <AnimatedButton
+                    onClick={handleRevokeAllConsents}
+                    className="w-full flex items-center justify-center space-x-2 bg-rose-50 text-rose-600 px-4 py-3 rounded-lg hover:bg-rose-100 transition-colors"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    <span>{t('settings.privacyRevokeAll')}</span>
+                  </AnimatedButton>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 text-xs text-gray-500">
+                  <p>{t('settings.privacyDownloadReportDescription')}</p>
+                  <p>{t('settings.privacyRevokeAllDescription')}</p>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 space-y-3">
+                  <p className="text-sm font-medium text-gray-900">{t('settings.privacyConsentHistory')}</p>
+                  {consentHistory.length === 0 ? (
+                    <p className="text-sm text-gray-500">{t('settings.privacyConsentHistoryEmpty')}</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {consentHistory.map((entry) => {
+                        const label =
+                          entry.key === 'all'
+                            ? t('settings.privacyAllConsents')
+                            : t(privacyLabelMap[entry.key])
+                        const isGranted = entry.action === 'granted'
+                        return (
+                          <div
+                            key={`${entry.key}-${entry.timestamp}`}
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{label}</p>
+                              <p className="text-xs text-gray-500">{formatDateTime(entry.timestamp)}</p>
+                            </div>
+                            <span
+                              className={`text-xs font-medium ${
+                                isGranted ? 'text-green-600' : 'text-rose-600'
+                              }`}
+                            >
+                              {isGranted
+                                ? t('settings.privacyConsentGranted')
+                                : t('settings.privacyConsentRevoked')}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
