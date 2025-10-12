@@ -159,8 +159,12 @@ const Map = () => {
     return () => {
       mounted = false
       clearTimeout(timeoutId)
-      if (mapInstance) {
-        mapInstance.destroy()
+
+      const currentMapInstance = useMapStore.getState().mapInstance
+      if (currentMapInstance) {
+        if (typeof currentMapInstance.destroy === 'function') {
+          currentMapInstance.destroy()
+        }
         setMapInstance(null)
       }
     }
@@ -178,7 +182,9 @@ const Map = () => {
     if (!mapInstance || !window.AMap) return
 
     // 清除现有标记
-    mapInstance.clearMap()
+    if (typeof mapInstance.clearMap === 'function') {
+      mapInstance.clearMap()
+    }
     
     // 添加POS机标记
     posMachines.forEach((pos) => {
