@@ -37,7 +37,9 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
           mapRef.current = null
           markerRef.current = null
           setIsMapReady(false)
-        } catch (e) {}
+        } catch (error) {
+          console.warn('[SimpleMapPicker] 销毁地图实例失败', error)
+        }
       }
       return
     }

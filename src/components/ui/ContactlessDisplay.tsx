@@ -30,27 +30,23 @@ const ContactlessDisplay: React.FC<ContactlessDisplayProps> = ({
     let bgColor: string
     let textColor: string
     let icon: React.ReactNode
-    let statusText: string
 
     switch (state) {
       case 'supported':
         bgColor = 'bg-emerald-600'
         textColor = 'text-white'
         icon = <Check className="w-3 h-3" />
-        statusText = '支持'
         break
       case 'unsupported':
         bgColor = 'bg-red-500'
         textColor = 'text-white'
         icon = <X className="w-3 h-3" />
-        statusText = '不支持'
         break
       case 'unknown':
       default:
         bgColor = 'bg-gray-500'
         textColor = 'text-white'
         icon = <HelpCircle className="w-3 h-3" />
-        statusText = '未知'
         break
     }
 

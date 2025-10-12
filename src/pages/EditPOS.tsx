@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2, CreditCard, Smartphone, Settings, FileText, Link, Plus, Building } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, CreditCard, Settings, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
@@ -13,12 +13,12 @@ import { CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import MultiSelect from '@/components/ui/MultiSelect'
 import BrandSelector from '@/components/BrandSelector'
-import { CARD_NETWORKS, CardNetwork, getCardNetworkLabel } from '@/lib/cardNetworks'
+import { CARD_NETWORKS, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { POSMachine, supabase } from '@/lib/supabase'
 import RadioGroup from '@/components/ui/RadioGroup'
 import Checkbox from '@/components/ui/Checkbox'
 import Select from '@/components/ui/Select'
-import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType, CardNetworkFee, feeUtils } from '@/types/fees'
+import { DEFAULT_FEES_CONFIG, FeeType, feeUtils } from '@/types/fees'
 
 const EditPOS = () => {
   const { id } = useParams<{ id: string }>()
@@ -372,7 +372,7 @@ const EditPOS = () => {
       const nextAttemptNumber = latestAttempt?.attempt_number ? latestAttempt.attempt_number + 1 : 1
 
       // 保存尝试记录到Supabase数据库
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('pos_attempts')
         .insert({
           pos_id: id,
@@ -393,7 +393,7 @@ const EditPOS = () => {
       }
       
       // 重新加载尝试记录
-       await loadAttempts()
+      await loadAttempts()
       
       setShowCardInfoModal(false)
       setPendingAttemptResult(null)

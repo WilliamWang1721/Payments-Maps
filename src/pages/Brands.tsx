@@ -1,16 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, Grid, List, Star, MapPin, Globe, Calendar, Plus, Trash2, Edit3, User, FileText, Building, Tag, Settings } from 'lucide-react';
+import { Search, Filter, Grid, List, Globe, Calendar, Trash2, User, FileText, Building, Tag, Settings } from 'lucide-react';
 import { Brand, BrandCategory, BrandBusinessType, BrandFilterOptions } from '../types/brands';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/useAuthStore';
 import AnimatedCard from '../components/ui/AnimatedCard';
 import AnimatedInput from '../components/ui/AnimatedInput';
 import AnimatedButton from '../components/ui/AnimatedButton';
-import Select from '../components/ui/Select';
 import Checkbox from '../components/ui/Checkbox';
 import AnimatedModal from '../components/ui/AnimatedModal';
 import PageTransition from '../components/PageTransition';
-import AddBrandModal from '../components/AddBrandModal';
 import { toast } from 'sonner';
 
 const Brands: React.FC = () => {
@@ -19,20 +17,16 @@ const Brands: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<BrandBusinessType | 'all'>('all');
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState<BrandFilterOptions>({
     category: [],
-    businessType: activeTab === 'all' ? [] : [activeTab as BrandBusinessType],
+    businessType: [],
     searchQuery: ''
   });
 
   // 加载品牌数据
   const loadBrands = async () => {
     try {
-      setIsLoading(true);
       const { data, error } = await supabase
         .from('brands')
         .select(`
@@ -51,21 +45,12 @@ const Brands: React.FC = () => {
     } catch (error) {
       console.error('加载品牌失败:', error);
       toast.error('加载品牌失败');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     loadBrands();
   }, []);
-
-  useEffect(() => {
-    setFilters(prev => ({ 
-      ...prev, 
-      businessType: activeTab === 'all' ? [] : [activeTab as BrandBusinessType] 
-    }));
-  }, [activeTab]);
 
   // 获取筛选后的品牌列表
   const filteredBrands = useMemo(() => {
@@ -150,7 +135,7 @@ const Brands: React.FC = () => {
   const clearFilters = () => {
     setFilters({
       category: [],
-      businessType: activeTab === 'all' ? [] : [activeTab as BrandBusinessType],
+      businessType: [],
       searchQuery: ''
     });
     setSearchQuery('');

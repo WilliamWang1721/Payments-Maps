@@ -1,5 +1,5 @@
 import React from 'react'
-import { Check, CreditCard } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CARD_NETWORKS, CardNetwork, getCardNetworkLabel } from '@/lib/cardNetworks'
 

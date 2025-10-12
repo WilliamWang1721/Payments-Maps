@@ -74,10 +74,40 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
 
   const currentTourStep = tourSteps[currentStep]
 
+  const handleComplete = useCallback(() => {
+    setIsVisible(false)
+    localStorage.setItem('onboarding_completed', 'true')
+    setTimeout(onComplete, 200)
+  }, [onComplete])
+
+  const handleSkip = useCallback(() => {
+    handleComplete()
+  }, [handleComplete])
+
+  const handleNext = useCallback(() => {
+    if (currentStep < tourSteps.length - 1) {
+      setIsVisible(false)
+      setTimeout(() => {
+        setCurrentStep(prev => prev + 1)
+      }, 200)
+    } else {
+      handleComplete()
+    }
+  }, [currentStep, handleComplete])
+
+  const handlePrev = useCallback(() => {
+    if (currentStep > 0) {
+      setIsVisible(false)
+      setTimeout(() => {
+        setCurrentStep(prev => prev - 1)
+      }, 200)
+    }
+  }, [currentStep])
+
   // 获取目标元素位置
   const updateTargetPosition = useCallback(() => {
     if (!currentTourStep) return
-    
+
     const element = document.querySelector(currentTourStep.target)
     if (element) {
       const rect = element.getBoundingClientRect()
@@ -91,7 +121,7 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
         }
       }, 500)
     }
-  }, [currentStep, currentTourStep])
+  }, [currentStep, currentTourStep, handleNext])
 
   useEffect(() => {
     if (isOpen) {
@@ -117,36 +147,6 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
     }
   }, [isOpen, currentStep, updateTargetPosition])
 
-  const handleNext = () => {
-    if (currentStep < tourSteps.length - 1) {
-      setIsVisible(false)
-      setTimeout(() => {
-        setCurrentStep(currentStep + 1)
-      }, 200)
-    } else {
-      handleComplete()
-    }
-  }
-
-  const handlePrev = () => {
-    if (currentStep > 0) {
-      setIsVisible(false)
-      setTimeout(() => {
-        setCurrentStep(currentStep - 1)
-      }, 200)
-    }
-  }
-
-  const handleComplete = () => {
-    setIsVisible(false)
-    localStorage.setItem('onboarding_completed', 'true')
-    setTimeout(onComplete, 200)
-  }
-
-  const handleSkip = () => {
-    handleComplete()
-  }
-
   if (!isOpen || !targetRect || !currentTourStep) return null
 
   // 计算提示框位置，确保不超出屏幕边界
@@ -162,7 +162,6 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
     
     // 目标元素中心点
     const targetCenterX = targetRect.left + targetRect.width / 2
-    const targetCenterY = targetRect.top + targetRect.height / 2
     
     // 初始位置（优先在目标下方）
     let x = targetCenterX

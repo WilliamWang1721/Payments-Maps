@@ -37,7 +37,7 @@ export const DEFAULT_MAP_CONFIG = {
 export const locationUtils = {
   // 获取当前位置（带重试机制和默认位置）
   getCurrentPosition: (maxRetries: number = 3): Promise<{ longitude: number; latitude: number }> => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       if (!navigator.geolocation) {
         console.error('浏览器不支持地理位置获取，使用默认位置')
         // 使用北京市中心作为默认位置

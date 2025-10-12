@@ -41,7 +41,13 @@ const SystemSelect: React.FC<SystemSelectProps> = ({
   required = false
 }) => {
   // 获取选项数据
-  const options = customOptions || (dataType ? getDropdownOptions(dataType) : [])
+  const options = React.useMemo(() => {
+    if (customOptions) {
+      return customOptions
+    }
+
+    return dataType ? getDropdownOptions(dataType) : []
+  }, [customOptions, dataType])
   
   // 获取当前选项的描述
   const selectedOption = options.find(opt => opt.value === value)

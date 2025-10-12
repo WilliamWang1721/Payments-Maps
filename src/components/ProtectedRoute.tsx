@@ -9,6 +9,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const location = useLocation()
+  const { user, loading, initialized } = useAuthStore()
 
   // 开发环境下，允许通过 URL 参数跳过鉴权，便于本地预览受保护页面
   if (import.meta.env.DEV) {
@@ -17,10 +18,10 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
       if (params.get('skipAuth') === '1') {
         return <>{children}</>
       }
-    } catch (_) {}
+    } catch (error) {
+      console.warn('无法解析跳过鉴权参数', error)
+    }
   }
-
-  const { user, loading, initialized } = useAuthStore()
 
   // 允许游客访问的只读路由
   const path = location.pathname || ''

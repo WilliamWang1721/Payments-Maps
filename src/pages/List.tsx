@@ -184,6 +184,27 @@ const List = () => {
     }
     return stars
   }
+  // 监听搜索关键词变化，实现实时搜索
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchKeyword !== undefined) {
+        handleSearch()
+      }
+    }, 500) // 500ms防抖
+
+    return () => clearTimeout(timeoutId)
+  }, [searchKeyword])
+
+  // 当列表长度变化，确保滚动条位置始终在有效范围内
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const maxScrollTop = Math.max(el.scrollHeight - el.clientHeight, 0)
+    if (el.scrollTop > maxScrollTop) {
+      el.scrollTop = maxScrollTop
+    }
+  }, [sortedPOSMachines.length])
+
 
   if (loading) {
     return (
@@ -1110,26 +1131,6 @@ const List = () => {
     </div>
   )
 
-  // 监听搜索关键词变化，实现实时搜索
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchKeyword !== undefined) {
-        handleSearch()
-      }
-    }, 500) // 500ms防抖
-    
-    return () => clearTimeout(timeoutId)
-  }, [searchKeyword])
-
-  // 当列表长度变化，确保滚动条位置始终在有效范围内
-  useEffect(() => {
-    const el = scrollContainerRef.current
-    if (!el) return
-    const maxScrollTop = Math.max(el.scrollHeight - el.clientHeight, 0)
-    if (el.scrollTop > maxScrollTop) {
-      el.scrollTop = maxScrollTop
-    }
-  }, [sortedPOSMachines.length])
 }
 
 export default List

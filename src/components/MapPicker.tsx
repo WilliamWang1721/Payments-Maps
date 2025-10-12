@@ -34,16 +34,75 @@ const MapPicker = ({
     address: ''
   })
 
+  // 根据坐标获取地址
+  const getAddressFromCoords = useCallback((lng: number, lat: number) => {
+    if (!geocoderRef.current) return
+
+    geocoderRef.current.getAddress([lng, lat], (status: string, result: any) => {
+      if (status === 'complete' && result.info === 'OK') {
+        const address = result.regeocode.formattedAddress
+        setSelectedLocation(prev => ({
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+          address
+        }))
+      }
+    })
+  }, [])
+
+  // 更新标记位置
+  const updateMarker = useCallback((lng: number, lat: number) => {
+    if (!mapInstanceRef.current) return
+
+    const AMap = (window as any).AMap
+    if (!AMap) return
+
+    // 移除旧标记
+    if (markerRef.current) {
+      mapInstanceRef.current.remove(markerRef.current)
+    }
+
+    // 创建新标记
+    const marker = new AMap.Marker({
+      position: [lng, lat],
+      map: mapInstanceRef.current,
+      draggable: true,
+      cursor: 'move',
+      animation: 'AMAP_ANIMATION_DROP'
+    })
+
+    // 标记拖拽事件
+    marker.on('dragend', () => {
+      const position = marker.getPosition()
+      const newLng = position.getLng()
+      const newLat = position.getLat()
+      getAddressFromCoords(newLng, newLat)
+    })
+
+    markerRef.current = marker
+
+    // 更新选中位置
+    setSelectedLocation(prev => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng
+    }))
+
+    // 将地图中心移动到标记位置
+    mapInstanceRef.current.setCenter([lng, lat])
+  }, [getAddressFromCoords])
+
   // 初始化地图
   const initializeMap = useCallback(async () => {
     if (!mapContainerRef.current) return
 
     setLoading(true)
-    
+
     try {
       console.log('[MapPicker] Starting map initialization...')
       const AMap = await loadAMap()
-      
+
       // 确保容器仍然存在
       if (!mapContainerRef.current) {
         console.log('[MapPicker] Container no longer exists')
@@ -101,66 +160,14 @@ const MapPicker = ({
     } finally {
       setLoading(false)
     }
-  }, [initialLatitude, initialLongitude, selectedLocation.longitude, selectedLocation.latitude])
-
-  // 更新标记位置
-  const updateMarker = useCallback((lng: number, lat: number) => {
-    if (!mapInstanceRef.current) return
-
-    const AMap = (window as any).AMap
-    if (!AMap) return
-
-    // 移除旧标记
-    if (markerRef.current) {
-      mapInstanceRef.current.remove(markerRef.current)
-    }
-
-    // 创建新标记
-    const marker = new AMap.Marker({
-      position: [lng, lat],
-      map: mapInstanceRef.current,
-      draggable: true,
-      cursor: 'move',
-      animation: 'AMAP_ANIMATION_DROP'
-    })
-
-    // 标记拖拽事件
-    marker.on('dragend', (e: any) => {
-      const position = marker.getPosition()
-      const newLng = position.getLng()
-      const newLat = position.getLat()
-      getAddressFromCoords(newLng, newLat)
-    })
-
-    markerRef.current = marker
-
-    // 更新选中位置
-    setSelectedLocation(prev => ({
-      ...prev,
-      latitude: lat,
-      longitude: lng
-    }))
-
-    // 将地图中心移动到标记位置
-    mapInstanceRef.current.setCenter([lng, lat])
-  }, [])
-
-  // 根据坐标获取地址
-  const getAddressFromCoords = useCallback((lng: number, lat: number) => {
-    if (!geocoderRef.current) return
-
-    geocoderRef.current.getAddress([lng, lat], (status: string, result: any) => {
-      if (status === 'complete' && result.info === 'OK') {
-        const address = result.regeocode.formattedAddress
-        setSelectedLocation(prev => ({
-          ...prev,
-          latitude: lat,
-          longitude: lng,
-          address
-        }))
-      }
-    })
-  }, [])
+  }, [
+    getAddressFromCoords,
+    initialLatitude,
+    initialLongitude,
+    selectedLocation.latitude,
+    selectedLocation.longitude,
+    updateMarker
+  ])
 
   // 获取当前位置
   const getCurrentLocation = useCallback(async () => {
