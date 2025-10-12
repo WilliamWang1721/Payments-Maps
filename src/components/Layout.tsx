@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Outlet, useLocation, Link } from 'react-router-dom'
 import { Map, List, User, Plus, Building2, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -42,6 +43,37 @@ const Layout = () => {
 
   useDynamicViewportHeight()
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return
+    }
+
+    const updateLayoutOffsets = () => {
+      const topNav = document.querySelector<HTMLElement>('.nav-top')
+      const bottomNav = document.querySelector<HTMLElement>('.nav-bottom')
+
+      const topHeight = topNav?.offsetHeight ?? 0
+      const bottomHeight = bottomNav?.offsetHeight ?? 0
+
+      document.documentElement.style.setProperty('--layout-top-offset', `${topHeight}px`)
+      document.documentElement.style.setProperty('--layout-bottom-offset', `${bottomHeight}px`)
+    }
+
+    updateLayoutOffsets()
+
+    window.addEventListener('resize', updateLayoutOffsets)
+    window.addEventListener('orientationchange', updateLayoutOffsets)
+    window.visualViewport?.addEventListener('resize', updateLayoutOffsets)
+    window.visualViewport?.addEventListener('scroll', updateLayoutOffsets)
+
+    return () => {
+      window.removeEventListener('resize', updateLayoutOffsets)
+      window.removeEventListener('orientationchange', updateLayoutOffsets)
+      window.visualViewport?.removeEventListener('resize', updateLayoutOffsets)
+      window.visualViewport?.removeEventListener('scroll', updateLayoutOffsets)
+    }
+  }, [])
+
   return (
     <OnboardingDetector>
       <div
@@ -79,11 +111,13 @@ const Layout = () => {
 
         {/* 主内容区域 */}
         <main
-          className="flex-1 overflow-x-hidden overflow-y-auto pt-16 pb-16"
+          className="flex-1 overflow-x-hidden overflow-y-auto"
           style={{
-            paddingTop: 'calc(4rem + env(safe-area-inset-top))',
-            paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))',
+            paddingTop: 'var(--layout-top-offset, calc(4rem + env(safe-area-inset-top)))',
+            paddingBottom: 'var(--layout-bottom-offset, calc(4rem + env(safe-area-inset-bottom)))',
+            minHeight: 'calc(var(--app-height, 100vh) - var(--layout-top-offset, 4rem) - var(--layout-bottom-offset, 4rem))',
             WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
           }}
         >
           <PageTransition variant="fadeIn">
