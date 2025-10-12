@@ -5,6 +5,7 @@ import PageTransition from '@/components/PageTransition'
 import { AnimatedBottomNav, AnimatedNavItem, AnimatedTopNav } from '@/components/AnimatedNavigation'
 import { useTranslation } from 'react-i18next'
 import OnboardingDetector from '@/components/OnboardingDetector'
+import useDynamicViewportHeight from '@/hooks/useDynamicViewportHeight'
 
 const Layout = () => {
   const location = useLocation()
@@ -39,9 +40,14 @@ const Layout = () => {
     },
   ]
 
+  useDynamicViewportHeight()
+
   return (
     <OnboardingDetector>
-      <div className="flex flex-col h-screen bg-gray-50 safe-area-padding">
+      <div
+        className="flex flex-col bg-gray-50 safe-area-padding min-h-screen"
+        style={{ minHeight: 'var(--app-height)' }}
+      >
       {/* 顶部导航栏 */}
       <AnimatedTopNav title="Payments Maps" className="nav-top fixed top-0 left-0 right-0 webkit-overflow-scrolling">
         <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
