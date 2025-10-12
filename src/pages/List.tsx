@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Filter, MapPin, Star, Plus, CreditCard, Building2, Shield, Settings } from 'lucide-react'
 import { useMapStore } from '@/stores/useMapStore'
@@ -61,7 +61,7 @@ const List = () => {
   }, [])
 
   // 处理搜索
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     try {
       await loadPOSMachines()
       if (searchKeyword.trim()) {
@@ -73,7 +73,12 @@ const List = () => {
       console.error('搜索失败:', error)
       toast.error('搜索失败，请重试')
     }
-  }
+  }, [
+    addSearchHistory,
+    loadPOSMachines,
+    searchKeyword,
+    setShowSearchSuggestions,
+  ])
   
   // 生成搜索建议
   const generateSearchSuggestions = (keyword: string) => {
@@ -184,6 +189,27 @@ const List = () => {
     }
     return stars
   }
+
+  // 监听搜索关键词变化，实现实时搜索
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchKeyword !== undefined) {
+        handleSearch()
+      }
+    }, 500) // 500ms防抖
+
+    return () => clearTimeout(timeoutId)
+  }, [searchKeyword, handleSearch])
+
+  // 当列表长度变化，确保滚动条位置始终在有效范围内
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const maxScrollTop = Math.max(el.scrollHeight - el.clientHeight, 0)
+    if (el.scrollTop > maxScrollTop) {
+      el.scrollTop = maxScrollTop
+    }
+  }, [sortedPOSMachines.length])
 
   if (loading) {
     return (
@@ -1110,26 +1136,6 @@ const List = () => {
     </div>
   )
 
-  // 监听搜索关键词变化，实现实时搜索
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchKeyword !== undefined) {
-        handleSearch()
-      }
-    }, 500) // 500ms防抖
-    
-    return () => clearTimeout(timeoutId)
-  }, [searchKeyword])
-
-  // 当列表长度变化，确保滚动条位置始终在有效范围内
-  useEffect(() => {
-    const el = scrollContainerRef.current
-    if (!el) return
-    const maxScrollTop = Math.max(el.scrollHeight - el.clientHeight, 0)
-    if (el.scrollTop > maxScrollTop) {
-      el.scrollTop = maxScrollTop
-    }
-  }, [sortedPOSMachines.length])
 }
 
 export default List

@@ -84,7 +84,7 @@ const Map = () => {
         container.style.bottom = '0'
         
         // 强制重排
-        container.offsetHeight
+        void container.offsetHeight
         
         const rect = container.getBoundingClientRect()
         console.log('最终容器尺寸:', {
