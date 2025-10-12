@@ -9,18 +9,17 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const location = useLocation()
-
-  // 开发环境下，允许通过 URL 参数跳过鉴权，便于本地预览受保护页面
-  if (import.meta.env.DEV) {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('skipAuth') === '1') {
-        return <>{children}</>
-      }
-    } catch (_) {}
-  }
-
   const { user, loading, initialized } = useAuthStore()
+
+  // 开发环境下，通过 URL 参数允许跳过鉴权，便于本地预览受保护页面
+  const shouldSkipAuth =
+    import.meta.env.DEV &&
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('skipAuth') === '1'
+
+  if (shouldSkipAuth) {
+    return <>{children}</>
+  }
 
   // 允许游客访问的只读路由
   const path = location.pathname || ''
