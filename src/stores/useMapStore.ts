@@ -80,7 +80,7 @@ interface MapState {
   viewMode: 'map' | 'list'
   
   // Actions
-  setMapInstance: (map: AMap.Map) => void
+  setMapInstance: (map: AMap.Map | null) => void
   getCurrentLocation: () => Promise<void>
   loadPOSMachines: (bounds?: { northeast: [number, number]; southwest: [number, number] }) => Promise<void>
   selectPOSMachine: (posMachine: POSMachine | null) => void
