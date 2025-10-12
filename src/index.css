@@ -23,6 +23,8 @@ html, body, #root {
 
 :root {
   --app-height: 100vh;
+  --layout-top-offset: 4rem;
+  --layout-bottom-offset: 4rem;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   line-height: 1.5;
   font-weight: 400;
@@ -31,6 +33,10 @@ html, body, #root {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  overscroll-behavior-y: none;
 }
 
 /* Safari 特有的样式修复 */
