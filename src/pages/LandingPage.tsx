@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, MapPin, CreditCard, Globe2, Shield, Sparkles, ChevronDown, Users, BarChart3, Zap } from 'lucide-react'
+import { ArrowRight, MapPin, CreditCard, Globe2, Shield, Sparkles, ChevronDown, Users, Zap } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useTranslation } from 'react-i18next'
 
 const LandingPage = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const { t } = useTranslation()
   const [scrollY, setScrollY] = useState(0)
 
   useEffect(() => {
@@ -25,47 +27,47 @@ const LandingPage = () => {
   const features = [
     {
       icon: MapPin,
-      title: '全球覆盖',
-      description: '涵盖全球主要城市的支付终端信息',
+      title: t('landing.features.global.title'),
+      description: t('landing.features.global.description'),
       color: 'from-blue-500 to-cyan-500'
     },
     {
       icon: CreditCard,
-      title: '多种支付',
-      description: '支持各类银行卡、移动支付方式',
+      title: t('landing.features.payments.title'),
+      description: t('landing.features.payments.description'),
       color: 'from-purple-500 to-pink-500'
     },
     {
       icon: Shield,
-      title: '安全可靠',
-      description: '企业级安全保障，数据加密传输',
+      title: t('landing.features.security.title'),
+      description: t('landing.features.security.description'),
       color: 'from-green-500 to-emerald-500'
     },
     {
       icon: Globe2,
-      title: '多语言支持',
-      description: '支持中英俄德四种语言界面',
+      title: t('landing.features.languages.title'),
+      description: t('landing.features.languages.description'),
       color: 'from-orange-500 to-red-500'
     },
     {
       icon: Users,
-      title: '社区驱动',
-      description: '用户共同维护，信息实时更新',
+      title: t('landing.features.community.title'),
+      description: t('landing.features.community.description'),
       color: 'from-indigo-500 to-purple-500'
     },
     {
       icon: Zap,
-      title: '极速体验',
-      description: '毫秒级响应，流畅的交互体验',
+      title: t('landing.features.speed.title'),
+      description: t('landing.features.speed.description'),
       color: 'from-yellow-500 to-orange-500'
     }
   ]
 
   const stats = [
-    { value: '10K+', label: 'POS终端' },
-    { value: '50+', label: '覆盖城市' },
-    { value: '1K+', label: '活跃用户' },
-    { value: '99.9%', label: '可用性' }
+    { value: '10K+', label: t('landing.stats.pos') },
+    { value: '50+', label: t('landing.stats.cities') },
+    { value: '1K+', label: t('landing.stats.users') },
+    { value: '99.9%', label: t('landing.stats.availability') }
   ]
 
   return (
@@ -96,11 +98,11 @@ const LandingPage = () => {
             </motion.div>
             
             <h1 className="text-6xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-              Payments Maps
+              {t('landing.hero.title')}
             </h1>
-            
+
             <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              全球支付终端信息平台，让支付触手可及
+              {t('landing.hero.subtitle')}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -110,18 +112,18 @@ const LandingPage = () => {
                   whileTap={{ scale: 0.95 }}
                   className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2 mx-auto sm:mx-0"
                 >
-                  开始使用
+                  {t('landing.hero.primaryCta')}
                   <ArrowRight className="w-5 h-5" />
                 </motion.button>
               </Link>
-              
+
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
                 className="px-8 py-4 bg-white text-gray-700 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200"
               >
-                了解更多
+                {t('landing.hero.secondaryCta')}
               </motion.button>
             </div>
           </motion.div>
@@ -148,10 +150,10 @@ const LandingPage = () => {
             className="text-center mb-16"
           >
             <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900">
-              核心功能
+              {t('landing.features.heading')}
             </h2>
             <p className="text-xl text-gray-600">
-              专为全球支付场景设计的智能平台
+              {t('landing.features.subheading')}
             </p>
           </motion.div>
 
@@ -221,10 +223,10 @@ const LandingPage = () => {
           >
             <Sparkles className="w-12 h-12 text-yellow-500 mx-auto mb-6" />
             <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
-              准备好了吗？
+              {t('landing.cta.title')}
             </h2>
             <p className="text-xl text-gray-600 mb-8">
-              加入我们，探索全球支付网络
+              {t('landing.cta.subtitle')}
             </p>
             <Link to="/login">
               <motion.button
@@ -232,7 +234,7 @@ const LandingPage = () => {
                 whileTap={{ scale: 0.95 }}
                 className="px-10 py-5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-semibold text-xl shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center gap-3 mx-auto"
               >
-                立即开始
+                {t('landing.cta.button')}
                 <ArrowRight className="w-6 h-6" />
               </motion.button>
             </Link>

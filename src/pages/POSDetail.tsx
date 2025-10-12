@@ -24,6 +24,8 @@ import { FeesConfiguration, feeUtils } from '@/types/fees'
 import { checkAndUpdatePOSStatus, updatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData } from '@/utils/posStatusUtils'
 import { AnimatedTopNav } from '@/components/AnimatedNavigation'
 import { exportToJSON, exportToHTML, exportToPDF, getStyleDisplayName, getFormatDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
+import { useLocaleStore } from '@/stores/useLocaleStore'
+import InternationalPOSOverview, { type InternationalAttemptSummary } from '@/components/international/InternationalPOSOverview'
 
 interface Review {
   id: string
@@ -61,6 +63,7 @@ const POSDetail = () => {
   const { user } = useAuthStore()
   const { posMachines, deletePOSMachine } = useMapStore()
   const permissions = usePermissions()
+  const { experience } = useLocaleStore()
   
   const [pos, setPOS] = useState<POSMachine | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
@@ -684,6 +687,28 @@ const POSDetail = () => {
           <AnimatedButton onClick={() => navigate(-1)}>返回</AnimatedButton>
         </div>
       </div>
+    )
+  }
+
+  if (experience === 'international') {
+    const latestAttempt: InternationalAttemptSummary | undefined = attempts.length > 0
+      ? {
+          result: attempts[0].result,
+          card_name: attempts[0].card_name,
+          payment_method: attempts[0].payment_method,
+          created_at: attempts[0].created_at,
+        }
+      : undefined
+
+    return (
+      <InternationalPOSOverview
+        pos={pos}
+        isFavorite={isFavorite}
+        onToggleFavorite={toggleFavorite}
+        onBack={() => navigate(-1)}
+        successRate={successRate}
+        latestAttempt={latestAttempt}
+      />
     )
   }
 

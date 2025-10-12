@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import VersionUpdateModal from '@/components/VersionUpdateModal'
 import { supabase, type User } from '@/lib/supabase'
+import InitialExperiencePrompt from '@/components/InitialExperiencePrompt'
 
 function App() {
   const { initialize, setUser } = useAuthStore()
@@ -52,6 +53,7 @@ function App() {
 
   return (
     <>
+      <InitialExperiencePrompt />
       <RouterProvider router={router} />
       <Toaster 
         position="top-center"

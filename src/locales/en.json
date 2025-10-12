@@ -74,6 +74,8 @@
     "print": "Print",
     "bookmark": "Bookmark",
     "unbookmark": "Remove Bookmark",
+    "yes": "Yes",
+    "no": "No",
     "favorite": "Favorite",
     "unfavorite": "Remove Favorite",
     "like": "Like",
@@ -1467,5 +1469,218 @@
     "loading": "Analyzing your preferences...",
     "error": "Unable to load personalized content",
     "retry": "Retry"
+  },
+  "experiencePrompt": {
+    "badge": "Tailored Experience",
+    "title": "Welcome to Payments Maps",
+    "subtitle": "Choose the language and guidance that fits how you pay in China.",
+    "options": {
+      "domestic": {
+        "title": "中文 · 中国版",
+        "description": "完整的参数、支付网络与技术细节，适合在地用户深入探索。",
+        "hint": "推荐给熟悉中国支付生态的用户",
+        "cta": "进入中国体验",
+        "short": "CN"
+      },
+      "international": {
+        "title": "English · International",
+        "description": "Quick tips, plain-language explanations, and the essentials for paying in China.",
+        "hint": "For travellers, newcomers and expatriates",
+        "cta": "Start international guide",
+        "short": "EN"
+      }
+    },
+    "promo": {
+      "title": "What you will see",
+      "points": [
+        "Interactive maps with verified payment acceptance",
+        "Step-by-step onboarding in your chosen language",
+        "Essential tips for cards, wallets and helpful phrases"
+      ]
+    },
+    "footer": "You can always switch languages later from the menu."
+  },
+  "experience": {
+    "badge": {
+      "domestic": "Chinese Experience",
+      "international": "International Experience"
+    }
+  },
+  "landing": {
+    "hero": {
+      "title": "Payments Maps",
+      "subtitle": "A smart companion for understanding payment options in every corner of China.",
+      "primaryCta": "Get started",
+      "secondaryCta": "Learn more"
+    },
+    "features": {
+      "heading": "Why travellers choose us",
+      "subheading": "Designed with international visitors and local experts working together.",
+      "global": {
+        "title": "City by city",
+        "description": "Discover terminals across major Chinese destinations"
+      },
+      "payments": {
+        "title": "Many ways to pay",
+        "description": "Cards, mobile wallets and alternative channels explained"
+      },
+      "security": {
+        "title": "Trusted data",
+        "description": "Verified contributions with transparent editing trail"
+      },
+      "languages": {
+        "title": "Multi-language",
+        "description": "Friendly copy in Chinese, English, German and Russian"
+      },
+      "community": {
+        "title": "Community powered",
+        "description": "Locals and expats share live updates"
+      },
+      "speed": {
+        "title": "Fast lookup",
+        "description": "Filter and search in seconds, even on the go"
+      }
+    },
+    "stats": {
+      "pos": "POS terminals tracked",
+      "cities": "Cities covered",
+      "users": "Active community members",
+      "availability": "Uptime"
+    },
+    "cta": {
+      "title": "Ready to explore payments in China?",
+      "subtitle": "Join the community and plan every purchase with confidence.",
+      "button": "Create your route"
+    }
+  },
+  "login": {
+    "title": "Welcome to Payments Maps",
+    "subtitle": "Sign in to unlock full payment insights and contribute to the map.",
+    "loading": "Signing in...",
+    "providers": {
+      "google": "Sign in with Google",
+      "github": "Sign in with GitHub",
+      "microsoft": "Sign in with Microsoft",
+      "linuxdo": "Sign in with LinuxDO"
+    },
+    "divider": "or",
+    "guestButton": "Continue as guest (view only)",
+    "notice": {
+      "providers": "Use Google, GitHub, Microsoft or LinuxDO to contribute information.",
+      "terms": "By signing in you agree to the Terms of Service and Privacy Policy.",
+      "guestLimitations": "Guest mode is read-only. To add or edit information please sign in."
+    },
+    "errors": {
+      "google": "Google sign-in failed, please try again.",
+      "github": "GitHub sign-in failed, please try again.",
+      "microsoft": "Microsoft sign-in failed, please try again.",
+      "linuxdo": "LinuxDO sign-in failed, please try again."
+    }
+  },
+  "onboardingTour": {
+    "labels": {
+      "previous": "Back",
+      "next": "Next",
+      "skip": "Skip",
+      "done": "Finish"
+    },
+    "steps": {
+      "map": {
+        "title": "Explore the map",
+        "title_international": "Explore the map",
+        "action": "Tap to view nearby payment-friendly merchants",
+        "action_international": "Tap to see places that work well with foreign cards"
+      },
+      "search": {
+        "title": "Search anything",
+        "title_international": "Search in English or Chinese",
+        "action": "Find merchants, addresses or brands instantly",
+        "action_international": "Type an address or brand, we match both English and Chinese names"
+      },
+      "add": {
+        "title": "Share a POS",
+        "title_international": "Share what you discover",
+        "action": "Report new payment terminals or update details",
+        "action_international": "Tell the community when you find a helpful terminal"
+      },
+      "filter": {
+        "title": "Use filters",
+        "title_international": "Filter by cards & wallets",
+        "action": "Narrow down by network, contactless support and more",
+        "action_international": "Choose the cards or wallets you carry to highlight compatible places"
+      },
+      "profile": {
+        "title": "Your profile",
+        "title_international": "Your dashboard",
+        "action": "Track favourites, history and submissions",
+        "action_international": "Keep bookmarks and edits synced across devices"
+      }
+    }
+  },
+  "internationalPos": {
+    "header": {
+      "badge": "International brief",
+      "title": "{{merchant}} payment overview",
+      "subtitle": "Understand how to pay here in a few seconds.",
+      "unknownAddress": "Address coming soon",
+      "coordinates": "Lat {{lat}}, Lng {{lng}}",
+      "successRate": "{{rate}}% recent success rate"
+    },
+    "quickFacts": {
+      "cards": "Foreign cards accepted",
+      "contactless": "Tap to pay",
+      "dcc": "Currency conversion",
+      "dccEnabled": "Dynamic currency conversion offered",
+      "dccDisabled": "Local currency only",
+      "language": "Staff language",
+      "languageValue": "Basic English assistance",
+      "hce": "Android tap-to-pay"
+    },
+    "explanations": {
+      "title": "What the badges mean",
+      "cards": "Most Visa, Mastercard and UnionPay (foreign-issued) cards are accepted when this shows 'Yes'.",
+      "contactless": "Tap your card or phone without entering a PIN for small amounts.",
+      "dcc": "DCC lets you pay in your home currency but may have a higher exchange rate.",
+      "language": "Our community noted whether staff can communicate in English or offer signage.",
+      "items": [
+        "Always ask to pay in CNY to avoid hidden conversion fees.",
+        "If contactless fails, insert the chip and try again—terminals often prompt for PIN.",
+        "Keep a backup payment option such as cash or Alipay Tour Pass."
+      ]
+    },
+    "cards": {
+      "title": "Supported card networks",
+      "unknown": "Community is still confirming accepted networks.",
+      "tipTitle": "Traveller tip",
+      "tipDescription": "UnionPay-logo credit cards from your bank often work best. Visa and Mastercard typically require offline PIN."
+    },
+    "mobile": {
+      "title": "Mobile wallets"
+    },
+    "tips": {
+      "title": "Payment checklist",
+      "items": [
+        "Carry the passport associated with your card for high-value purchases.",
+        "Prepare to show the last four digits of your card if staff requests verification.",
+        "Some shops only enable foreign cards on select lanes—ask for the international terminal."
+      ]
+    },
+    "attempts": {
+      "latest": "Latest report",
+      "card": "Card used: {{card}}",
+      "method": "Method: {{method}}",
+      "time": "Reported on {{time}}",
+      "status": {
+        "success": "Worked",
+        "failure": "Declined",
+        "unknown": "Result unconfirmed"
+      }
+    },
+    "actions": {
+      "switch": "中文详细版",
+      "switchSuccess": "Switched to the Chinese detailed view.",
+      "addFavorite": "Save to favourites",
+      "removeFavorite": "Remove favourite"
+    }
   }
 }
