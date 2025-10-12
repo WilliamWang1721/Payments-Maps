@@ -73,6 +73,7 @@ __MACOSX/
 *debug*
 *DEBUG*
 *Debug*
+!src/pages/DebugRole.tsx
 
 # Local config files
 *local*.json
