@@ -6,10 +6,12 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from '../locales/en.json';
 import ru from '../locales/ru.json';
 import de from '../locales/de.json';
+import zh from '../locales/zh.json';
 
 // 支持的语言列表
 export const supportedLanguages = {
   en: 'English',
+  zh: '简体中文',
   ru: 'Русский',
   de: 'Deutsch'
 };
@@ -19,17 +21,29 @@ export const defaultLanguage = 'en';
 
 // 获取浏览器语言或从本地存储获取
 const getInitialLanguage = (): string => {
-  const savedLanguage = localStorage.getItem('language');
-  if (savedLanguage && Object.keys(supportedLanguages).includes(savedLanguage)) {
-    return savedLanguage;
+  if (typeof window === 'undefined') {
+    return defaultLanguage;
   }
-  
+
+  try {
+    const savedLanguage = window.localStorage.getItem('language');
+    if (savedLanguage && Object.keys(supportedLanguages).includes(savedLanguage)) {
+      return savedLanguage;
+    }
+  } catch (error) {
+    console.warn('Unable to access localStorage for language detection:', error);
+  }
+
   // 检查浏览器语言
-  const browserLanguage = navigator.language.split('-')[0];
-  if (Object.keys(supportedLanguages).includes(browserLanguage)) {
-    return browserLanguage;
+  try {
+    const browserLanguage = window.navigator.language.split('-')[0];
+    if (Object.keys(supportedLanguages).includes(browserLanguage)) {
+      return browserLanguage;
+    }
+  } catch (error) {
+    console.warn('Unable to read browser language for detection:', error);
   }
-  
+
   return defaultLanguage;
 };
 
@@ -40,6 +54,7 @@ i18n
   .init({
     resources: {
       en: { translation: en },
+      zh: { translation: zh },
       ru: { translation: ru },
       de: { translation: de }
     },
@@ -61,7 +76,13 @@ i18n
 export const changeLanguage = (language: string) => {
   if (Object.keys(supportedLanguages).includes(language)) {
     i18n.changeLanguage(language);
-    localStorage.setItem('language', language);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('language', language);
+      } catch (error) {
+        console.warn('Unable to persist language preference:', error);
+      }
+    }
   }
 };
 

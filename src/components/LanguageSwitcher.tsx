@@ -2,7 +2,8 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Globe } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { changeLanguage, getCurrentLanguage, getLanguageDisplayName } from '@/lib/i18n'
+import { getLanguageDisplayName, supportedLanguages } from '@/lib/i18n'
+import { useLocaleStore } from '@/stores/useLocaleStore'
 
 interface LanguageSwitcherProps {
   className?: string
@@ -14,16 +15,18 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
   showLabel = true 
 }) => {
   const { t } = useTranslation()
-  const currentLanguage = getCurrentLanguage()
-  
+  const { language, setPreference, experience } = useLocaleStore()
+
   const languages = [
+    { code: 'zh', name: '中文', flag: '🇨🇳' },
     { code: 'en', name: 'English', flag: '🇺🇸' },
     { code: 'ru', name: 'Русский', flag: '🇷🇺' },
     { code: 'de', name: 'Deutsch', flag: '🇩🇪' }
   ]
 
   const handleLanguageChange = (languageCode: string) => {
-    changeLanguage(languageCode)
+    const mode = languageCode === 'zh' ? 'domestic' : 'international'
+    setPreference(languageCode, mode)
   }
 
   return (
@@ -37,17 +40,19 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
         )}
         
         <div className="flex gap-1">
-          {languages.map((language) => {
-            const isActive = currentLanguage === language.code
-            
+          {languages
+            .filter((item) => Object.keys(supportedLanguages).includes(item.code))
+            .map((languageOption) => {
+              const isActive = language === languageOption.code
+
             return (
               <motion.button
-                key={language.code}
-                onClick={() => handleLanguageChange(language.code)}
+                key={languageOption.code}
+                onClick={() => handleLanguageChange(languageOption.code)}
                 className={`
                   px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                  ${isActive 
-                    ? 'bg-blue-500 text-white shadow-md' 
+                  ${isActive
+                    ? 'bg-blue-500 text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }
                 `}
@@ -60,8 +65,8 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
                 }}
               >
                 <div className="flex items-center gap-1">
-                  <span>{language.flag}</span>
-                  <span>{language.code.toUpperCase()}</span>
+                  <span>{languageOption.flag}</span>
+                  <span>{languageOption.code.toUpperCase()}</span>
                 </div>
               </motion.button>
             )
@@ -71,7 +76,13 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
       
       {/* 当前语言显示 */}
       <div className="mt-2 text-xs text-gray-500">
-        {t('common.currentLanguage')}: {getLanguageDisplayName(currentLanguage)}
+        {t('common.currentLanguage')}: {getLanguageDisplayName(language)}
+      </div>
+
+      <div className="mt-1 text-xs font-medium text-blue-500">
+        {experience === 'domestic'
+          ? t('experience.badge.domestic')
+          : t('experience.badge.international')}
       </div>
     </div>
   )
