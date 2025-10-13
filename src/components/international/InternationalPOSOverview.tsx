@@ -96,6 +96,16 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
     },
   ], [pos.basic_info, t])
 
+  const travelTips = useMemo(() => {
+    const tips = t('internationalPos.tips.items', { returnObjects: true })
+    return Array.isArray(tips) ? tips : []
+  }, [t])
+
+  const explanationPoints = useMemo(() => {
+    const items = t('internationalPos.explanations.items', { returnObjects: true })
+    return Array.isArray(items) ? items : []
+  }, [t])
+
   const handleSwitchToChinese = () => {
     setPreference('zh', 'domestic')
     toast.success(t('internationalPos.actions.switchSuccess'))
@@ -195,7 +205,7 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
 
         <div className="grid gap-4 md:grid-cols-2">
           {quickFacts.map((fact, index) => (
-            <AnimatedCard key={fact.label} className="bg-white" variant="flat" hoverable>
+            <AnimatedCard key={fact.label} className="bg-white" hoverable>
               <CardContent className="flex h-full flex-col gap-3 p-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -217,7 +227,7 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
           ))}
         </div>
 
-        <AnimatedCard className="bg-white" variant="flat" hoverable>
+        <AnimatedCard className="bg-white" hoverable>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg font-semibold text-slate-900">
               {t('internationalPos.cards.title')}
@@ -251,7 +261,7 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
         </AnimatedCard>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <AnimatedCard className="bg-white" variant="flat" hoverable>
+          <AnimatedCard className="bg-white" hoverable>
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-slate-900">
                 {t('internationalPos.mobile.title')}
@@ -269,7 +279,7 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
             </CardContent>
           </AnimatedCard>
 
-          <AnimatedCard className="bg-white" variant="flat" hoverable>
+          <AnimatedCard className="bg-white" hoverable>
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-purple-500" />
@@ -277,7 +287,7 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-slate-600">
-              {t('internationalPos.tips.items', { returnObjects: true }).map((tip: string, index: number) => (
+              {travelTips.map((tip, index) => (
                 <div key={index} className="flex items-start gap-2">
                   <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-purple-400" />
                   <span>{tip}</span>
@@ -287,14 +297,14 @@ const InternationalPOSOverview: React.FC<InternationalPOSOverviewProps> = ({
           </AnimatedCard>
         </div>
 
-        <AnimatedCard className="bg-white" variant="flat" hoverable>
+        <AnimatedCard className="bg-white" hoverable>
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-slate-900">
               {t('internationalPos.explanations.title')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
-            {t('internationalPos.explanations.items', { returnObjects: true }).map((item: string, index: number) => (
+            {explanationPoints.map((item, index) => (
               <div key={index} className="flex items-start gap-2">
                 <Info className="mt-1 h-4 w-4 flex-shrink-0 text-slate-400" />
                 <span>{item}</span>

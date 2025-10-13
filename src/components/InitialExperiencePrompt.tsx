@@ -31,6 +31,11 @@ const InitialExperiencePrompt = () => {
 
   const activeKey = useMemo(() => experience, [experience])
 
+  const promoPoints = useMemo(() => {
+    const items = t('experiencePrompt.promo.points', { returnObjects: true })
+    return Array.isArray(items) ? items : []
+  }, [t])
+
   if (!shouldRender || hasSelectedLanguage || dismissed) {
     return null
   }
@@ -134,10 +139,9 @@ const InitialExperiencePrompt = () => {
                     {t('experiencePrompt.promo.title')}
                   </p>
                   <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                    {t('experiencePrompt.promo.points', { returnObjects: true })
-                      .map((item: string, index: number) => (
-                        <li key={index}>• {item}</li>
-                      ))}
+                    {promoPoints.map((item, index) => (
+                      <li key={index}>• {item}</li>
+                    ))}
                   </ul>
                 </div>
               </div>

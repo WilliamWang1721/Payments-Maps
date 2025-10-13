@@ -16,8 +16,6 @@ import PaymentIcon from '@/components/icons/PaymentIcon'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import { usePermissions } from '@/hooks/usePermissions'
 import { SearchSuggestions } from '@/components/SearchSuggestions'
-import { useOnboardingTour } from '@/hooks/useOnboardingTour'
-import OnboardingTour from '@/components/OnboardingTour'
 
 const Map = () => {
   const navigate = useNavigate()
@@ -30,9 +28,6 @@ const Map = () => {
   
   // 搜索历史功能
   const { searchHistory, addSearchHistory, clearSearchHistory, removeSearchHistory } = useSearchHistory()
-  
-  // 新手引导
-  const { showTour, completeTour } = useOnboardingTour()
   
   const {
     mapInstance,
@@ -315,13 +310,6 @@ const Map = () => {
 
   return (
     <div className="w-full h-full relative"> 
-      {/* 新手引导 */}
-      <OnboardingTour 
-        isOpen={showTour} 
-        onComplete={completeTour}
-      /> 
-
-
       {/* 加载遮罩 */}
       {mapLoading && (
         <div className="map-loading-overlay absolute inset-0 flex items-center justify-center bg-white/70">
