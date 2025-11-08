@@ -15,6 +15,7 @@ object NavigationRoutes {
     const val POS_MACHINE_DETAIL = "pos_machine_detail/{posMachineId}"
     const val MERCHANT_DETAIL = "merchant_detail/{merchantId}"
     const val USER_PROFILE = "user_profile/{userId}"
+    const val EDIT_PROFILE = "edit_profile/{userId}"
     
     // 认证相关路由
     const val LOGIN = "login"
@@ -58,6 +59,10 @@ object NavigationRoutes {
             return "user_profile/$userId"
         }
         
+        fun editProfile(userId: String): String {
+            return "edit_profile/$userId"
+        }
+
         fun editPOSMachine(posMachineId: String): String {
             return "edit_pos_machine/$posMachineId"
         }
@@ -97,6 +102,7 @@ object NavigationRoutes {
         EDIT_POS_MACHINE,
         ADD_MERCHANT,
         EDIT_MERCHANT,
+        EDIT_PROFILE,
         ACCOUNT_SETTINGS,
         NOTIFICATION_SETTINGS,
         PRIVACY_SETTINGS
@@ -122,6 +128,7 @@ object NavigationRoutes {
         POS_MACHINE_DETAIL,
         MERCHANT_DETAIL,
         USER_PROFILE,
+        EDIT_PROFILE,
         ADD_POS_MACHINE,
         EDIT_POS_MACHINE,
         ADD_MERCHANT,

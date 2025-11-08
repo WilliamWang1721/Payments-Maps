@@ -33,6 +33,7 @@ import com.paymentsmaps.android.domain.model.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
+    userId: String? = null,
     onNavigateBack: () -> Unit,
     onSaveSuccess: () -> Unit,
     modifier: Modifier = Modifier,
@@ -70,14 +71,15 @@ fun EditProfileScreen(
     var marketingEmails by remember { mutableStateOf(false) }
     
     // 加载用户数据
-    LaunchedEffect(Unit) {
-        viewModel.loadUserForEdit()
+    LaunchedEffect(userId) {
+        viewModel.loadUserForEdit(userId)
     }
     
     // 监听加载成功，填充表单
     LaunchedEffect(uiState) {
-        if (uiState is EditProfileUiState.Success) {
-            val user = uiState.user
+    when (val state = uiState) {
+        is EditProfileUiState.Success -> {
+                val user = state.user
             firstName = user.profile.firstName ?: ""
             lastName = user.profile.lastName ?: ""
             company = user.profile.company ?: ""
@@ -97,16 +99,16 @@ fun EditProfileScreen(
             pushNotifications = user.preferences.notifications.pushNotifications
             smsNotifications = user.preferences.notifications.smsNotifications
             marketingEmails = user.preferences.notifications.marketingEmails
+            }
+
+            is EditProfileUiState.SaveSuccess -> {
+                onSaveSuccess()
+            }
+
+            else -> Unit
         }
     }
-    
-    // 监听保存成功
-    LaunchedEffect(uiState) {
-        if (uiState is EditProfileUiState.SaveSuccess) {
-            onSaveSuccess()
-        }
-    }
-    
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -154,7 +156,7 @@ fun EditProfileScreen(
             isLoading = isLoading
         )
         
-        when (uiState) {
+        when (val state = uiState) {
             is EditProfileUiState.Loading -> {
                 Box(
                     modifier = Modifier
@@ -194,7 +196,7 @@ fun EditProfileScreen(
                     }
                     
                     // 头像编辑区域
-                    EditProfileHeader(user = uiState.user)
+                    EditProfileHeader(user = state.user)
                     
                     // 基本信息
                     EditSection(
@@ -373,28 +375,27 @@ fun EditProfileScreen(
                     Spacer(modifier = Modifier.height(32.dp))
                 }
             }
-            
+
             is EditProfileUiState.Error -> {
-                ErrorContent(
-                    message = uiState.message,
-                    onRetry = { viewModel.loadUserForEdit() }
-                )
+            ErrorContent(
+                message = state.message,
+                onRetry = { viewModel.loadUserForEdit() }
+            )
+        }
+
+        EditProfileUiState.Initial -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(64.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
-            
-            EditProfileUiState.Initial -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(64.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            
-            EditProfileUiState.SaveSuccess -> {
-                // 处理成功状态，实际上在 LaunchedEffect 中已处理
-            }
+        }
+
+        EditProfileUiState.SaveSuccess -> {
+            // handled in LaunchedEffect
         }
     }
 }

@@ -283,6 +283,10 @@
     "progress": {
       "step": "Step {{current}} of {{total}}"
     },
+    "welcome": {
+      "title": "Welcome to China Payment Map",
+      "description": "Your comprehensive guide to payment methods accepted across China. Find POS machines that support your international cards."
+    },
     "languageSelection": {
       "title": "Choose Your Language",
       "subtitle": "Select your preferred language for the best experience",
@@ -319,7 +323,7 @@
     },
     "paymentIntro": {
       "title": "Payment Methods in China",
-      "subtitle": "Learn about the most popular payment options",
+      "subtitle": "Learn about the most popular payment options for international visitors",
       "methods": {
         "alipay": {
           "title": "Alipay",
@@ -1042,16 +1046,34 @@
     "delete_pos": "Delete POS",
     "pos_details": "POS Details",
     "merchant_name": "Merchant Name",
+    "merchant_name_en": "English Merchant Name",
     "address": "Address",
+    "address_en": "English Address",
     "basic_info": "Basic Info",
     "payment_methods": "Payment Methods",
     "card_networks": "Card Networks",
+    "contactless": "Contactless/NFC Payment",
+    "contactless_supported": "✓ Tap to Pay Supported",
+    "contactless_not_supported": "✗ No Tap to Pay",
+    "3d_secure": "3D Secure",
+    "3d_secure_enabled": "✓ 3D Secure Enabled",
+    "3d_secure_disabled": "✗ No 3D Secure",
+    "dcc": "Dynamic Currency Conversion",
+    "dcc_available": "DCC Available (may include fees)",
+    "dcc_not_available": "No DCC",
+    "chip_pin": "Chip & PIN Required",
+    "signature": "Signature May Be Required",
+    "min_amount": "Minimum Amount",
+    "no_pin_limit": "Contactless Limit (No PIN)",
     "fees": "Fees",
+    "foreign_card_fee": "International Card Fee",
+    "currency_conversion_fee": "Currency Conversion Fee",
     "notes": "Notes",
     "remarks": "Remarks",
     "custom_links": "Custom Links",
     "verification_status": "Verification Status",
     "success_rate": "Success Rate",
+    "success_rate_foreign": "International Card Success Rate",
     "total_attempts": "Total Attempts",
     "successful_attempts": "Successful Attempts",
     "failed_attempts": "Failed Attempts",

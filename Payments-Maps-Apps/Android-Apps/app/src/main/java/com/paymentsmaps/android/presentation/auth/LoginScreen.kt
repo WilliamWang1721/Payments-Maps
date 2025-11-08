@@ -35,6 +35,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    onNavigateToRegister: () -> Unit = {},
+    onNavigateToForgotPassword: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
@@ -45,13 +47,15 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
-    var isSignUpMode by remember { mutableStateOf(false) }
-    var confirmPassword by remember { mutableStateOf("") }
     
     // 观察认证状态
     val authState by viewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
-    val errorMessage = (authState as? AuthState.Error)?.message
+    val (feedbackMessage, isErrorMessage) = when (val state = authState) {
+        is AuthState.Error -> state.message to true
+        is AuthState.Message -> state.message to state.isError
+        else -> null to false
+    }
     
     // 登录成功时的处理
     LaunchedEffect(authState) {
@@ -104,14 +108,14 @@ fun LoginScreen(
                 
                 // 标题
                 Text(
-                    text = if (isSignUpMode) "创建账户" else "欢迎回来",
+                    text = "欢迎回来",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 
                 Text(
-                    text = if (isSignUpMode) "加入 Payments Maps 社区" else "登录到你的账户",
+                    text = "登录到你的账户",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -119,20 +123,28 @@ fun LoginScreen(
                 
                 // 错误提示
                 AnimatedVisibility(
-                    visible = errorMessage != null,
+                    visible = feedbackMessage != null,
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
-                    errorMessage?.let { error ->
+                    feedbackMessage?.let { message ->
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
+                                containerColor = if (isErrorMessage) {
+                                    MaterialTheme.colorScheme.errorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                }
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = error,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                text = message,
+                                color = if (isErrorMessage) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(16.dp)
                             )
@@ -189,47 +201,28 @@ fun LoginScreen(
                     enabled = !isLoading
                 )
                 
-                // 确认密码输入框（注册模式）
-                AnimatedVisibility(
-                    visible = isSignUpMode,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
-                        label = { Text("确认密码") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = "确认密码"
-                            )
-                        },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        ),
-                        enabled = !isLoading
-                    )
-                }
-                
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
+                // 忘记密码
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearError()
+                            onNavigateToForgotPassword()
+                        },
+                        enabled = !isLoading
+                    ) {
+                        Text("忘记密码？")
+                    }
+                }
+
                 // 主要操作按钮
                 Button(
                     onClick = {
-                        if (isSignUpMode) {
-                            if (password == confirmPassword) {
-                                viewModel.signUp(email, password)
-                            } else {
-                                viewModel.showError("密码不匹配")
-                            }
-                        } else {
-                            viewModel.signIn(email, password)
-                        }
+                        viewModel.signIn(email, password)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -248,38 +241,37 @@ fun LoginScreen(
                         )
                     } else {
                         Icon(
-                            imageVector = if (isSignUpMode) Icons.Default.PersonAdd else Icons.Default.Login,
+                            imageVector = Icons.Default.Login,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isSignUpMode) "创建账户" else "登录",
+                            text = "登录",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
-                
-                // 切换登录/注册模式
+
+                // 注册入口
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = if (isSignUpMode) "已有账户？" else "还没有账户？",
+                        text = "还没有账户？",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     TextButton(
-                        onClick = { 
-                            isSignUpMode = !isSignUpMode
-                            // 清除错误状态
+                        onClick = {
                             viewModel.clearError()
+                            onNavigateToRegister()
                         }
                     ) {
                         Text(
-                            text = if (isSignUpMode) "立即登录" else "创建账户",
+                            text = "立即注册",
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -293,6 +285,7 @@ fun LoginScreen(
         SocialLoginSection(
             onGoogleLogin = { viewModel.signInWithGoogle() },
             onGithubLogin = { viewModel.signInWithGitHub() },
+            onMicrosoftLogin = { viewModel.signInWithMicrosoft() },
             isLoading = isLoading
         )
         
@@ -378,6 +371,7 @@ private fun BrandHeader() {
 private fun SocialLoginSection(
     onGoogleLogin: () -> Unit,
     onGithubLogin: () -> Unit,
+    onMicrosoftLogin: () -> Unit,
     isLoading: Boolean
 ) {
     Column(
@@ -421,7 +415,7 @@ private fun SocialLoginSection(
             
             // Microsoft 登录
             SocialLoginButton(
-                onClick = { viewModel.signInWithMicrosoft() },
+                onClick = onMicrosoftLogin,
                 icon = Icons.Default.Business, // 临时图标
                 label = "Microsoft",
                 enabled = !isLoading,

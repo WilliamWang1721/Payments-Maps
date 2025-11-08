@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -38,15 +39,25 @@ class EditProfileViewModel @Inject constructor(
     val uiState: StateFlow<EditProfileUiState> = _uiState.asStateFlow()
     
     private var currentUser: User? = null
+    private var loadJob: Job? = null
+    private var requestedUserId: String? = null
     
     /**
      * 加载用户信息用于编辑
      */
-    fun loadUserForEdit() {
-        viewModelScope.launch {
+    fun loadUserForEdit(userId: String? = null) {
+        requestedUserId = userId
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.value = EditProfileUiState.Loading
             
-            userManagementUseCase.getCurrentUser().collect { result ->
+            val userFlow = if (userId.isNullOrBlank()) {
+                userManagementUseCase.getCurrentUser()
+            } else {
+                userManagementUseCase.getUserById(userId)
+            }
+            
+            userFlow.collect { result ->
                 when (result) {
                     is Result.Success -> {
                         if (result.data != null) {

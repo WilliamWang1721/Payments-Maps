@@ -1599,7 +1599,7 @@
       },
       "paymentIntro": {
         "title": "支付方式介绍",
-        "subtitle": "了解新加坡常用的支付方式",
+        "subtitle": "了解中国常用的支付方式",
         "methods": {
           "creditCard": {
             "title": "信用卡",
@@ -1615,7 +1615,7 @@
           },
           "cash": {
             "title": "现金",
-            "description": "新加坡元现金支付"
+            "description": "人民币现金支付"
           }
         },
         "continue": "继续",

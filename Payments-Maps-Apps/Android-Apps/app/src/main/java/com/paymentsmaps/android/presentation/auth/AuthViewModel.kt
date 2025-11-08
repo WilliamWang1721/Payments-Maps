@@ -110,7 +110,9 @@ class AuthViewModel @Inject constructor(
                     this.password = password
                 }
                 
-                _authState.value = AuthState.Error("注册成功！请检查您的邮箱并点击验证链接")
+                _authState.value = AuthState.Message(
+                    message = "注册成功！请检查您的邮箱并点击验证链接"
+                )
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(
                     when {
@@ -238,7 +240,9 @@ class AuthViewModel @Inject constructor(
                 
                 supabaseClient.auth.resetPasswordForEmail(email)
                 
-                _authState.value = AuthState.Error("密码重置邮件已发送，请检查您的邮箱")
+                _authState.value = AuthState.Message(
+                    message = "密码重置邮件已发送，请检查您的邮箱"
+                )
             } catch (e: Exception) {
                 _authState.value = AuthState.Error("发送重置邮件失败: ${e.message}")
             }
@@ -256,7 +260,7 @@ class AuthViewModel @Inject constructor(
      * 清除错误状态
      */
     fun clearError() {
-        if (_authState.value is AuthState.Error) {
+        if (_authState.value is AuthState.Error || _authState.value is AuthState.Message) {
             _authState.value = AuthState.Idle
         }
     }

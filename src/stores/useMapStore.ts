@@ -139,10 +139,19 @@ export const useMapStore = create<MapState>((set, get) => ({
         .from('pos_machines')
         .select('*')
       
-      // 如果有搜索关键词，添加搜索条件
+      // 如果有搜索关键词，添加搜索条件（支持中文、英文、拼音）
       if (searchKeyword && searchKeyword.trim()) {
         const keyword = searchKeyword.trim().toLowerCase()
-        query = query.or(`merchant_name.ilike.%${keyword}%,address.ilike.%${keyword}%,basic_info->>model.ilike.%${keyword}%,basic_info->>acquiring_institution.ilike.%${keyword}%`)
+        query = query.or(
+          `merchant_name.ilike.%${keyword}%,` +
+          `merchant_name_en.ilike.%${keyword}%,` +
+          `merchant_name_pinyin.ilike.%${keyword}%,` +
+          `address.ilike.%${keyword}%,` +
+          `address_en.ilike.%${keyword}%,` +
+          `address_pinyin.ilike.%${keyword}%,` +
+          `basic_info->>model.ilike.%${keyword}%,` +
+          `basic_info->>acquiring_institution.ilike.%${keyword}%`
+        )
       }
       
       // 添加筛选条件
@@ -251,9 +260,9 @@ export const useMapStore = create<MapState>((set, get) => ({
       }
       
       const { data: posMachines, error } = await query.order('created_at', { ascending: false })
-      
+
       if (error) {
-        console.error('加载POS机数据失败:', error)
+        console.error('Failed to load POS machine data / 加载POS机数据失败:', error)
         throw error
       }
       
@@ -326,8 +335,8 @@ export const useMapStore = create<MapState>((set, get) => ({
       
       set({ posMachines: processedData })
     } catch (error) {
-      console.error('加载POS机数据失败:', error)
-      // 设置空数组，避免界面卡住
+      console.error('Failed to load POS machine data / 加载POS机数据失败:', error)
+      // 设置空数组，避免界面卡住 / Set empty array to prevent UI freeze
       set({ posMachines: [] })
     } finally {
       set({ loading: false })

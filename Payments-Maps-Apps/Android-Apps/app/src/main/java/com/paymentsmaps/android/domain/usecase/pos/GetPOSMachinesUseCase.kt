@@ -27,7 +27,14 @@ class GetPOSMachinesUseCase @Inject constructor(
     suspend fun getByMerchantId(merchantId: String): Flow<Result<List<POSMachine>>> {
         return posRepository.getPOSMachinesByMerchantId(merchantId)
     }
-    
+
+    /**
+     * 根据ID获取POS机
+     */
+    suspend fun getById(posMachineId: String): Flow<Result<POSMachine?>> {
+        return posRepository.getPOSMachineById(posMachineId)
+    }
+
     /**
      * 根据状态获取POS机
      */

@@ -17,6 +17,14 @@ class UserManagementUseCase @Inject constructor(
 ) {
     
     /**
+     * 获取当前用户信息
+     * @return 当前用户信息
+     */
+    fun getCurrentUser(): Flow<Result<User?>> {
+        return userRepository.getCurrentUser()
+    }
+
+    /**
      * 根据ID获取用户信息
      * @param id 用户ID
      * @return 用户信息
