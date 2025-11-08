@@ -72,6 +72,13 @@ class UserPreferencesManager @Inject constructor(
         // 缓存控制
         private val CACHE_EXPIRY_TIME = longPreferencesKey("cache_expiry_time")
         private val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
+        private val BIOMETRIC_LOGIN = booleanPreferencesKey("biometric_login")
+        private val REMEMBER_DEVICE = booleanPreferencesKey("remember_device")
+        private val TWO_FACTOR_ENABLED = booleanPreferencesKey("two_factor_enabled")
+        private val AUTO_LOGOUT_MINUTES = intPreferencesKey("auto_logout_minutes")
+        private val ANALYTICS_OPT_IN = booleanPreferencesKey("analytics_opt_in")
+        private val LOCATION_SHARING = booleanPreferencesKey("location_sharing")
+        private val PERSONALIZED_CONTENT = booleanPreferencesKey("personalized_content")
     }
     
     // ========== 用户基本信息 ==========
@@ -267,6 +274,46 @@ class UserPreferencesManager @Inject constructor(
         .map { preferences ->
             preferences[EMAIL_NOTIFICATIONS] ?: true
         }
+
+    /**
+     * 获取短信通知设置
+     */
+    val smsNotificationsFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[SMS_NOTIFICATIONS] ?: false
+        }
+
+    /**
+     * 获取营销邮件设置
+     */
+    val marketingEmailsFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[MARKETING_EMAILS] ?: false
+        }
+
+    /**
+     * 获取安全告警设置
+     */
+    val securityAlertsFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[SECURITY_ALERTS] ?: true
+        }
+
+    /**
+     * 获取交易告警设置
+     */
+    val transactionAlertsFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[TRANSACTION_ALERTS] ?: true
+        }
+
+    /**
+     * 获取维护提醒设置
+     */
+    val maintenanceAlertsFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[MAINTENANCE_ALERTS] ?: true
+        }
     
     // ========== 地图设置 ==========
     
@@ -408,6 +455,96 @@ class UserPreferencesManager @Inject constructor(
         .map { preferences ->
             preferences[OFFLINE_MODE] ?: false
         }
+
+    /**
+     * 获取生物识别登录设置
+     */
+    val biometricLoginFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[BIOMETRIC_LOGIN] ?: false
+        }
+
+    /**
+     * 获取记住设备设置
+     */
+    val rememberDeviceFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[REMEMBER_DEVICE] ?: true
+        }
+
+    /**
+     * 获取两步验证设置
+     */
+    val twoFactorEnabledFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[TWO_FACTOR_ENABLED] ?: false
+        }
+
+    /**
+     * 获取自动登出时间（分钟）
+     */
+    val autoLogoutMinutesFlow: Flow<Int> = dataStore.data
+        .map { preferences ->
+            preferences[AUTO_LOGOUT_MINUTES] ?: 30
+        }
+
+    /**
+     * 隐私设置相关 Flow
+     */
+    val analyticsOptInFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[ANALYTICS_OPT_IN] ?: true
+        }
+
+    val locationSharingFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[LOCATION_SHARING] ?: true
+        }
+
+    val personalizedContentFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[PERSONALIZED_CONTENT] ?: true
+        }
+
+    /**
+     * 保存账户安全设置
+     */
+    suspend fun saveAccountSecuritySettings(
+        biometricLogin: Boolean,
+        rememberDevice: Boolean,
+        twoFactorEnabled: Boolean,
+        autoLogoutMinutes: Int
+    ) {
+        try {
+            dataStore.edit { preferences ->
+                preferences[BIOMETRIC_LOGIN] = biometricLogin
+                preferences[REMEMBER_DEVICE] = rememberDevice
+                preferences[TWO_FACTOR_ENABLED] = twoFactorEnabled
+                preferences[AUTO_LOGOUT_MINUTES] = autoLogoutMinutes
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to save account security settings")
+        }
+    }
+
+    /**
+     * 保存隐私设置
+     */
+    suspend fun savePrivacySettings(
+        analyticsEnabled: Boolean,
+        locationSharing: Boolean,
+        personalizedContent: Boolean
+    ) {
+        try {
+            dataStore.edit { preferences ->
+                preferences[ANALYTICS_OPT_IN] = analyticsEnabled
+                preferences[LOCATION_SHARING] = locationSharing
+                preferences[PERSONALIZED_CONTENT] = personalizedContent
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to save privacy settings")
+        }
+    }
     
     /**
      * 清除所有偏好设置

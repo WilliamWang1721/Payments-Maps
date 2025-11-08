@@ -46,9 +46,13 @@ export interface User {
 export interface POSMachine {
   id: string
   address: string
+  address_en?: string  // English address
+  address_pinyin?: string  // Pinyin for search
   latitude: number
   longitude: number
   merchant_name: string
+  merchant_name_en?: string  // English merchant name
+  merchant_name_pinyin?: string  // Pinyin merchant name
   // 品牌信息
   brand_id?: string
   // 商家信息

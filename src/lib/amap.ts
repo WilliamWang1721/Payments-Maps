@@ -39,8 +39,8 @@ export const locationUtils = {
   getCurrentPosition: (maxRetries: number = 3): Promise<{ longitude: number; latitude: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        console.error('浏览器不支持地理位置获取，使用默认位置')
-        // 使用北京市中心作为默认位置
+        console.error('Browser does not support geolocation, using default location / 浏览器不支持地理位置获取，使用默认位置')
+        // 使用北京市中心作为默认位置 / Use Beijing center as default
         resolve({
           longitude: 116.397428,
           latitude: 39.90923
@@ -49,13 +49,13 @@ export const locationUtils = {
       }
 
       let retryCount = 0
-      
+
       const attemptGetLocation = () => {
-        console.log(`开始获取位置 (尝试 ${retryCount + 1}/${maxRetries})`)
-        
+        console.log(`Getting location (attempt ${retryCount + 1}/${maxRetries}) / 开始获取位置 (尝试 ${retryCount + 1}/${maxRetries})`)
+
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            console.log('位置获取成功:', {
+            console.log('Location obtained successfully / 位置获取成功:', {
               longitude: position.coords.longitude,
               latitude: position.coords.latitude,
               accuracy: position.coords.accuracy
@@ -73,19 +73,19 @@ export const locationUtils = {
               attempt: retryCount,
               maxRetries
             }
-            console.warn('位置获取失败详情:', errorDetails)
-            
+            console.warn('Location acquisition failed / 位置获取失败:', errorDetails)
+
             if (retryCount < maxRetries) {
-              console.log(`将在1秒后重试 (${retryCount}/${maxRetries})`)
+              console.log(`Retrying in 1 second / 将在1秒后重试 (${retryCount}/${maxRetries})`)
               // 减少重试间隔时间到1秒
               setTimeout(() => {
                 attemptGetLocation()
               }, 1000)
             } else {
-              console.error('所有重试均失败，使用默认位置')
-              // 提供默认位置而不是拒绝
+              console.error('All retries failed, using default location / 所有重试均失败，使用默认位置')
+              // 提供默认位置而不是拒绝 / Provide default location instead of rejecting
               resolve({
-                longitude: 116.397428, // 北京市中心
+                longitude: 116.397428, // 北京市中心 / Beijing center
                 latitude: 39.90923
               })
             }

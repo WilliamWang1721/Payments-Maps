@@ -37,6 +37,7 @@ import com.paymentsmaps.android.domain.model.User
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserProfileScreen(
+    userId: String? = null,
     onNavigateBack: () -> Unit,
     onEditProfile: () -> Unit,
     modifier: Modifier = Modifier,
@@ -47,10 +48,10 @@ fun UserProfileScreen(
     
     // 观察用户状态
     val uiState by viewModel.uiState.collectAsState()
-    
+
     // 加载用户数据
-    LaunchedEffect(Unit) {
-        viewModel.loadUserProfile()
+    LaunchedEffect(userId) {
+        viewModel.loadUserProfile(userId)
     }
     
     Column(
@@ -65,7 +66,7 @@ fun UserProfileScreen(
             onEditProfile = onEditProfile
         )
         
-        when (uiState) {
+        when (val state = uiState) {
             is UserProfileUiState.Loading -> {
                 Box(
                     modifier = Modifier
@@ -79,14 +80,14 @@ fun UserProfileScreen(
             
             is UserProfileUiState.Success -> {
                 ProfileContent(
-                    user = uiState.user,
-                    onRefresh = { viewModel.loadUserProfile() }
+                    user = state.user,
+                    onRefresh = viewModel::refreshProfile
                 )
             }
             
             is UserProfileUiState.Error -> {
                 ErrorContent(
-                    message = uiState.message,
+                    message = state.message,
                     onRetry = { viewModel.loadUserProfile() }
                 )
             }

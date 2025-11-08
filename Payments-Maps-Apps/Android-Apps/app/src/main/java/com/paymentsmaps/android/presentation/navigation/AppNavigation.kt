@@ -1,9 +1,16 @@
 package com.paymentsmaps.android.presentation.navigation
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -12,7 +19,28 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.paymentsmaps.android.presentation.auth.ForgotPasswordScreen
+import com.paymentsmaps.android.presentation.auth.LoginScreen
+import com.paymentsmaps.android.presentation.auth.RegisterScreen
 import com.paymentsmaps.android.presentation.map.MapScreen
+import com.paymentsmaps.android.presentation.merchant.AddMerchantScreen
+import com.paymentsmaps.android.presentation.merchant.AddPOSMachineScreen
+import com.paymentsmaps.android.presentation.merchant.EditMerchantScreen
+import com.paymentsmaps.android.presentation.merchant.EditPOSMachineScreen
+import com.paymentsmaps.android.presentation.merchant.MerchantDetailScreen
+import com.paymentsmaps.android.presentation.merchant.MerchantManagementScreen
+import com.paymentsmaps.android.presentation.pos.POSMachineDetailScreen
+import com.paymentsmaps.android.presentation.profile.EditProfileScreen
+import com.paymentsmaps.android.presentation.profile.UserProfileScreen
+import com.paymentsmaps.android.presentation.search.SearchScreen
+import com.paymentsmaps.android.presentation.settings.AboutScreen
+import com.paymentsmaps.android.presentation.settings.AccountSettingsScreen
+import com.paymentsmaps.android.presentation.settings.LanguageSettingsScreen
+import com.paymentsmaps.android.presentation.settings.NotificationSettingsScreen
+import com.paymentsmaps.android.presentation.settings.PrivacySettingsScreen
+import com.paymentsmaps.android.presentation.settings.SettingsScreen
+import com.paymentsmaps.android.presentation.settings.ThemeSettingsScreen
+import com.paymentsmaps.android.presentation.usercenter.UserCenterScreen
 
 /**
  * 应用主导航组件
@@ -208,6 +236,34 @@ fun AppNavigation(
                     userId = userId,
                     onNavigateBack = {
                         navController.popBackStack()
+                    },
+                    onEditProfile = {
+                        navController.navigate(
+                            NavigationRoutes.Builder.editProfile(userId)
+                        )
+                    }
+                )
+            }
+
+            composable(
+                route = NavigationRoutes.EDIT_PROFILE,
+                arguments = listOf(
+                    navArgument(NavigationRoutes.Args.USER_ID) {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val userId = backStackEntry.arguments?.getString(
+                    NavigationRoutes.Args.USER_ID
+                ) ?: return@composable
+
+                EditProfileScreen(
+                    userId = userId,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    onSaveSuccess = {
+                        navController.popBackStack()
                     }
                 )
             }
@@ -225,9 +281,6 @@ fun AppNavigation(
                         navController.navigate(NavigationRoutes.MAP) {
                             popUpTo(NavigationRoutes.LOGIN) { inclusive = true }
                         }
-                    },
-                    onNavigateBack = {
-                        navController.popBackStack()
                     }
                 )
             }
@@ -285,6 +338,11 @@ fun AppNavigation(
             // 其他设置子页面
             composable(NavigationRoutes.ACCOUNT_SETTINGS) {
                 AccountSettingsScreen(
+                    onNavigateToProfile = { userId ->
+                        navController.navigate(
+                            NavigationRoutes.Builder.userProfile(userId)
+                        )
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }
@@ -330,216 +388,63 @@ fun AppNavigation(
                     }
                 )
             }
+
+            // 商户与POS管理表单
+            composable(NavigationRoutes.ADD_MERCHANT) {
+                AddMerchantScreen(
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = NavigationRoutes.EDIT_MERCHANT,
+                arguments = listOf(
+                    navArgument(NavigationRoutes.Args.MERCHANT_ID) {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val merchantId = backStackEntry.arguments?.getString(
+                    NavigationRoutes.Args.MERCHANT_ID
+                ) ?: return@composable
+
+                EditMerchantScreen(
+                    merchantId = merchantId,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(NavigationRoutes.ADD_POS_MACHINE) {
+                AddPOSMachineScreen(
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = NavigationRoutes.EDIT_POS_MACHINE,
+                arguments = listOf(
+                    navArgument(NavigationRoutes.Args.POS_MACHINE_ID) {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val posMachineId = backStackEntry.arguments?.getString(
+                    NavigationRoutes.Args.POS_MACHINE_ID
+                ) ?: return@composable
+
+                EditPOSMachineScreen(
+                    posMachineId = posMachineId,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
         }
-    }
-}
-
-// 占位符组件 - 这些将在后续实现
-@Composable
-fun MerchantManagementScreen(
-    onNavigateToMerchantDetail: (String) -> Unit,
-    onNavigateToAddMerchant: () -> Unit,
-    onNavigateToEditMerchant: (String) -> Unit
-) {
-    // TODO: 实现商户管理页面
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("商户管理页面 - 待实现")
-    }
-}
-
-@Composable
-fun UserCenterScreen(
-    onNavigateToProfile: (String) -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToLogin: () -> Unit
-) {
-    // TODO: 实现用户中心页面
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("用户中心页面 - 待实现")
-    }
-}
-
-@Composable
-fun SettingsScreen(
-    onNavigateToAccountSettings: () -> Unit,
-    onNavigateToNotificationSettings: () -> Unit,
-    onNavigateToPrivacySettings: () -> Unit,
-    onNavigateToLanguageSettings: () -> Unit,
-    onNavigateToThemeSettings: () -> Unit,
-    onNavigateToAbout: () -> Unit,
-    onNavigateBack: () -> Unit
-) {
-    // TODO: 实现设置页面
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("设置页面 - 待实现")
-    }
-}
-
-// 其他占位符组件...
-@Composable
-fun POSMachineDetailScreen(
-    posMachineId: String,
-    onNavigateBack: () -> Unit,
-    onNavigateToMerchant: (String) -> Unit,
-    onNavigateToEdit: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("POS机详情页面 - 待实现")
-    }
-}
-
-@Composable
-fun MerchantDetailScreen(
-    merchantId: String,
-    onNavigateBack: () -> Unit,
-    onNavigateToEdit: () -> Unit,
-    onNavigateToPOSDetail: (String) -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("商户详情页面 - 待实现")
-    }
-}
-
-@Composable
-fun UserProfileScreen(
-    userId: String,
-    onNavigateBack: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("用户资料页面 - 待实现")
-    }
-}
-
-@Composable
-fun LoginScreen(
-    onNavigateToRegister: () -> Unit,
-    onNavigateToForgotPassword: () -> Unit,
-    onLoginSuccess: () -> Unit,
-    onNavigateBack: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("登录页面 - 待实现")
-    }
-}
-
-@Composable
-fun RegisterScreen(
-    onNavigateToLogin: () -> Unit,
-    onRegisterSuccess: () -> Unit,
-    onNavigateBack: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("注册页面 - 待实现")
-    }
-}
-
-@Composable
-fun ForgotPasswordScreen(
-    onNavigateBack: () -> Unit,
-    onNavigateToLogin: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("忘记密码页面 - 待实现")
-    }
-}
-
-@Composable
-fun SearchScreen(
-    onNavigateBack: () -> Unit,
-    onNavigateToPOSDetail: (String) -> Unit,
-    onNavigateToMerchantDetail: (String) -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("搜索页面 - 待实现")
-    }
-}
-
-@Composable
-fun AccountSettingsScreen(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("账户设置页面 - 待实现")
-    }
-}
-
-@Composable
-fun NotificationSettingsScreen(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("通知设置页面 - 待实现")
-    }
-}
-
-@Composable
-fun PrivacySettingsScreen(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("隐私设置页面 - 待实现")
-    }
-}
-
-@Composable
-fun LanguageSettingsScreen(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("语言设置页面 - 待实现")
-    }
-}
-
-@Composable
-fun ThemeSettingsScreen(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("主题设置页面 - 待实现")
-    }
-}
-
-@Composable
-fun AboutScreen(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("关于页面 - 待实现")
     }
 }

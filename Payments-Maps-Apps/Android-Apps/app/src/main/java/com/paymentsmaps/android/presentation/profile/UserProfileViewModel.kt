@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -34,14 +35,25 @@ class UserProfileViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<UserProfileUiState>(UserProfileUiState.Initial)
     val uiState: StateFlow<UserProfileUiState> = _uiState.asStateFlow()
     
+    private var loadJob: Job? = null
+    private var requestedUserId: String? = null
+    
     /**
      * 加载用户个人资料
      */
-    fun loadUserProfile() {
-        viewModelScope.launch {
+    fun loadUserProfile(userId: String? = null) {
+        requestedUserId = userId
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.value = UserProfileUiState.Loading
             
-            userManagementUseCase.getCurrentUser().collect { result ->
+            val userFlow = if (userId.isNullOrBlank()) {
+                userManagementUseCase.getCurrentUser()
+            } else {
+                userManagementUseCase.getUserById(userId)
+            }
+            
+            userFlow.collect { result ->
                 when (result) {
                     is Result.Success -> {
                         if (result.data != null) {
@@ -70,6 +82,6 @@ class UserProfileViewModel @Inject constructor(
      * 刷新用户资料
      */
     fun refreshProfile() {
-        loadUserProfile()
+        loadUserProfile(requestedUserId)
     }
 }

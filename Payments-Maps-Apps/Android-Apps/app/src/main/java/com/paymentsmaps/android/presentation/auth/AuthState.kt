@@ -9,4 +9,5 @@ sealed class AuthState {
     object Authenticated : AuthState()
     object Unauthenticated : AuthState()
     data class Error(val message: String) : AuthState()
+    data class Message(val message: String, val isError: Boolean = false) : AuthState()
 }
