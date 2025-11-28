@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { startAuthentication } from '@simplewebauthn/browser'
+import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { signInWithGoogleSupabase, signInWithGitHubSupabase, signInWithMicrosoftSupabase } from '@/lib/supabase-auth'
 import Button from '@/components/ui/Button'
@@ -9,8 +11,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 const Login = () => {
   const navigate = useNavigate()
-  const { user, loading, loginWithLinuxDO } = useAuthStore()
+  const { user, loading, loginWithLinuxDO, refreshUser } = useAuthStore()
   const [isLoading, setIsLoading] = useState(false)
+  const [passkeyEmail, setPasskeyEmail] = useState('')
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
+  const [showPasskeyForm, setShowPasskeyForm] = useState(false)
 
   // 如果用户已登录，重定向到首页
   if (user) {
@@ -70,10 +75,72 @@ const Login = () => {
     navigate('/app/map')
   }
 
+  const handlePasskeyLogin = async () => {
+    if (!passkeyEmail.trim()) {
+      toast.error('请输入在设置中注册 Passkey 时使用的邮箱')
+      return
+    }
+    if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+      toast.error('当前浏览器不支持 Passkey，请在支持的浏览器中尝试')
+      return
+    }
+
+    setPasskeyLoading(true)
+    try {
+      const email = passkeyEmail.trim().toLowerCase()
+      const optionsRes = await fetch('/api/passkey/auth/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const optionsData = await optionsRes.json().catch(() => ({}))
+      if (!optionsRes.ok) {
+        throw new Error(optionsData?.error || '无法创建 Passkey 登录请求')
+      }
+
+      const assertionResponse = await startAuthentication(optionsData)
+
+      const verifyRes = await fetch('/api/passkey/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, assertionResponse })
+      })
+      const verifyData = await verifyRes.json().catch(() => ({}))
+      if (!verifyRes.ok) {
+        throw new Error(verifyData?.error || 'Passkey 登录失败，请重试')
+      }
+
+      const session = verifyData?.session
+      if (!session?.access_token || !session?.refresh_token) {
+        throw new Error('服务端未返回有效的 Supabase 凭证')
+      }
+
+      const { error } = await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      })
+      if (error) {
+        throw error
+      }
+
+      await refreshUser()
+      toast.success('Passkey 登录成功')
+      navigate('/app/map')
+    } catch (error) {
+      console.error('Passkey 登录失败:', error)
+      toast.error(error instanceof Error ? error.message : 'Passkey 登录失败，请重试')
+    } finally {
+      setPasskeyLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <img src="/web_logo.JPG" alt="Payments Maps Logo" className="w-16 h-16 object-contain" />
+          </div>
           <CardTitle className="text-2xl font-bold text-gray-900">
             欢迎使用 Payments Maps
           </CardTitle>
@@ -140,6 +207,56 @@ const Login = () => {
             <div className="relative flex justify-center">
               <span className="bg-white px-2 text-xs text-gray-400">或</span>
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <label className="text-xs font-medium text-gray-600">使用 Passkey 登录</label>
+              <p className="text-[11px] text-gray-500 mt-1">
+                在设置页面注册过 Passkey 的邮箱即可直接唤起指纹/Face ID 登录
+              </p>
+            </div>
+            {!showPasskeyForm ? (
+              <Button
+                onClick={() => setShowPasskeyForm(true)}
+                disabled={loading || isLoading || passkeyLoading}
+                className="w-full bg-soft-black hover:bg-[#101940] text-white flex items-center justify-center gap-2 py-3 px-4 rounded-lg transition-colors"
+              >
+                使用 Passkey 登录
+              </Button>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="email"
+                  value={passkeyEmail}
+                  onChange={(e) => setPasskeyEmail(e.target.value)}
+                  placeholder="请输入注册过 Passkey 的邮箱"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    onClick={handlePasskeyLogin}
+                    disabled={loading || isLoading || passkeyLoading}
+                    loading={passkeyLoading}
+                    className="flex-1 bg-soft-black hover:bg-[#101940] text-white flex items-center justify-center gap-2 py-3 px-4 rounded-lg transition-colors"
+                  >
+                    确认登录
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={passkeyLoading}
+                    onClick={() => {
+                      setShowPasskeyForm(false)
+                      setPasskeyEmail('')
+                    }}
+                    className="flex-1 border border-gray-300 text-gray-600 hover:bg-white"
+                  >
+                    取消
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           <Button

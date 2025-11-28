@@ -150,6 +150,16 @@
   transform: translateZ(0);
 }
 
+/* 自定义滚动条隐藏，便于移动端水平滚动 */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* 媒体查询：针对小屏幕设备 */
 @media (max-width: 768px) {
   /* 增加所有可点击元素的内边距 */

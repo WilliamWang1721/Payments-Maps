@@ -15,23 +15,24 @@ const GoogleCallback = React.lazy(() => import('@/components/GoogleCallback'))
 const GitHubCallback = React.lazy(() => import('@/pages/auth/GitHubCallback'))
 const MicrosoftCallback = React.lazy(() => import('@/pages/auth/MicrosoftCallback'))
 const LinuxDOCallback = React.lazy(() => import('@/pages/auth/LinuxDOCallback'))
-const GoogleTest = React.lazy(() => import('@/pages/GoogleTest'))
+// const GoogleTest = React.lazy(() => import('@/pages/GoogleTest'))  // 文件不存在，暂时注释
 const AddPOS = React.lazy(() => import('@/pages/AddPOS'))
 const EditPOS = React.lazy(() => import('@/pages/EditPOS'))
 const Brands = React.lazy(() => import('@/pages/Brands'))
 const RoleManagement = React.lazy(() => import('@/pages/RoleManagement'))
-const DebugRole = React.lazy(() => import('@/pages/DebugRole'))
-const SupabaseTest = React.lazy(() => import('@/pages/SupabaseTest'))
+// const DebugRole = React.lazy(() => import('@/pages/DebugRole'))  // 文件不存在，暂时注释
+// const SupabaseTest = React.lazy(() => import('@/pages/SupabaseTest'))  // 文件不存在，暂时注释
 const MyPOS = React.lazy(() => import('@/pages/MyPOS'))
 const Favorites = React.lazy(() => import('@/pages/Favorites'))
+const Notifications = React.lazy(() => import('@/pages/Notifications'))
 const History = React.lazy(() => import('@/pages/History'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
 const OnboardingFlow = React.lazy(() => import('@/components/OnboardingFlow'))
+const Drafts = React.lazy(() => import('@/pages/Drafts'))
 // const SmartWelcome = React.lazy(() => import('@/components/SmartWelcome')) // removed
 const HelpCenter = React.lazy(() => import('@/pages/HelpCenter'))
 const LandingPage = React.lazy(() => import('@/pages/LandingPage'))
 const MCPSettings = React.lazy(() => import('@/pages/MCPSettings'))
-
 // Fallback component for Suspense
 const Loading = () => <div>Loading...</div>
 
@@ -92,14 +93,14 @@ export const router = createBrowserRouter([
         path: 'role-management',
         element: <Suspense fallback={<Loading />}><RoleManagement /></Suspense>,
       },
-      {
-        path: 'debug-role',
-        element: <Suspense fallback={<Loading />}><DebugRole /></Suspense>,
-      },
-      {
-        path: 'supabase-test',
-        element: <Suspense fallback={<Loading />}><SupabaseTest /></Suspense>,
-      },
+      // {
+      //   path: 'debug-role',
+      //   element: <Suspense fallback={<Loading />}><DebugRole /></Suspense>,
+      // },
+      // {
+      //   path: 'supabase-test',
+      //   element: <Suspense fallback={<Loading />}><SupabaseTest /></Suspense>,
+      // },
       {
         path: 'my-pos',
         element: <Suspense fallback={<Loading />}><MyPOS /></Suspense>,
@@ -109,8 +110,16 @@ export const router = createBrowserRouter([
         element: <Suspense fallback={<Loading />}><Favorites /></Suspense>,
       },
       {
+        path: 'drafts',
+        element: <Suspense fallback={<Loading />}><Drafts /></Suspense>,
+      },
+      {
         path: 'history',
         element: <Suspense fallback={<Loading />}><History /></Suspense>,
+      },
+      {
+        path: 'notifications',
+        element: <Suspense fallback={<Loading />}><Notifications /></Suspense>,
       },
       {
         path: 'settings',
@@ -151,8 +160,8 @@ export const router = createBrowserRouter([
     path: '/auth/linuxdo/callback',
     element: <Suspense fallback={<Loading />}><LinuxDOCallback /></Suspense>,
   },
-  {
-    path: '/google-test',
-    element: <Suspense fallback={<Loading />}><GoogleTest /></Suspense>,
-  },
+  // {
+  //   path: '/google-test',
+  //   element: <Suspense fallback={<Loading />}><GoogleTest /></Suspense>,
+  // },
 ])

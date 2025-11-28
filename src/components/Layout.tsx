@@ -1,150 +1,81 @@
-import { useEffect } from 'react'
-import { Outlet, useLocation, Link } from 'react-router-dom'
-import { Map, List, User, Plus, Building2, HelpCircle } from 'lucide-react'
-import { useAuthStore } from '@/stores/useAuthStore'
-import PageTransition from '@/components/PageTransition'
-import { AnimatedBottomNav, AnimatedNavItem, AnimatedTopNav } from '@/components/AnimatedNavigation'
-import { useTranslation } from 'react-i18next'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import OnboardingDetector from '@/components/OnboardingDetector'
-import useDynamicViewportHeight from '@/hooks/useDynamicViewportHeight'
+import PageTransition from '@/components/PageTransition'
+import ModernSidebar from '@/components/modern-dashboard/Sidebar'
+import ModernHeader from '@/components/modern-dashboard/Header'
+import MobileNav from '@/components/modern-dashboard/MobileNav'
+import { useMapStore } from '@/stores/useMapStore'
+
+export type LayoutOutletContext = {
+  showLabels: boolean
+}
 
 const Layout = () => {
+  const navigate = useNavigate()
   const location = useLocation()
-  const { user } = useAuthStore()
-  const { t } = useTranslation()
+  const searchKeyword = useMapStore((state) => state.searchKeyword)
+  const setSearchKeyword = useMapStore((state) => state.setSearchKeyword)
+  const loadPOSMachines = useMapStore((state) => state.loadPOSMachines)
+  const getCurrentLocation = useMapStore((state) => state.getCurrentLocation)
+  const locationLoading = useMapStore((state) => state.locationLoading)
 
-  const navItems = [
-    {
-      path: '/app/map',
-      icon: Map,
-      label: t('navigation.map'),
-    },
-    {
-      path: '/app/list',
-      icon: List,
-      label: t('navigation.list'),
-    },
-    {
-      path: '/app/brands',
-      icon: Building2,
-      label: t('navigation.brands'),
-    },
-    {
-      path: '/app/add-pos',
-      icon: Plus,
-      label: t('navigation.add'),
-    },
-    {
-      path: '/app/profile',
-      icon: User,
-      label: t('navigation.profile'),
-    },
-  ]
-
-  useDynamicViewportHeight()
+  const [searchValue, setSearchValue] = useState(searchKeyword)
+  const [showLabels, setShowLabels] = useState(true)
+  const hideHeaderControls =
+    location.pathname.startsWith('/app/profile') || location.pathname.startsWith('/app/brands')
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return
-    }
+    setSearchValue(searchKeyword)
+  }, [searchKeyword])
 
-    const updateLayoutOffsets = () => {
-      const topNav = document.querySelector<HTMLElement>('.nav-top')
-      const bottomNav = document.querySelector<HTMLElement>('.nav-bottom')
+  const handleSearchChange = (value: string) => {
+    setSearchValue(value)
+    setSearchKeyword(value)
+  }
 
-      const topHeight = topNav?.offsetHeight ?? 0
-      const bottomHeight = bottomNav?.offsetHeight ?? 0
+  const handleSearchSubmit = () => {
+    loadPOSMachines().catch((error) => console.error('搜索 POS 机失败:', error))
+  }
 
-      document.documentElement.style.setProperty('--layout-top-offset', `${topHeight}px`)
-      document.documentElement.style.setProperty('--layout-bottom-offset', `${bottomHeight}px`)
-    }
+  const handleFilterClick = () => {
+    navigate('/app/map?view=filters')
+  }
 
-    updateLayoutOffsets()
-
-    window.addEventListener('resize', updateLayoutOffsets)
-    window.addEventListener('orientationchange', updateLayoutOffsets)
-    window.visualViewport?.addEventListener('resize', updateLayoutOffsets)
-    window.visualViewport?.addEventListener('scroll', updateLayoutOffsets)
-
-    return () => {
-      window.removeEventListener('resize', updateLayoutOffsets)
-      window.removeEventListener('orientationchange', updateLayoutOffsets)
-      window.visualViewport?.removeEventListener('resize', updateLayoutOffsets)
-      window.visualViewport?.removeEventListener('scroll', updateLayoutOffsets)
-    }
-  }, [])
+  const handleLocate = () => {
+    getCurrentLocation().catch((error) => console.warn('定位失败:', error))
+  }
 
   return (
     <OnboardingDetector>
-      <div
-        className="flex flex-col bg-gray-50 safe-area-padding min-h-screen"
-        style={{ minHeight: 'var(--app-height, 100vh)' }}
-      >
-        {/* 顶部导航栏 */}
-        <AnimatedTopNav
-          title="Payments Maps"
-          className="nav-top fixed top-0 left-0 right-0 webkit-overflow-scrolling"
-        >
-          <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <img src="/web_logo.JPG" alt="Payments Maps Logo" className="w-8 h-8" />
-          </Link>
-          <div className="flex items-center space-x-2">
-            <Link
-              to="/app/help"
-              className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
-              title={t('navigation.help')}
-            >
-              <HelpCircle className="w-5 h-5" />
-            </Link>
-            {user?.user_metadata?.avatar_url && (
-              <img
-                src={user.user_metadata?.avatar_url || '/default-avatar.png'}
-                alt={user.user_metadata?.display_name || user.email || 'User'}
-                className="w-8 h-8 rounded-full"
+      <>
+        <div className="flex min-h-screen md:h-screen flex-col md:flex-row bg-cream dark:bg-slate-950 p-4 sm:p-6 lg:p-8 font-sans overflow-hidden text-soft-black dark:text-gray-100">
+          <ModernSidebar />
+
+          <main className="flex-1 ml-0 md:ml-6 lg:ml-8 max-w-screen-2xl w-full mx-auto flex flex-col min-h-[70vh] pb-28 md:pb-0 md:overflow-hidden">
+            <div className="sticky top-0 z-30 bg-cream dark:bg-slate-950 pb-4">
+              <ModernHeader
+                searchValue={searchValue}
+                onSearchChange={handleSearchChange}
+                onSearchSubmit={handleSearchSubmit}
+                onFilterClick={handleFilterClick}
+                onLocate={handleLocate}
+                locating={locationLoading}
+                showLabels={showLabels}
+                onToggleLabels={() => setShowLabels((prev) => !prev)}
+                hideControls={hideHeaderControls}
               />
-            )}
-            <span className="text-sm text-gray-600">
-              {user?.user_metadata?.display_name || user?.email}
-            </span>
-          </div>
-        </AnimatedTopNav>
+            </div>
 
-        {/* 主内容区域 */}
-        <main
-          className="flex-1 overflow-x-hidden overflow-y-auto"
-          style={{
-            paddingTop: 'var(--layout-top-offset, calc(4rem + env(safe-area-inset-top)))',
-            paddingBottom: 'var(--layout-bottom-offset, calc(4rem + env(safe-area-inset-bottom)))',
-            minHeight: 'calc(var(--app-height, 100vh) - var(--layout-top-offset, 4rem) - var(--layout-bottom-offset, 4rem))',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-          }}
-        >
-          <PageTransition variant="fadeIn">
-            <Outlet />
-          </PageTransition>
-        </main>
-
-        {/* 底部导航栏 */}
-        <AnimatedBottomNav className="nav-bottom webkit-overflow-scrolling">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = location.pathname === item.path
-
-            return (
-              <Link key={item.path} to={item.path}>
-                <AnimatedNavItem
-                  icon={Icon}
-                  label={item.label}
-                  isActive={isActive}
-                  onClick={() => {}}
-                  className="relative"
-                />
-              </Link>
-            )
-          })}
-        </AnimatedBottomNav>
-      </div>
+            <div className="flex-1 w-full h-full pb-2 overflow-y-auto custom-scrollbar">
+              <PageTransition variant="fadeIn">
+                <Outlet context={{ showLabels }} />
+              </PageTransition>
+            </div>
+          </main>
+        </div>
+        <MobileNav />
+      </>
     </OnboardingDetector>
   )
 }

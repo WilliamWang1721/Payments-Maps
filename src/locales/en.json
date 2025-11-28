@@ -279,6 +279,15 @@
     },
     "skipMessage": "You can change these settings later in preferences"
   },
+  "dashboardHeader": {
+    "greeting": {
+      "morning": "Good morning!",
+      "afternoon": "Good afternoon!",
+      "evening": "Good evening!",
+      "night": "Good night!"
+    },
+    "subtitle": "Discover local gems and card-friendly spots around you."
+  },
   "onboarding": {
     "progress": {
       "step": "Step {{current}} of {{total}}"
@@ -1383,6 +1392,15 @@
     "privacyConsentGranted": "Granted",
     "privacyConsentRevoked": "Revoked",
     "privacyAllConsents": "All privacy preferences"
+  },
+  "notificationsPage": {
+    "title": "Notifications",
+    "unread": "You have {{count}} unread messages",
+    "caughtUp": "You're all caught up",
+    "markAll": "Mark all as read",
+    "newSection": "New",
+    "earlierSection": "Earlier",
+    "empty": "No notifications at the moment"
   },
   "errors": {
     "generic": "Something went wrong",
