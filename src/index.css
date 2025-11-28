@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import './styles/mobile-optimizations.css';
 @import './styles/z-index-layers.css';
 @import './styles/safari-animations.css';
@@ -99,4 +100,53 @@ input, textarea, select {
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
   }
+}
+
+/* 渐变动画效果 */
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  animation: gradient 6s ease infinite;
+}
+
+.bg-300 {
+  background-size: 300% 300%;
+}
+
+/* Dashboard style scrollbar for list视图 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #A0AEC0 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #A0AEC0;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
+
+.bg-pattern {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.4) 0, transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.25) 0, transparent 40%),
+    radial-gradient(circle at 0% 50%, rgba(255, 255, 255, 0.3) 0, transparent 50%);
+  background-size: 200% 200%;
 }

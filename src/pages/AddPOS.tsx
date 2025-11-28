@@ -1,24 +1,31 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CreditCard, Smartphone, Settings, FileText, Link, Plus, Trash2, Building, MapPin } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  CreditCard,
+  HelpCircle,
+  MapPin,
+  Smartphone,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
-import AnimatedButton from '@/components/ui/AnimatedButton'
-import AnimatedInput from '@/components/ui/AnimatedInput'
-import Loading from '@/components/ui/Loading'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import ThreeStateSelector, { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
-import CardNetworkSelector from '@/components/ui/CardNetworkSelector'
-import RadioGroup from '@/components/ui/RadioGroup'
 import BrandSelector from '@/components/BrandSelector'
 import SystemSelect from '@/components/ui/SystemSelect'
-import { CARD_NETWORKS, CardNetwork, getCardNetworkLabel } from '@/lib/cardNetworks'
-import { AnimatedTopNav } from '@/components/AnimatedNavigation'
-import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType } from '@/types/fees'
-import { formatFeeDisplay } from '@/utils/feeUtils'
 import SimpleMapPicker from '@/components/SimpleMapPicker'
+import { CARD_NETWORKS } from '@/lib/cardNetworks'
+import { FeeType, FeesConfiguration, DEFAULT_FEES_CONFIG, CardNetworkFee } from '@/types/fees'
+import { formatFeeDisplay } from '@/utils/feeUtils'
+import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
+import { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
+import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
 
 interface FormData {
   merchant_name: string
@@ -27,7 +34,6 @@ interface FormData {
   longitude: number
   brand_id?: string
   status?: 'active' | 'inactive' | 'maintenance' | 'disabled'
-  // 商家信息
   merchant_info: {
     transaction_name?: string
     transaction_type?: string
@@ -42,22 +48,23 @@ interface FormData {
     min_amount_no_pin?: number
     supported_card_networks?: string[]
     checkout_location?: '自助收银' | '人工收银'
-    // 收单模式支持
     acquiring_modes?: string[]
   }
-  // 验证模式
   verification_modes: {
     small_amount_no_pin?: string[]
     small_amount_no_pin_unsupported?: boolean
     small_amount_no_pin_uncertain?: boolean
+    small_amount_no_pin_unknown?: boolean
     requires_password?: string[]
     requires_password_unsupported?: boolean
     requires_password_uncertain?: boolean
+    requires_password_unknown?: boolean
     requires_signature?: string[]
     requires_signature_unsupported?: boolean
     requires_signature_uncertain?: boolean
+    requires_signature_unknown?: boolean
   }
-  // 尝试记录
+  common_cards?: Array<{ name: string; method?: string }>
   attempts?: {
     user: string
     result: 'success' | 'failure'
@@ -71,20 +78,116 @@ interface FormData {
   fees?: FeesConfiguration
 }
 
+type TapMethod = 'card' | 'apple' | 'google' | 'hce'
+type TapState = 'yes' | 'no' | 'unknown'
+type SchemeID = typeof CARD_NETWORKS[number]['value']
+
+type CvmTab = 'noPin' | 'pin' | 'signature'
+const CVM_FLAGS = ['unsupported', 'uncertain', 'unknown'] as const
+type CvmFlag = (typeof CVM_FLAGS)[number]
+
+const SCHEME_COLOR_MAP: Partial<Record<SchemeID, string>> = {
+  visa: 'bg-[#1A1F71]',
+  mastercard: 'bg-[#EB001B]',
+  unionpay: 'bg-[#00537F]',
+  amex: 'bg-[#2E77BB]',
+  amex_cn: 'bg-[#2E77BB]',
+  mastercard_cn: 'bg-[#EB001B]',
+  jcb: 'bg-[#1F2F5D]',
+  discover: 'bg-[#F97316]',
+  diners: 'bg-[#7C3AED]',
+}
+
+const tapStateOrder: TapState[] = ['yes', 'no', 'unknown']
+
+const CVM_FIELD_MAP: Record<CvmTab, keyof FormData['verification_modes']> = {
+  noPin: 'small_amount_no_pin',
+  pin: 'requires_password',
+  signature: 'requires_signature',
+}
+
+const CVM_FLAG_MAP: Record<
+  CvmTab,
+  {
+    unsupported: keyof FormData['verification_modes']
+    uncertain: keyof FormData['verification_modes']
+    unknown: keyof FormData['verification_modes']
+  }
+> = {
+  noPin: {
+    unsupported: 'small_amount_no_pin_unsupported',
+    uncertain: 'small_amount_no_pin_uncertain',
+    unknown: 'small_amount_no_pin_unknown',
+  },
+  pin: {
+    unsupported: 'requires_password_unsupported',
+    uncertain: 'requires_password_uncertain',
+    unknown: 'requires_password_unknown',
+  },
+  signature: {
+    unsupported: 'requires_signature_unsupported',
+    uncertain: 'requires_signature_uncertain',
+    unknown: 'requires_signature_unknown',
+  },
+}
+
+const ADD_POS_TEXTS = {
+  navTitle: '添加POS机',
+  pickLocationButton: '在地图上选择位置',
+  reselectLocationButton: '重新选择位置',
+  merchantNameLabel: '商户名称 *',
+  addressLabel: '地址 *',
+  coordinatesLabel: '坐标',
+  transactionNameLabel: '交易票面名称',
+  transactionTypeLabel: 'MCC代码或行业',
+  deviceStatusLabel: '设备状态',
+  checkoutLocationLabel: '收银区域',
+  acquiringInstitutionLabel: '收单机构',
+  posModelLabel: 'POS型号',
+  tapSupportLabel: 'Tap & Pay 支持',
+  cvmTitle: '验证模式 (CVM)',
+  remarksTitle: '内部备注',
+  customLinksTitle: '自定义链接',
+  addLinkButton: '添加链接',
+  submitButton: '提交',
+  backButton: '返回',
+} as const
+
+const tapToThreeState = (state: TapState): ThreeStateValue => {
+  if (state === 'yes') return 'supported'
+  if (state === 'no') return 'unsupported'
+  return 'unknown'
+}
+
+const threeStateToTap = (value?: ThreeStateValue): TapState => {
+  if (value === 'supported') return 'yes'
+  if (value === 'unsupported') return 'no'
+  return 'unknown'
+}
+
+const ensureFees = (fees?: FeesConfiguration): FeesConfiguration => {
+  if (fees && Object.keys(fees).length) {
+    return fees
+  }
+  return { ...DEFAULT_FEES_CONFIG }
+}
+
 const AddPOS = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user: _ } = useAuthStore()
   const { addPOSMachine } = useMapStore()
   const _permissions = usePermissions()
-  
+  const uiText = useAutoTranslatedTextMap(ADD_POS_TEXTS)
+
+  const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [showLocationModal, setShowLocationModal] = useState(false)
-  
-  // 调试：监听状态变化
-  useEffect(() => {
-    console.log('showLocationModal 状态变化:', showLocationModal)
-  }, [showLocationModal])
-  
+  const [isBillDetailsOpen, setIsBillDetailsOpen] = useState(false)
+  const [activeCvmTab, setActiveCvmTab] = useState<CvmTab>('noPin')
+  const [cardNetworkStates, setCardNetworkStates] = useState<Partial<Record<SchemeID, ThreeStateValue>>>({})
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
     address: '',
@@ -93,7 +196,7 @@ const AddPOS = () => {
     status: 'active',
     merchant_info: {
       transaction_name: '',
-      transaction_type: ''
+      transaction_type: '',
     },
     basic_info: {
       model: '',
@@ -105,37 +208,89 @@ const AddPOS = () => {
       min_amount_no_pin: 0,
       supported_card_networks: [],
       checkout_location: undefined,
-      acquiring_modes: []
+      acquiring_modes: [],
     },
     verification_modes: {
       small_amount_no_pin: [],
       small_amount_no_pin_unsupported: false,
       small_amount_no_pin_uncertain: false,
+      small_amount_no_pin_unknown: false,
       requires_password: [],
       requires_password_unsupported: false,
       requires_password_uncertain: false,
+      requires_password_unknown: false,
       requires_signature: [],
       requires_signature_unsupported: false,
-      requires_signature_uncertain: false
+      requires_signature_uncertain: false,
+      requires_signature_unknown: false,
     },
     attempts: [],
     extended_fields: {},
     remarks: '',
     custom_links: [],
-    fees: DEFAULT_FEES_CONFIG
+    fees: ensureFees(DEFAULT_FEES_CONFIG),
+    common_cards: [],
   })
+
+  useEffect(() => {
+    console.log('[AddPOS] step changed:', step)
+  }, [step])
+
+  useEffect(() => {
+    const draftId = searchParams.get('draftId')
+    if (!draftId) return
+    const draft = getDraft<{ formData: FormData; step?: number }>(draftId)
+    if (draft?.data?.formData) {
+      const payload = draft.data.formData as FormData
+      setFormData({
+        ...payload,
+        fees: ensureFees(payload.fees),
+      })
+      setStep(Math.min(draft.data.step || 1, 5))
+      setCurrentDraftId(draft.id)
+      toast.success('已加载草稿')
+    } else {
+      toast.error('草稿不存在或已过期')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const supported = formData.basic_info.supported_card_networks || []
+    setCardNetworkStates((prev) => {
+      const next: Partial<Record<SchemeID, ThreeStateValue>> = { ...prev }
+      CARD_NETWORKS.forEach((scheme) => {
+        const id = scheme.value as SchemeID
+        if (supported.includes(id)) {
+          next[id] = 'supported'
+        } else if (!next[id]) {
+          next[id] = 'unknown'
+        }
+      })
+      return next
+    })
+  }, [formData.basic_info.supported_card_networks])
+
+  const syncSupportedNetworks = (states: Partial<Record<SchemeID, ThreeStateValue>>) => {
+    const supported = Object.entries(states)
+      .filter(([, status]) => status === 'supported')
+      .map(([schemeId]) => schemeId as SchemeID)
+    handleInputChange('basic_info.supported_card_networks', supported)
+  }
+
+  const getSchemeState = (schemeId: SchemeID): ThreeStateValue => cardNetworkStates[schemeId] || 'unknown'
 
   const handleInputChange = (field: string, value: any) => {
     try {
-      setFormData(prev => {
+      setFormData((prev) => {
         if (field.includes('.')) {
           const [parent, child] = field.split('.')
           return {
             ...prev,
             [parent]: {
               ...(prev[parent as keyof FormData] as any),
-              [child]: value
-            }
+              [child]: value,
+            },
           }
         }
         return { ...prev, [field]: value }
@@ -147,78 +302,60 @@ const AddPOS = () => {
   }
 
   const addCustomLink = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      custom_links: [...(prev.custom_links || []), { title: '', url: '', platform: '' }]
+      custom_links: [...(prev.custom_links || []), { title: '', url: '', platform: '' }],
     }))
   }
 
   const removeCustomLink = (index: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      custom_links: prev.custom_links?.filter((_, i) => i !== index) || []
+      custom_links: prev.custom_links?.filter((_, i) => i !== index) || [],
     }))
   }
 
   const updateCustomLink = (index: number, field: string, value: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      custom_links: prev.custom_links?.map((link, i) => 
-        i === index ? { ...link, [field]: value } : link
-      ) || []
+      custom_links:
+        prev.custom_links?.map((link, i) => (i === index ? { ...link, [field]: value } : link)) || [],
     }))
   }
 
   const validateForm = () => {
-    // 快速验证：先检查最基本的字段
     if (!formData.merchant_name?.trim()) {
       toast.error('请填写商家名称')
       return false
     }
-    
+
     if (!formData.address?.trim()) {
       toast.error('请填写详细地址')
       return false
     }
-    
-    // 位置验证
-    if (!formData.latitude || !formData.longitude || 
-        formData.latitude === 0 || formData.longitude === 0) {
+
+    if (!formData.latitude || !formData.longitude || formData.latitude === 0 || formData.longitude === 0) {
       toast.error('请在地图上选择准确位置')
       return false
     }
-    
-    // 可选但推荐的字段验证
-     const warnings = []
-     
-     if (!formData.basic_info?.model?.trim()) {
-       warnings.push('设备型号')
-     }
-     
-     if (!formData.basic_info?.acquiring_institution?.trim()) {
-       warnings.push('收单机构')
-     }
-     
-     if (!formData.merchant_info?.transaction_name?.trim()) {
-       warnings.push('交易名称')
-     }
-    
-    // 如果有缺失的推荐字段，给出友好提示但不阻止提交
+
+    const warnings: string[] = []
+    if (!formData.basic_info?.model?.trim()) warnings.push('设备型号')
+    if (!formData.basic_info?.acquiring_institution?.trim()) warnings.push('收单机构')
+    if (!formData.merchant_info?.transaction_name?.trim()) warnings.push('交易名称')
+
     if (warnings.length > 0) {
       console.log('[AddPOS] 推荐填写字段:', warnings.join('、'))
-      // 不阻止提交，只是记录日志
     }
-    
     return true
   }
 
-  // 处理地图选择的位置
   const handleLocationConfirm = (latitude: number, longitude: number, address?: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       latitude,
       longitude,
-      address: address || prev.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+      address: address || prev.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
     }))
     toast.success('位置选择成功')
   }
@@ -228,54 +365,42 @@ const AddPOS = () => {
 
     setLoading(true)
     try {
-      console.log('[AddPOS] 提交开始，表单数据:', formData)
-      
-      // 延长超时时间到60秒，给用户更多填写时间
       const timeoutMs = 60000
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`保存请求超时（>${timeoutMs / 1000}s），请检查网络连接后重试`)), timeoutMs)
       )
 
-      // 添加网络状态检查
       if (!navigator.onLine) {
         throw new Error('网络连接已断开，请检查网络后重试')
       }
 
-      // 显示详细的加载状态
       toast.loading('正在保存POS机信息...', { id: 'saving-pos' })
 
-      const result = await Promise.race([
-        addPOSMachine({
-          ...formData,
-          status: 'active',
-          // 转换 ThreeStateValue 到 boolean 以保持数据库兼容性
-          basic_info: {
-            ...formData.basic_info,
-            supports_apple_pay: formData.basic_info.supports_apple_pay === 'supported',
-            supports_google_pay: formData.basic_info.supports_google_pay === 'supported',
-            supports_contactless: formData.basic_info.supports_contactless === 'supported',
-            supports_hce_simulation: formData.basic_info.supports_hce_simulation === 'supported',
-          }
-        }),
-        timeoutPromise,
-      ])
+      const payload = {
+        ...formData,
+        status: formData.status || 'active',
+        basic_info: {
+          ...formData.basic_info,
+          supports_apple_pay: formData.basic_info.supports_apple_pay === 'supported',
+          supports_google_pay: formData.basic_info.supports_google_pay === 'supported',
+          supports_contactless: formData.basic_info.supports_contactless === 'supported',
+          supports_hce_simulation: formData.basic_info.supports_hce_simulation === 'supported',
+        },
+      }
+
+      const result = await Promise.race([addPOSMachine(payload), timeoutPromise])
 
       console.log('[AddPOS] 提交成功，结果:', result)
       toast.dismiss('saving-pos')
       toast.success('POS机添加成功！')
-      
-      // 延迟跳转，让用户看到成功提示
-      setTimeout(() => {
-        navigate('/app/map')
-      }, 500)
-      
+      if (currentDraftId) {
+        deleteDraft(currentDraftId)
+      }
+      setTimeout(() => navigate('/app/map'), 500)
     } catch (error: any) {
       console.error('[AddPOS] 添加POS机失败:', error)
       toast.dismiss('saving-pos')
-      
-      // 更详细的错误处理
       let errorMessage = '添加失败，请重试'
-      
       if (error?.message?.includes('超时')) {
         errorMessage = '保存超时，请检查网络连接后重试'
       } else if (error?.message?.includes('网络')) {
@@ -287,659 +412,832 @@ const AddPOS = () => {
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
       toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* 顶部导航栏 */}
-      <AnimatedTopNav title="添加POS机" className="flex-shrink-0">
-        <AnimatedButton onClick={() => navigate(-1)} variant="ghost" size="sm" className="p-2">
-          <ArrowLeft className="w-5 h-5" />
-        </AnimatedButton>
-        <AnimatedButton onClick={handleSubmit} loading={loading} disabled={loading} className="min-w-[80px] touch-manipulation">
-          保存
-        </AnimatedButton>
-      </AnimatedTopNav>
+  const cycleSchemeState = (schemeId: SchemeID) => {
+    const order: ThreeStateValue[] = ['supported', 'unsupported', 'unknown']
+    const current = getSchemeState(schemeId)
+    const nextState = order[(order.indexOf(current) + 1) % order.length]
+    const nextStates: Partial<Record<SchemeID, ThreeStateValue>> = { ...cardNetworkStates, [schemeId]: nextState }
+    setCardNetworkStates(nextStates)
+    syncSupportedNetworks(nextStates)
+  }
 
-      {/* 主要内容区域 */}
-      <div className="flex-1 p-4 space-y-4 pb-20 sm:pb-4">
-        {/* 基本信息 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>基本信息</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <AnimatedInput
-              label="商户名称 *"
-              value={formData.merchant_name}
-              onChange={e => handleInputChange('merchant_name', e.target.value)}
-              placeholder="请输入商户名称"
-            />
-            <AnimatedInput
-              label="地址 *"
+  const cycleTapState = (method: TapMethod) => {
+    const current: TapState = (() => {
+      switch (method) {
+        case 'card':
+          return threeStateToTap(formData.basic_info.supports_contactless)
+        case 'apple':
+          return threeStateToTap(formData.basic_info.supports_apple_pay)
+        case 'google':
+          return threeStateToTap(formData.basic_info.supports_google_pay)
+        case 'hce':
+        default:
+          return threeStateToTap(formData.basic_info.supports_hce_simulation)
+      }
+    })()
+    const nextState = tapStateOrder[(tapStateOrder.indexOf(current) + 1) % tapStateOrder.length]
+    const mapped = tapToThreeState(nextState)
+    switch (method) {
+      case 'card':
+        handleInputChange('basic_info.supports_contactless', mapped)
+        break
+      case 'apple':
+        handleInputChange('basic_info.supports_apple_pay', mapped)
+        break
+      case 'google':
+        handleInputChange('basic_info.supports_google_pay', mapped)
+        break
+      case 'hce':
+      default:
+        handleInputChange('basic_info.supports_hce_simulation', mapped)
+        break
+    }
+  }
+
+  const addAttemptRow = () => {
+    setFormData((prev) => ({
+      ...prev,
+      attempts: [
+        ...(prev.attempts || []),
+        {
+          user: '',
+          result: 'success',
+          timestamp: new Date().toISOString(),
+          card_name: '',
+          payment_method: '',
+        },
+      ],
+    }))
+  }
+
+  const updateAttempt = (index: number, field: keyof NonNullable<FormData['attempts']>[number], value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      attempts: prev.attempts?.map((attempt, i) => (i === index ? { ...attempt, [field]: value } : attempt)) || [],
+    }))
+  }
+
+  const removeAttempt = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      attempts: prev.attempts?.filter((_, i) => i !== index) || [],
+    }))
+  }
+
+  const saveAttemptAsCommonCard = (index: number) => {
+    const attempt = formData.attempts?.[index]
+    if (!attempt) return
+    const name = attempt.card_name?.trim()
+    const method = attempt.payment_method?.trim()
+    if (!name && !method) {
+      toast.error('请先填写卡片名称或支付方式再保存')
+      return
+    }
+    setFormData((prev) => {
+      const existing = prev.common_cards || []
+      const exists = existing.some((item) => item.name === (name || '') && item.method === (method || ''))
+      if (exists) {
+        toast.success('已在常用卡片列表中')
+        return prev
+      }
+      toast.success('常用卡片已保存')
+      return {
+        ...prev,
+        common_cards: [...existing, { name: name || method || '未命名卡片', method }],
+      }
+    })
+  }
+
+  const applyCommonCard = (index: number, cardIndex: number) => {
+    const card = formData.common_cards?.[cardIndex]
+    if (!card) return
+    updateAttempt(index, 'card_name', card.name)
+    updateAttempt(index, 'payment_method', card.method || '')
+  }
+
+  const handleSaveDraft = () => {
+    if (!formData.latitude || !formData.longitude) {
+      toast.error('请先在地图上选择位置再保存草稿')
+      return
+    }
+    const title = formData.merchant_name?.trim() || formData.address || `${formData.latitude.toFixed(4)},${formData.longitude.toFixed(4)}`
+    const record = saveDraft({
+      id: currentDraftId || undefined,
+      title,
+      data: { formData, step },
+      step,
+    })
+    setCurrentDraftId(record.id)
+    toast.success('草稿已保存')
+  }
+
+  const selectedSchemes =
+    Object.keys(cardNetworkStates).length > 0
+      ? (Object.entries(cardNetworkStates)
+          .filter(([, status]) => status === 'supported')
+          .map(([schemeId]) => schemeId as SchemeID))
+      : formData.basic_info.supported_card_networks || []
+
+  const toggleCvmScheme = (schemeId: SchemeID) => {
+    if (getSchemeState(schemeId) !== 'supported') {
+      toast.error('请先将该卡组织标记为支持')
+      return
+    }
+    const field = CVM_FIELD_MAP[activeCvmTab]
+    const list = (formData.verification_modes[field] as string[]) || []
+    const exists = list.includes(schemeId)
+    const updated = exists ? list.filter((id) => id !== schemeId) : [...list, schemeId]
+    handleInputChange(`verification_modes.${field}`, updated)
+  }
+
+  const updateFeeConfig = (schemeId: string, updater: (fee: CardNetworkFee) => CardNetworkFee) => {
+    const currentFees = ensureFees(formData.fees)
+    const nextFees: FeesConfiguration = { ...currentFees }
+    const targetFee = nextFees[schemeId] || {
+      network: schemeId,
+      type: FeeType.PERCENTAGE,
+      value: 0,
+      enabled: false,
+    }
+    nextFees[schemeId] = updater(targetFee)
+    handleInputChange('fees', nextFees)
+  }
+
+  const stepIndicator = (
+    <div className="flex items-center gap-2 mb-8">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <div
+          key={s}
+          className={`h-2 rounded-full transition-all duration-300 ${
+            s === step ? 'w-8 bg-accent-yellow' : s < step ? 'w-8 bg-accent-salmon' : 'w-2 bg-gray-200'
+          }`}
+        />
+      ))}
+      <div className="ml-auto text-sm font-bold text-gray-400">Step {step}/5</div>
+    </div>
+  )
+
+  const renderStep1 = () => (
+    <div className="space-y-6 animate-fade-in-up">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.merchantNameLabel}</label>
+          <input
+            type="text"
+            className="w-full bg-cream rounded-xl px-4 py-3 text-soft-black font-medium focus:outline-none focus:ring-2 focus:ring-accent-yellow/20"
+            placeholder="e.g. Starbucks Coffee"
+            value={formData.merchant_name}
+            onChange={(e) => handleInputChange('merchant_name', e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.addressLabel}</label>
+          <div className="relative">
+            <input
+              type="text"
+              className="w-full bg-cream rounded-xl px-4 py-3 text-soft-black font-medium focus:outline-none focus:ring-2 focus:ring-accent-yellow/20 pr-12"
+              placeholder="Search address..."
               value={formData.address}
-              onChange={e => handleInputChange('address', e.target.value)}
-              placeholder="请输入地址"
+              onChange={(e) => handleInputChange('address', e.target.value)}
             />
+            <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+          </div>
+          {formData.latitude !== 0 && formData.longitude !== 0 && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-accent-salmon font-bold bg-green-50 p-2 rounded-lg w-fit">
+              <CheckCircle className="w-3 h-3" /> {uiText.coordinatesLabel}: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
+            </div>
+          )}
+        </div>
+
+        <button
+          className="w-full py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 font-bold hover:border-accent-yellow hover:text-accent-yellow transition-all flex items-center justify-center gap-2"
+          onClick={() => setShowLocationModal(true)}
+        >
+          <MapPin className="w-4 h-4" />
+          {formData.latitude && formData.longitude ? uiText.reselectLocationButton : uiText.pickLocationButton}
+        </button>
+
+      </div>
+
+      <div className="border border-gray-100 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setIsBillDetailsOpen(!isBillDetailsOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors"
+        >
+          <span className="font-bold text-sm text-soft-black">更多账单设置</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${isBillDetailsOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {isBillDetailsOpen && (
+          <div className="p-4 bg-cream space-y-3 border-t border-gray-100">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{uiText.transactionNameLabel}</label>
+              <input
+                type="text"
+                className="w-full bg-white rounded-lg px-3 py-2 text-sm"
+                placeholder="STARBUCKS #1024"
+                value={formData.merchant_info.transaction_name}
+                onChange={(e) => handleInputChange('merchant_info.transaction_name', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{uiText.transactionTypeLabel}</label>
+              <input
+                type="text"
+                className="w-full bg-white rounded-lg px-3 py-2 text-sm"
+                placeholder="5411 - Grocery Stores"
+                value={formData.merchant_info.transaction_type}
+                onChange={(e) => handleInputChange('merchant_info.transaction_type', e.target.value)}
+              />
+            </div>
             <BrandSelector
               value={formData.brand_id || ''}
-              onChange={value => handleInputChange('brand_id', value)}
-              placeholder="请选择所属品牌（可选）"
+              onChange={(value) => handleInputChange('brand_id', value)}
+              placeholder="选择品牌 (可选)"
             />
-            <AnimatedButton 
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                console.log('点击了地图选择按钮')
-                // 延迟到当前事件循环结束后再打开，避免同一次点击事件触发遮罩 onClick 导致立刻关闭
-                setTimeout(() => {
-                  setShowLocationModal(true)
-                  console.log('showLocationModal 已设置为 true')
-                }, 0)
-              }}
-              variant="outline" 
-              className="w-full"
-            >
-              <MapPin className="w-4 h-4 mr-2" />
-              {formData.latitude && formData.longitude ? '重新选择位置' : '在地图上选择位置'}
-            </AnimatedButton>
-            {formData.latitude !== 0 && formData.longitude !== 0 && (
-              <div className="text-sm text-gray-600">
-                坐标: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
-        {/* 商家信息 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Building className="w-5 h-5 mr-2" />
-              商家信息
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <AnimatedInput
-              label="商户交易名称"
-              value={formData.merchant_info.transaction_name || ''}
-              onChange={e => handleInputChange('merchant_info.transaction_name', e.target.value)}
-              placeholder="请输入商户交易名称"
-            />
-            <AnimatedInput
-              label="商户交易类型"
-              value={formData.merchant_info.transaction_type || ''}
-              onChange={e => handleInputChange('merchant_info.transaction_type', e.target.value)}
-              placeholder="请输入商户交易类型"
-            />
-          </CardContent>
-        </Card>
+  const renderStep2 = () => (
+    <div className="space-y-8 animate-fade-in-up">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.posModelLabel}</label>
+          <SystemSelect
+            dataType="pos_models"
+            value={formData.basic_info.model || ''}
+            onChange={(value) => handleInputChange('basic_info.model', value)}
+            placeholder="请选择POS型号"
+            allowCustom
+            customPlaceholder="输入POS型号"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.acquiringInstitutionLabel}</label>
+          <SystemSelect
+            dataType="acquiring_institution"
+            value={formData.basic_info.acquiring_institution || ''}
+            onChange={(value) => handleInputChange('basic_info.acquiring_institution', value)}
+            placeholder="请选择收单机构"
+            showDescription
+            allowCustom
+            customPlaceholder="输入收单机构"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.deviceStatusLabel}</label>
+          <SystemSelect
+            dataType="device_status"
+            value={formData.status || 'active'}
+            onChange={(value) => handleInputChange('status', value)}
+            placeholder="请选择设备状态"
+            showDescription
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.checkoutLocationLabel}</label>
+          <SystemSelect
+            dataType="checkout_locations"
+            value={formData.basic_info.checkout_location || ''}
+            onChange={(value) => handleInputChange('basic_info.checkout_location', value)}
+            placeholder="请选择收银区域"
+            showDescription
+          />
+        </div>
+      </div>
 
-        {/* 设备支持 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <CreditCard className="w-5 h-5 mr-2" />
-              设备支持
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <AnimatedInput
-              label="POS机型号"
-              value={formData.basic_info.model || ''}
-              onChange={e => handleInputChange('basic_info.model', e.target.value)}
-              placeholder="请输入POS机型号"
-            />
-            
-            <SystemSelect
-              dataType="acquiring_institution"
-              label="收单机构"
-              value={formData.basic_info.acquiring_institution || ''}
-              onChange={value => handleInputChange('basic_info.acquiring_institution', value)}
-              placeholder="请选择收单机构"
-              showDescription={true}
-              allowCustom={true}
-              customPlaceholder="输入自定义收单机构名称"
-            />
-
-            <SystemSelect
-              dataType="device_status"
-              label="设备状态"
-              value={formData.status || 'active'}
-              onChange={value => handleInputChange('status', value)}
-              placeholder="请选择设备状态"
-              showDescription={true}
-            />
-
-            <SystemSelect
-              dataType="checkout_locations"
-              label="收银位置"
-              value={formData.basic_info.checkout_location || ''}
-              onChange={value => handleInputChange('basic_info.checkout_location', value)}
-              placeholder="请选择收银位置"
-              showDescription={true}
-            />
-
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-gray-700">收单模式支持</label>
-              <div className="space-y-3">
-                {/* DCC Toggle Switch */}
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">DCC</div>
-                    <div className="text-sm text-gray-500">Dynamic Currency Conversion</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const modes = formData.basic_info.acquiring_modes || []
-                      const isDCCEnabled = modes.includes('DCC')
-                      if (isDCCEnabled) {
-                        handleInputChange('basic_info.acquiring_modes', modes.filter(m => m !== 'DCC'))
-                      } else {
-                        handleInputChange('basic_info.acquiring_modes', [...modes, 'DCC'])
-                      }
-                    }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      formData.basic_info.acquiring_modes?.includes('DCC') ? 'bg-blue-600' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        formData.basic_info.acquiring_modes?.includes('DCC') ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-                
-                {/* EDC Toggle Switch */}
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">EDC</div>
-                    <div className="text-sm text-gray-500">Electronic Data Capture</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const modes = formData.basic_info.acquiring_modes || []
-                      const isEDCEnabled = modes.includes('EDC')
-                      if (isEDCEnabled) {
-                        handleInputChange('basic_info.acquiring_modes', modes.filter(m => m !== 'EDC'))
-                      } else {
-                        handleInputChange('basic_info.acquiring_modes', [...modes, 'EDC'])
-                      }
-                    }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      formData.basic_info.acquiring_modes?.includes('EDC') ? 'bg-blue-600' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        formData.basic_info.acquiring_modes?.includes('EDC') ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <CardNetworkSelector
-              label="支持的卡组织"
-              value={formData.basic_info.supported_card_networks || []}
-              onChange={value => handleInputChange('basic_info.supported_card_networks', value)}
-              allowSelectAll={true}
-            />
-
-
-          </CardContent>
-        </Card>
-
-        {/* Contactless支持 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Smartphone className="w-5 h-5 mr-2" />
-              Contactless支持
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 gap-6">
-              {/* 实体卡 Contactless */}
-              <ThreeStateSelector
-                value={formData.basic_info.supports_contactless || 'unknown'}
-                onChange={value => handleInputChange('basic_info.supports_contactless', value)}
-                label="实体卡 Contactless"
-                icon={<CreditCard className="w-5 h-5" />}
-              />
-
-              {/* Apple Pay */}
-              <ThreeStateSelector
-                value={formData.basic_info.supports_apple_pay || 'unknown'}
-                onChange={value => handleInputChange('basic_info.supports_apple_pay', value)}
-                label="Apple Pay"
-                icon={<Smartphone className="w-5 h-5" />}
-              />
-
-              {/* Google Pay */}
-              <ThreeStateSelector
-                value={formData.basic_info.supports_google_pay || 'unknown'}
-                onChange={value => handleInputChange('basic_info.supports_google_pay', value)}
-                label="Google Pay"
-                icon={<Smartphone className="w-5 h-5" />}
-              />
-
-              {/* HCE模拟 */}
-              <ThreeStateSelector
-                value={formData.basic_info.supports_hce_simulation || 'unknown'}
-                onChange={value => handleInputChange('basic_info.supports_hce_simulation', value)}
-                label="HCE模拟"
-                icon={<Settings className="w-5 h-5" />}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 验证模式 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Settings className="w-5 h-5 mr-2" />
-              验证模式
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* 小额免密 */}
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">小额免密</h4>
-              <div className="flex items-center space-x-4">
-                <div className="flex-1">
-                  <CardNetworkSelector
-                     label="支持小额免密的卡组织"
-                     value={formData.verification_modes.small_amount_no_pin || []}
-                     onChange={value => handleInputChange('verification_modes.small_amount_no_pin', value)}
-                     maxSelections={10}
-                   />
-                </div>
-                <div className="flex flex-col space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('verification_modes.small_amount_no_pin_unsupported', !formData.verification_modes.small_amount_no_pin_unsupported)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      formData.verification_modes.small_amount_no_pin_unsupported
-                        ? 'bg-red-100 text-red-800 border border-red-200'
-                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {formData.verification_modes.small_amount_no_pin_unsupported ? '● 不支持' : '○ 不支持'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('verification_modes.small_amount_no_pin_uncertain', !formData.verification_modes.small_amount_no_pin_uncertain)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      formData.verification_modes.small_amount_no_pin_uncertain
-                        ? 'bg-orange-100 text-orange-800 border border-orange-200'
-                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {formData.verification_modes.small_amount_no_pin_uncertain ? '● 未确定' : '○ 未确定'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 需要密码 */}
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">需要密码</h4>
-              <div className="flex items-center space-x-4">
-                <div className="flex-1">
-                  <CardNetworkSelector
-                     label="需要密码验证的卡组织"
-                     value={formData.verification_modes.requires_password || []}
-                     onChange={value => handleInputChange('verification_modes.requires_password', value)}
-                     maxSelections={10}
-                   />
-                </div>
-                <div className="flex flex-col space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('verification_modes.requires_password_unsupported', !formData.verification_modes.requires_password_unsupported)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      formData.verification_modes.requires_password_unsupported
-                        ? 'bg-red-100 text-red-800 border border-red-200'
-                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {formData.verification_modes.requires_password_unsupported ? '● 不支持' : '○ 不支持'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('verification_modes.requires_password_uncertain', !formData.verification_modes.requires_password_uncertain)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      formData.verification_modes.requires_password_uncertain
-                        ? 'bg-orange-100 text-orange-800 border border-orange-200'
-                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {formData.verification_modes.requires_password_uncertain ? '● 未确定' : '○ 未确定'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 需要签名 */}
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">需要签名</h4>
-              <div className="flex items-center space-x-4">
-                <div className="flex-1">
-                  <CardNetworkSelector
-                     label="需要签名验证的卡组织"
-                     value={formData.verification_modes.requires_signature || []}
-                     onChange={value => handleInputChange('verification_modes.requires_signature', value)}
-                     maxSelections={10}
-                   />
-                </div>
-                <div className="flex flex-col space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('verification_modes.requires_signature_unsupported', !formData.verification_modes.requires_signature_unsupported)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      formData.verification_modes.requires_signature_unsupported
-                        ? 'bg-red-100 text-red-800 border border-red-200'
-                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {formData.verification_modes.requires_signature_unsupported ? '● 不支持' : '○ 不支持'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('verification_modes.requires_signature_uncertain', !formData.verification_modes.requires_signature_uncertain)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      formData.verification_modes.requires_signature_uncertain
-                        ? 'bg-orange-100 text-orange-800 border border-orange-200'
-                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {formData.verification_modes.requires_signature_uncertain ? '● 未确定' : '○ 未确定'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 备注信息 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <FileText className="w-5 h-5 mr-2" />
-              备注信息
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <textarea
-              className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              rows={4}
-              value={formData.remarks || ''}
-              onChange={e => handleInputChange('remarks', e.target.value)}
-              placeholder="请输入备注信息..."
-            />
-          </CardContent>
-        </Card>
-
-        {/* 付款手续费配置 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <CreditCard className="w-5 h-5 mr-2" />
-              付款手续费配置
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="text-sm text-gray-600 mb-4">
-              为不同卡组织设置手续费率，支持百分比和固定金额两种模式
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4">
-              {CARD_NETWORKS.map(network => {
-                const fee = formData.fees?.[network.value] || {
-                  network: network.value,
-                  type: FeeType.PERCENTAGE,
-                  value: 0,
-                  enabled: false
+      <div className="flex flex-col md:flex-row gap-4">
+        {['DCC', 'EDC'].map((mode) => {
+          const enabled = formData.basic_info.acquiring_modes?.includes(mode)
+          return (
+            <div
+              key={mode}
+              onClick={() => {
+                const current = formData.basic_info.acquiring_modes || []
+                if (enabled) {
+                  handleInputChange('basic_info.acquiring_modes', current.filter((item) => item !== mode))
+                } else {
+                  handleInputChange('basic_info.acquiring_modes', [...current, mode])
                 }
-                
-                return (
-                  <div key={network.value} className="border border-gray-200 rounded-lg p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium text-gray-900">{network.label}</span>
-                        <span className="text-xs text-gray-500 uppercase">{network.value}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newFees = { ...formData.fees }
-                          newFees[network.value] = {
-                            ...fee,
-                            enabled: !fee.enabled
-                          }
-                          handleInputChange('fees', newFees)
-                        }}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          fee.enabled
-                            ? 'bg-green-100 text-green-800 border border-green-200'
-                            : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                        }`}
-                      >
-                        {fee.enabled ? '已启用' : '未启用'}
-                      </button>
-                    </div>
-                    
-                    {fee.enabled && (
-                      <div className="space-y-3">
-                        {/* 手续费类型选择 */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            手续费类型
-                          </label>
-                          <div className="flex space-x-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newFees = { ...formData.fees }
-                                newFees[network.value] = {
-                                  ...fee,
-                                  type: FeeType.PERCENTAGE,
-                                  value: 0
-                                }
-                                handleInputChange('fees', newFees)
-                              }}
-                              className={`flex-1 px-3 py-2 text-sm rounded-md border transition-colors ${
-                                fee.type === FeeType.PERCENTAGE
-                                  ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                              }`}
-                            >
-                              百分比 (%)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newFees = { ...formData.fees }
-                                newFees[network.value] = {
-                                  ...fee,
-                                  type: FeeType.FIXED,
-                                  value: 0,
-                                  currency: '$'
-                                }
-                                handleInputChange('fees', newFees)
-                              }}
-                              className={`flex-1 px-3 py-2 text-sm rounded-md border transition-colors ${
-                                fee.type === FeeType.FIXED
-                                  ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                              }`}
-                            >
-                              固定金额
-                            </button>
-                          </div>
-                        </div>
-                        
-                        {/* 手续费值输入 */}
-                        <div className="flex space-x-2">
-                          {fee.type === FeeType.FIXED && (
-                            <div className="w-20">
-                              <SystemSelect
-                                dataType="currency"
-                                label="货币"
-                                value={fee.currency || '$'}
-                                onChange={(value) => {
-                                  const newFees = { ...formData.fees }
-                                  newFees[network.value] = {
-                                    ...fee,
-                                    currency: value
-                                  }
-                                  handleInputChange('fees', newFees)
-                                }}
-                                className="w-20"
-                              />
-                            </div>
-                          )}
-                          <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {fee.type === FeeType.PERCENTAGE ? '费率 (%)' : '金额'}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max={fee.type === FeeType.PERCENTAGE ? "100" : undefined}
-                              step={fee.type === FeeType.PERCENTAGE ? "0.01" : "0.01"}
-                              value={fee.value}
-                              onChange={e => {
-                                const newFees = { ...formData.fees }
-                                newFees[network.value] = {
-                                  ...fee,
-                                  value: parseFloat(e.target.value) || 0
-                                }
-                                handleInputChange('fees', newFees)
-                              }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder={fee.type === FeeType.PERCENTAGE ? "0.00" : "0.00"}
-                            />
-                          </div>
-                        </div>
-                        
-                        {/* 预览显示 */}
-                        <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                          预览: {formatFeeDisplay(fee)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            
-            {/* 手续费配置说明 */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="text-sm text-blue-800">
-                <div className="font-medium mb-1">配置说明:</div>
-                <ul className="text-xs space-y-1 list-disc list-inside">
-                  <li>百分比费率: 按交易金额的百分比收取手续费</li>
-                  <li>固定金额: 每笔交易收取固定手续费</li>
-                  <li>可为每个卡组织单独设置不同的费率</li>
-                  <li>未启用的卡组织将不收取手续费</li>
-                </ul>
+              }}
+              className={`flex-1 p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                enabled ? 'border-accent-yellow bg-blue-50' : 'border-gray-100 bg-white'
+              }`}
+            >
+              <div>
+                <div className="font-bold text-sm text-soft-black uppercase">{mode}</div>
+                <div className="text-xs text-gray-400">{mode === 'DCC' ? 'Dynamic Currency Conversion' : 'Electronic Data Capture'}</div>
               </div>
+              <div
+                className={`w-5 h-5 rounded-full border ${
+                  enabled ? 'bg-accent-yellow border-accent-yellow' : 'border-gray-300'
+                }`}
+              />
             </div>
-          </CardContent>
-        </Card>
+          )
+        })}
+      </div>
 
-        {/* 自定义链接 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center">
-                <Link className="w-5 h-5 mr-2" />
-                自定义链接
-              </div>
-              <AnimatedButton onClick={addCustomLink} size="sm" variant="outline">
-                <Plus className="w-4 h-4 mr-1" />
-                添加链接
-              </AnimatedButton>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.custom_links?.map((link, index) => (
-              <div key={index} className="flex items-center space-x-2 p-3 border border-gray-200 rounded-md">
-                <div className="flex-1 space-y-2">
-                  <AnimatedInput
-                    label="标题"
-                    value={link.title}
-                    onChange={e => updateCustomLink(index, 'title', e.target.value)}
-                    placeholder="链接标题"
-                  />
-                  <AnimatedInput
-                    label="URL"
-                    value={link.url}
-                    onChange={e => updateCustomLink(index, 'url', e.target.value)}
-                    placeholder="https://"
-                  />
-                  <AnimatedInput
-                    label="平台"
-                    value={link.platform}
-                    onChange={e => updateCustomLink(index, 'platform', e.target.value)}
-                    placeholder="平台名称"
-                  />
-                </div>
-                <AnimatedButton
-                  onClick={() => removeCustomLink(index)}
-                  variant="outline"
-                  size="sm"
-                  className="text-red-600 border-red-200 hover:bg-red-50"
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-3">支持的卡组织</label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {CARD_NETWORKS.map((scheme) => {
+            const id = scheme.value as SchemeID
+            const state = getSchemeState(id)
+            const isSupported = state === 'supported'
+            const isUnsupported = state === 'unsupported'
+            const color = SCHEME_COLOR_MAP[id] || 'bg-gray-500'
+            return (
+              <button
+                key={scheme.value}
+                onClick={() => cycleSchemeState(id)}
+                type="button"
+                className={`relative overflow-hidden h-14 rounded-2xl border transition-all duration-300 flex items-center justify-between px-4 group ${
+                  isSupported
+                    ? `${color} border-transparent shadow-lg scale-[1.02]`
+                    : isUnsupported
+                    ? 'bg-red-50 border-red-100 text-red-500 hover:border-red-200'
+                    : 'bg-white border-gray-100 text-gray-400 hover:border-gray-300 hover:shadow-sm'
+                }`}
+              >
+                {isSupported && <div className="absolute -right-4 -bottom-6 w-20 h-20 bg-white opacity-10 rounded-full blur-xl"></div>}
+                <span className={`font-bold text-sm tracking-wide ${isSupported ? 'text-white' : isUnsupported ? 'text-red-500' : 'text-gray-500'}`}>
+                  {scheme.label}
+                </span>
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                    isSupported
+                      ? 'bg-white/20 text-white'
+                      : isUnsupported
+                      ? 'bg-red-100 text-red-500'
+                      : 'bg-gray-100 text-transparent'
+                  }`}
                 >
-                  <Trash2 className="w-4 h-4" />
-                </AnimatedButton>
+                  <Check className="w-3.5 h-3.5" />
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.tapSupportLabel}</label>
+        <div className="grid grid-cols-4 gap-2">
+          {(['card', 'apple', 'google', 'hce'] as TapMethod[]).map((method) => {
+            const state = (() => {
+              switch (method) {
+                case 'card':
+                  return threeStateToTap(formData.basic_info.supports_contactless)
+                case 'apple':
+                  return threeStateToTap(formData.basic_info.supports_apple_pay)
+                case 'google':
+                  return threeStateToTap(formData.basic_info.supports_google_pay)
+                case 'hce':
+                default:
+                  return threeStateToTap(formData.basic_info.supports_hce_simulation)
+              }
+            })()
+            let color = 'bg-gray-100 text-gray-400'
+            let icon = <HelpCircle className="w-4 h-4" />
+            if (state === 'yes') {
+              color = 'bg-green-100 text-green-600 ring-1 ring-green-200'
+              icon = <Check className="w-4 h-4" />
+            } else if (state === 'no') {
+              color = 'bg-red-50 text-red-400'
+              icon = <X className="w-4 h-4" />
+            }
+            return (
+              <div
+                key={method}
+                onClick={() => cycleTapState(method)}
+                className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl cursor-pointer transition-all hover:scale-105 active:scale-95 ${color}`}
+              >
+                {method === 'card' && <CreditCard className="w-5 h-5" />}
+                {method === 'apple' && <div className="text-lg font-bold"></div>}
+                {method === 'google' && <span className="font-bold text-sm">G</span>}
+                {method === 'hce' && <Smartphone className="w-5 h-5" />}
+                <div className="mt-1">{icon}</div>
               </div>
-            ))}
-            {(!formData.custom_links || formData.custom_links.length === 0) && (
-              <div className="text-center py-8 text-gray-500">
-                暂无自定义链接，点击上方按钮添加
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.cvmTitle}</label>
+        <div className="bg-cream rounded-2xl p-1 flex gap-1">
+          {(['noPin', 'pin', 'signature'] as CvmTab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveCvmTab(tab)}
+              className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
+                activeCvmTab === tab ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {tab === 'noPin' ? 'No PIN' : tab}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 p-4 bg-white border border-gray-100 rounded-2xl shadow-sm space-y-4">
+          <p className="text-[10px] text-gray-400">
+            选择支持 <span className="font-bold text-soft-black uppercase">{activeCvmTab === 'noPin' ? 'No PIN' : activeCvmTab}</span> 的卡组织：
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {selectedSchemes.length === 0 && <span className="text-xs text-gray-300 italic">请先选择支持的卡组织</span>}
+            {selectedSchemes.map((schemeId) => {
+              const scheme = CARD_NETWORKS.find((s) => s.value === schemeId)
+              const isActive = ((formData.verification_modes[CVM_FIELD_MAP[activeCvmTab]] as string[]) || []).includes(
+                schemeId
+              )
+              const color = SCHEME_COLOR_MAP[schemeId as SchemeID] || 'bg-gray-500'
+              return (
+                <button
+                  key={schemeId}
+                  type="button"
+                  onClick={() => toggleCvmScheme(schemeId as SchemeID)}
+                  className={`w-12 h-9 rounded flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
+                    isActive ? `${color} text-white shadow-md scale-105` : 'bg-gray-100 text-gray-400 grayscale opacity-50'
+                  }`}
+                >
+                  {scheme?.label.slice(0, 3)}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex gap-2 text-[10px]">
+            {CVM_FLAGS.map((flag: CvmFlag) => {
+              const flagKey = CVM_FLAG_MAP[activeCvmTab][flag]
+              const enabled = Boolean(formData.verification_modes[flagKey])
+              return (
+                <button
+                  key={flag}
+                  onClick={() => handleInputChange(`verification_modes.${flagKey}`, !enabled)}
+                  className={`px-3 py-1.5 rounded-full font-semibold uppercase tracking-wide transition-colors ${
+                    enabled
+                      ? flag === 'unsupported'
+                        ? 'bg-red-100 text-red-600'
+                        : flag === 'uncertain'
+                        ? 'bg-orange-100 text-orange-600'
+                        : 'bg-gray-200 text-gray-700'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {flag === 'unsupported' ? '不支持' : flag === 'uncertain' ? '不确定' : '未知'}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderStep3 = () => (
+    <div className="space-y-4 animate-fade-in-up">
+      {selectedSchemes.length === 0 && <p className="text-sm text-gray-400">请先选择支持的卡组织</p>}
+      {selectedSchemes.map((schemeId) => {
+        const scheme = CARD_NETWORKS.find((s) => s.value === schemeId)
+        const color = SCHEME_COLOR_MAP[schemeId as SchemeID] || 'bg-gray-500'
+        const fee = formData.fees?.[schemeId] || {
+          network: schemeId,
+          type: FeeType.PERCENTAGE,
+          value: 0,
+          enabled: false,
+        }
+        return (
+          <div key={schemeId} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-6 rounded flex items-center justify-center text-[10px] font-bold text-white ${color}`}>
+                  {scheme?.label.slice(0, 1)}
+                </div>
+                <span className="font-bold text-soft-black">{scheme?.label}</span>
+              </div>
+              <div
+                onClick={() =>
+                  updateFeeConfig(schemeId, (current) => ({
+                    ...current,
+                    enabled: !current.enabled,
+                  }))
+                }
+                className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${
+                  fee.enabled ? 'bg-accent-yellow' : 'bg-gray-200'
+                }`}
+              >
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${fee.enabled ? 'left-5' : 'left-1'}`}></div>
+              </div>
+            </div>
+            {fee.enabled && (
+              <div className="space-y-3">
+                <div className="bg-cream rounded-lg p-1 flex w-fit">
+                  <button
+                    onClick={() =>
+                      updateFeeConfig(schemeId, (current) => ({
+                        ...current,
+                        type: FeeType.PERCENTAGE,
+                      }))
+                    }
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                      fee.type === FeeType.PERCENTAGE ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400'
+                    }`}
+                  >
+                    %
+                  </button>
+                  <button
+                    onClick={() =>
+                      updateFeeConfig(schemeId, (current) => ({
+                        ...current,
+                        type: FeeType.FIXED,
+                      }))
+                    }
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                      fee.type === FeeType.FIXED ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400'
+                    }`}
+                  >
+                    $
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm font-bold text-soft-black focus:ring-1 focus:ring-accent-yellow/50 outline-none"
+                  placeholder="0.00"
+                  value={fee.value}
+                  onChange={(e) =>
+                    updateFeeConfig(schemeId, (current) => ({
+                      ...current,
+                      value: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                />
+                <p className="text-[10px] text-gray-400 text-right">{formatFeeDisplay(fee)}</p>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 
-      {/* 移动端固定保存按钮 */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 sm:hidden z-10 pb-safe-bottom">
-        <AnimatedButton 
-          onClick={handleSubmit} 
-          loading={loading} 
-          disabled={loading}
-          className="w-full h-12 text-base font-medium touch-manipulation"
-          size="lg"
+  const renderStep4 = () => (
+    <div className="space-y-6 animate-fade-in-up">
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.remarksTitle}</label>
+        <textarea
+          className="w-full bg-cream rounded-xl p-4 text-sm text-soft-black focus:ring-2 focus:ring-accent-yellow/20 outline-none h-32 resize-none"
+          placeholder="Access codes, contact info, or special instructions..."
+          value={formData.remarks}
+          onChange={(e) => handleInputChange('remarks', e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.customLinksTitle}</label>
+        <div className="space-y-2">
+          {formData.custom_links?.map((link, i) => (
+            <div key={i} className="flex flex-col md:flex-row gap-2 bg-white border border-gray-100 rounded-xl p-3">
+              <input
+                className="flex-1 bg-cream rounded-lg px-3 py-2 text-xs text-gray-600"
+                placeholder="标题"
+                value={link.title}
+                onChange={(e) => updateCustomLink(i, 'title', e.target.value)}
+              />
+              <input
+                className="flex-1 bg-cream rounded-lg px-3 py-2 text-xs text-gray-600"
+                placeholder="https://"
+                value={link.url}
+                onChange={(e) => updateCustomLink(i, 'url', e.target.value)}
+              />
+              <input
+                className="flex-1 bg-cream rounded-lg px-3 py-2 text-xs text-gray-600"
+                placeholder="平台"
+                value={link.platform}
+                onChange={(e) => updateCustomLink(i, 'platform', e.target.value)}
+              />
+              <button
+                onClick={() => removeCustomLink(i)}
+                className="p-2 text-red-400 hover:bg-red-50 rounded-lg self-start"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addCustomLink}
+            className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:border-accent-yellow hover:text-accent-yellow transition-all"
+          >
+            + {uiText.addLinkButton}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderStep5 = () => (
+    <div className="space-y-4 animate-fade-in-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-soft-black">尝试记录</h3>
+          <p className="text-xs text-gray-500 mt-1">记录测试刷卡/支付的结果，便于后续参考（可选）</p>
+        </div>
+        <button
+          type="button"
+          onClick={addAttemptRow}
+          className="px-3 py-2 rounded-xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
         >
-          保存POS机信息
-        </AnimatedButton>
+          + 添加记录
+        </button>
       </div>
 
-      {/* 地图选择位置组件 */}
+      {(formData.attempts || []).length === 0 && (
+        <div className="p-4 rounded-xl border border-dashed border-gray-200 text-sm text-gray-500 bg-white">
+          还没有添加尝试记录，点击“添加记录”开始填写。
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {formData.attempts?.map((attempt, index) => (
+          <div key={index} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs font-semibold text-gray-500">尝试 {index + 1}</div>
+              <button
+                type="button"
+                onClick={() => removeAttempt(index)}
+                className="text-red-500 text-xs font-bold hover:text-red-600"
+              >
+                删除
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">用户/操作人</label>
+                <input
+                  type="text"
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.user}
+                  onChange={(e) => updateAttempt(index, 'user', e.target.value)}
+                  placeholder="例如：店员A / 自测"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">结果</label>
+                <select
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.result}
+                  onChange={(e) => updateAttempt(index, 'result', e.target.value as 'success' | 'failure')}
+                >
+                  <option value="success">成功</option>
+                  <option value="failure">失败</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">时间</label>
+                <input
+                  type="datetime-local"
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.timestamp ? attempt.timestamp.slice(0, 16) : ''}
+                  onChange={(e) => updateAttempt(index, 'timestamp', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">支付方式/卡名称</label>
+                <input
+                  type="text"
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.card_name || ''}
+                  onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
+                  placeholder="如：Visa Signature / Apple Pay"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">支付通道/备注</label>
+              <input
+                type="text"
+                className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                value={attempt.payment_method || ''}
+                onChange={(e) => updateAttempt(index, 'payment_method', e.target.value)}
+                placeholder="如：线下POS / 小程序 / Tap支付"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveAttemptAsCommonCard(index)}
+                  className="text-xs font-semibold text-soft-black bg-cream px-3 py-1.5 rounded-lg hover:bg-accent-yellow/20 transition-colors"
+                >
+                  保存为常用卡
+                </button>
+                {formData.common_cards && formData.common_cards.length > 0 && (
+                  <select
+                    className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selected = parseInt(e.target.value, 10)
+                      if (!Number.isNaN(selected)) applyCommonCard(index, selected)
+                    }}
+                  >
+                    <option value="">快速填充常用卡</option>
+                    {formData.common_cards.map((card, cardIndex) => (
+                      <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
+                        {card.name}{card.method ? ` · ${card.method}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {formData.common_cards && formData.common_cards.length > 0 && (
+        <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm">
+          <div className="text-xs font-semibold text-gray-500 mb-2">常用卡片</div>
+          <div className="flex flex-wrap gap-2">
+            {formData.common_cards.map((card, idx) => (
+              <span key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cream text-xs font-semibold text-soft-black">
+                {card.name}
+                {card.method && <span className="text-gray-500">({card.method})</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const goNext = () => setStep((prev) => Math.min(prev + 1, 5))
+  const goPrev = () => setStep((prev) => Math.max(prev - 1, 1))
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 p-4 md:p-6 lg:p-8">
+        <div className="bg-white rounded-[32px] shadow-soft border border-white/50 flex flex-col relative overflow-hidden min-h-[600px]">
+          <div className="p-8 pb-4 border-b border-gray-50 z-10 bg-white">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => navigate(-1)}
+                className="px-4 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                {uiText.backButton}
+              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveDraft}
+                  className="px-4 py-2 rounded-xl font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
+                >
+                  保存草稿
+                </button>
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-soft-black tracking-tight mt-4">添加新位置</h2>
+            <p className="text-sm text-gray-400 mt-1">分四步完成POS机信息登记</p>
+          </div>
+          <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+            {stepIndicator}
+            {step === 1 && renderStep1()}
+            {step === 2 && renderStep2()}
+            {step === 3 && renderStep3()}
+            {step === 4 && renderStep4()}
+            {step === 5 && renderStep5()}
+            <div className="h-10" />
+          </div>
+          <div className="p-6 border-t border-gray-50 bg-white w-full flex justify-between items-center">
+            {step > 1 ? (
+              <button
+                onClick={goPrev}
+                className="px-6 py-3 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-colors flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+            ) : (
+              <div />
+            )}
+            <button
+              onClick={step === 5 ? handleSubmit : goNext}
+              className="px-8 py-3 rounded-2xl font-bold text-white bg-soft-black hover:bg-accent-yellow shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+            >
+              {step === 5 ? uiText.submitButton : 'Next'} <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
       <SimpleMapPicker
         isOpen={showLocationModal}
-        onClose={() => {
-          console.log('关闭地图选择器')
-          setShowLocationModal(false)
-        }}
-        onConfirm={(lat, lng, address) => {
-          console.log('确认位置:', lat, lng, address)
-          handleLocationConfirm(lat, lng, address)
-        }}
+        onClose={() => setShowLocationModal(false)}
+        onConfirm={(lat, lng, address) => handleLocationConfirm(lat, lng, address)}
         initialLat={formData.latitude || 39.9042}
         initialLng={formData.longitude || 116.4074}
       />

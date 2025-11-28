@@ -11,6 +11,8 @@
     "check": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^9.0.1",
+    "@simplewebauthn/server": "^9.0.1",
     "@supabase/supabase-js": "^2.39.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.12",

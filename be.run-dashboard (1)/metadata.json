@@ -1,0 +1,5 @@
+{
+  "name": "Be.run Dashboard",
+  "description": "A high-fidelity recreation of the Be.run health activity dashboard featuring workout tracking, calendar scheduling, and AI-powered health insights.",
+  "requestFramePermissions": []
+}

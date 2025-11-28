@@ -316,6 +316,24 @@
     "privacyConsentRevoked": "Widerrufen",
     "privacyAllConsents": "Alle Datenschutzeinstellungen"
   },
+  "notificationsPage": {
+    "title": "Benachrichtigungen",
+    "unread": "Sie haben {{count}} ungelesene Nachrichten",
+    "caughtUp": "Alle Benachrichtigungen gelesen",
+    "markAll": "Alle als gelesen markieren",
+    "newSection": "Neu",
+    "earlierSection": "Früher",
+    "empty": "Keine Benachrichtigungen vorhanden"
+  },
+  "dashboardHeader": {
+    "greeting": {
+      "morning": "Guten Morgen!",
+      "afternoon": "Guten Tag!",
+      "evening": "Guten Abend!",
+      "night": "Gute Nacht!"
+    },
+    "subtitle": "Entdecke lokale Highlights und kartentaugliche Orte in deiner Nähe."
+  },
     "help": "Hilfezentrum",
     "about": "Über",
     "version": "Version",
@@ -1567,5 +1585,69 @@
     "loading": "Analysiere Ihre Präferenzen...",
     "error": "Personalisierte Inhalte konnten nicht geladen werden",
     "retry": "Wiederholen"
+  },
+  "landingPage": {
+    "title": "Payments Maps",
+    "badge": "Verbessertes Erlebnis, reibungslosere Leistung",
+    "hero": {
+      "title1": "Festlandchina-Zahlungen",
+      "title2": "Auf einen Blick",
+      "subtitle": "Präzise Lokalisierung von Zahlungsterminals in Festlandchina für mühelose Transaktionen",
+      "getStarted": "Loslegen",
+      "learnMore": "Mehr erfahren"
+    },
+    "trust": {
+      "bankLevel": "Datensicherheit",
+      "compliance": "Zertifizierte Compliance",
+      "rating": "Nutzerbewertung"
+    },
+    "features": {
+      "title": "Für Zahlungen entwickelt",
+      "subtitle": "Jede Funktion ist sorgfältig gestaltet, um das beste Zahlungsinformations-Service-Erlebnis zu bieten",
+      "globalNetwork": {
+        "title": "Festlandchina-Zahlungsnetzwerk",
+        "description": "50+ Städte in Festlandchina, 10.000+ Zahlungsterminals mit Echtzeitdaten"
+      },
+      "instantResponse": {
+        "title": "Sofortige Reaktion",
+        "description": "Blitzschnelles Laden, reibungsloses Erlebnis"
+      },
+      "enterpriseSecurity": {
+        "title": "Unternehmenssicherheit",
+        "description": "Standard-Verschlüsselungstechnologie, umfassender Datenschutz"
+      },
+      "communityDriven": {
+        "title": "Community-gesteuert",
+        "description": "1000+ aktive Mitwirkende mit kontinuierlichen Updates"
+      },
+      "smartRecommendation": {
+        "title": "Intelligente Empfehlungen",
+        "description": "KI-gestützte personalisierte Empfehlungs-Engine"
+      }
+    },
+    "stats": {
+      "title": "Vertrauenswürdige Wahl",
+      "subtitle": "Datenbasiert, stetig wachsend, Mehrwert für Nutzer schaffend",
+      "terminals": "POS-Terminals",
+      "cities": "Abgedeckte Städte",
+      "uptime": "Verfügbarkeit",
+      "support": "24/7-Support"
+    },
+    "cta": {
+      "title": "Starten Sie Ihre Zahlungsreise",
+      "subtitle": "Schließen Sie sich Tausenden von Nutzern an und machen Sie Zahlungen einfach und effizient",
+      "start": "Kostenlos starten",
+      "learnMore": "Mehr erfahren"
+    },
+    "language": {
+      "title": "Wählen Sie Ihr Land oder Ihre Region",
+      "subtitle": "Payments Maps passt Inhalte und Angebote an Ihren Standort an"
+    },
+    "footer": {
+      "copyright": "© 2025 Payments Maps. Alle Rechte vorbehalten."
+    },
+    "nav": {
+      "getStarted": "Loslegen"
+    }
   }
 }

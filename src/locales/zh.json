@@ -1288,6 +1288,15 @@
     "language": "语言",
     "currentLanguage": "当前语言"
   },
+  "dashboardHeader": {
+    "greeting": {
+      "morning": "早上好！",
+      "afternoon": "下午好！",
+      "evening": "晚上好！",
+      "night": "夜深了，注意休息！"
+    },
+    "subtitle": "发现身边支持国际支付的商户与服务。"
+  },
   "smartWelcome": {
       "title": "智能欢迎",
       "subtitle": "为您提供个性化的支付体验",
@@ -1728,53 +1737,77 @@
       "privacyConsentRevoked": "已撤回",
       "privacyAllConsents": "全部隐私偏好"
     },
-    "smartWelcome": {
-      "title": "智能欢迎",
-      "subtitle": "基于您的位置和偏好为您提供个性化体验",
-      "location": "位置",
-      "userType": "用户类型",
-      "userTypes": {
-        "tourist": "游客",
-        "student": "学生",
-        "business": "商务人士",
-        "resident": "本地居民"
+  "notificationsPage": {
+    "title": "消息中心",
+    "unread": "您有 {{count}} 条未读消息",
+    "caughtUp": "暂无新的通知",
+    "markAll": "全部标记为已读",
+    "newSection": "最新",
+    "earlierSection": "更早",
+    "empty": "暂无通知"
+  },
+  "landingPage": {
+    "title": "Payments Maps",
+    "badge": "全新升级，体验更流畅",
+    "hero": {
+      "title1": "中国支付",
+      "title2": "一图尽览",
+      "subtitle": "精准定位中国大陆地区支付终端，让每一次支付都轻松便捷",
+      "getStarted": "立即开始",
+      "learnMore": "了解功能"
+    },
+    "trust": {
+      "bankLevel": "数据安全",
+      "compliance": "合规认证",
+      "rating": "用户评分"
+    },
+    "features": {
+      "title": "为支付而生",
+      "subtitle": "每个功能都经过精心设计，只为提供最佳的支付信息服务体验",
+      "globalNetwork": {
+        "title": "中国支付网络",
+        "description": "覆盖中国大陆50+城市，10,000+支付终端实时数据"
       },
-      "status": {
-        "firstTime": "首次访问",
-        "returning": "回访用户"
+      "instantResponse": {
+        "title": "毫秒级响应",
+        "description": "极速加载，流畅体验"
       },
-      "recommendationsTitle": "为您推荐",
-      "recommendations": {
-        "paymentSetup": {
-          "title": "设置支付方式",
-          "description": "配置您的首选支付方式，享受便捷支付体验"
-        },
-        "exploreMap": {
-          "title": "探索地图",
-          "description": "发现附近接受您支付方式的商家和服务"
-        },
-        "languageSettings": {
-          "title": "语言设置",
-          "description": "调整语言偏好，获得更好的使用体验"
-        },
-        "community": {
-          "title": "加入社区",
-          "description": "与其他用户交流，分享支付体验和建议"
-        }
+      "enterpriseSecurity": {
+        "title": "企业级安全",
+        "description": "标准加密技术，全方位保护您的数据安全"
       },
-      "getStarted": "开始使用",
-      "actions": {
-        "startOnboarding": "开始引导",
-        "exploreNow": "立即探索"
+      "communityDriven": {
+        "title": "社区驱动",
+        "description": "1000+活跃贡献者持续更新"
       },
-      "skipMessage": "您可以随时在设置中更改这些偏好",
-      "security": {
-        "title": "安全提示",
-        "message": "我们使用您的位置信息来提供个性化服务，您的隐私受到保护"
-      },
-      "loading": "正在分析您的偏好...",
-      "error": "无法加载个性化内容",
-      "retry": "重试"
+      "smartRecommendation": {
+        "title": "智能推荐",
+        "description": "AI驱动的个性化推荐引擎"
+      }
+    },
+    "stats": {
+      "title": "值得信赖的选择",
+      "subtitle": "数据驱动，持续增长，为用户创造价值",
+      "terminals": "POS终端",
+      "cities": "覆盖城市",
+      "uptime": "可用性",
+      "support": "全天候服务"
+    },
+    "cta": {
+      "title": "开启支付新体验",
+      "subtitle": "加入数千用户的行列，让支付变得简单高效",
+      "start": "免费开始",
+      "learnMore": "了解更多"
+    },
+    "language": {
+      "title": "选择你的国家或地区",
+      "subtitle": "我们会根据所在位置为你定制内容和推荐"
+    },
+    "footer": {
+      "copyright": "© 2025 Payments Maps. All rights reserved."
+    },
+    "nav": {
+      "getStarted": "开始使用"
     }
   }
 }

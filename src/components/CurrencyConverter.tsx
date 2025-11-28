@@ -8,12 +8,18 @@ interface CurrencyConverterProps {
   className?: string
 }
 
-interface ExchangeRates {
-  USD: number
-  EUR: number
-  GBP: number
-  JPY: number
-  lastUpdated: Date
+type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'JPY';
+
+interface CurrencyRates {
+  USD: number;
+  EUR: number;
+  GBP: number;
+  JPY: number;
+}
+
+interface ExchangeRatesData {
+  rates: CurrencyRates;
+  lastUpdated: Date;
 }
 
 const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
@@ -22,15 +28,17 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
   className = ''
 }) => {
   const { t, i18n } = useTranslation()
-  const [rates, setRates] = useState<ExchangeRates>({
-    USD: 0.14,  // Default approximate rates
-    EUR: 0.13,
-    GBP: 0.11,
-    JPY: 20.5,
+  const [exchangeData, setExchangeData] = useState<ExchangeRatesData>({
+    rates: {
+      USD: 0.14,  // Default approximate rates
+      EUR: 0.13,
+      GBP: 0.11,
+      JPY: 20.5,
+    },
     lastUpdated: new Date()
   })
   const [loading, setLoading] = useState(false)
-  const [selectedCurrency, setSelectedCurrency] = useState('USD')
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD')
 
   // Currency symbols and icons
   const currencies = {
@@ -49,11 +57,13 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
       // const data = await response.json()
 
       // Simulated rates for now
-      setRates({
-        USD: 0.14 + (Math.random() - 0.5) * 0.005,
-        EUR: 0.13 + (Math.random() - 0.5) * 0.005,
-        GBP: 0.11 + (Math.random() - 0.5) * 0.005,
-        JPY: 20.5 + (Math.random() - 0.5) * 0.5,
+      setExchangeData({
+        rates: {
+          USD: 0.14 + (Math.random() - 0.5) * 0.005,
+          EUR: 0.13 + (Math.random() - 0.5) * 0.005,
+          GBP: 0.11 + (Math.random() - 0.5) * 0.005,
+          JPY: 20.5 + (Math.random() - 0.5) * 0.5,
+        },
         lastUpdated: new Date()
       })
     } catch (error) {
@@ -70,8 +80,8 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
     return () => clearInterval(interval)
   }, [])
 
-  const convertedAmount = amount * rates[selectedCurrency as keyof ExchangeRates]
-  const CurrencyIcon = currencies[selectedCurrency as keyof typeof currencies].icon
+  const convertedAmount = amount * exchangeData.rates[selectedCurrency]
+  const CurrencyIcon = currencies[selectedCurrency].icon
 
   // Determine if rate went up or down (mock for now)
   const rateChange = Math.random() > 0.5 ? 'up' : 'down'
@@ -106,7 +116,7 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
         {Object.entries(currencies).map(([code, info]) => (
           <button
             key={code}
-            onClick={() => setSelectedCurrency(code)}
+            onClick={() => setSelectedCurrency(code as CurrencyCode)}
             className={`flex-1 py-2 px-3 rounded-lg border transition-all ${
               selectedCurrency === code
                 ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -127,7 +137,7 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
           <div className="flex items-center gap-2">
             <CurrencyIcon className="w-5 h-5 text-gray-600" />
             <span className="text-xl font-bold text-gray-900">
-              {currencies[selectedCurrency as keyof typeof currencies].symbol}
+              {currencies[selectedCurrency].symbol}
               {convertedAmount.toLocaleString('en-US', {
                 minimumFractionDigits: selectedCurrency === 'JPY' ? 0 : 2,
                 maximumFractionDigits: selectedCurrency === 'JPY' ? 0 : 2
@@ -150,10 +160,10 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
         <div className="mt-2 text-xs text-gray-500">
           <div className="flex items-center justify-between">
             <span>
-              1 CNY = {rates[selectedCurrency as keyof ExchangeRates].toFixed(selectedCurrency === 'JPY' ? 2 : 4)} {selectedCurrency}
+              1 CNY = {exchangeData.rates[selectedCurrency].toFixed(selectedCurrency === 'JPY' ? 2 : 4)} {selectedCurrency}
             </span>
             <span>
-              {t('common.updated', { defaultValue: 'Updated' })}: {new Date(rates.lastUpdated).toLocaleTimeString()}
+              {t('common.updated', { defaultValue: 'Updated' })}: {new Date(exchangeData.lastUpdated).toLocaleTimeString()}
             </span>
           </div>
         </div>

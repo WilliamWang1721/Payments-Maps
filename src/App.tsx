@@ -3,13 +3,12 @@ import { RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { router } from '@/router'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useVersionCheck } from '@/hooks/useVersionCheck'
-import VersionUpdateModal from '@/components/VersionUpdateModal'
 import { supabase, type User } from '@/lib/supabase'
+import usePersistedLanguage from '@/hooks/usePersistedLanguage'
 
 function App() {
   const { initialize, setUser } = useAuthStore()
-  const { showVersionModal, versionInfo, closeVersionModal } = useVersionCheck()
+  usePersistedLanguage()
 
   useEffect(() => {
     initialize()
@@ -53,16 +52,11 @@ function App() {
   return (
     <>
       <RouterProvider router={router} />
-      <Toaster 
+      <Toaster
         position="top-center"
         richColors
         closeButton
         duration={3000}
-      />
-      <VersionUpdateModal 
-        isOpen={showVersionModal}
-        onClose={closeVersionModal}
-        versionInfo={versionInfo}
       />
     </>
   )

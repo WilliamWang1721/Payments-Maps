@@ -3,19 +3,21 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 // 导入翻译文件
+import zh from '../locales/zh.json';
 import en from '../locales/en.json';
 import ru from '../locales/ru.json';
 import de from '../locales/de.json';
 
 // 支持的语言列表
 export const supportedLanguages = {
+  zh: '简体中文',
   en: 'English',
   ru: 'Русский',
   de: 'Deutsch'
 };
 
 // 默认语言
-export const defaultLanguage = 'en';
+export const defaultLanguage = 'zh';
 
 // 获取浏览器语言或从本地存储获取
 const getInitialLanguage = (): string => {
@@ -39,6 +41,7 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
+      zh: { translation: zh },
       en: { translation: en },
       ru: { translation: ru },
       de: { translation: de }
