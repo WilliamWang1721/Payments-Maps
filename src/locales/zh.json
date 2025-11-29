@@ -1742,9 +1742,64 @@
     "unread": "您有 {{count}} 条未读消息",
     "caughtUp": "暂无新的通知",
     "markAll": "全部标记为已读",
+    "markingAll": "标记中...",
+    "markAllSuccess": "已全部标记为已读",
+    "markAllError": "批量标记失败",
+    "markReadError": "标记已读失败",
+    "loadError": "加载通知失败",
+    "loading": "加载通知中...",
     "newSection": "最新",
     "earlierSection": "更早",
-    "empty": "暂无通知"
+    "empty": "暂无通知",
+    "markAsRead": "标记为已读",
+    "openLink": "打开相关链接",
+    "sentBy": "发送人",
+    "close": "关闭",
+    "audience": {
+      "all": "所有用户",
+      "role": "面向角色：{{role}}",
+      "roleShort": "指定角色",
+      "user": "指定用户"
+    },
+    "types": {
+      "message": "消息",
+      "promo": "公告",
+      "alert": "警报",
+      "success": "成功",
+      "system": "系统"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
+    },
+    "form": {
+      "admin": "管理员广播",
+      "title": "发送通知",
+      "subtitle": "向全体用户、指定角色或用户推送更新。",
+      "role": "当前角色：{{role}}",
+      "fields": {
+        "title": "标题",
+        "type": "类型",
+        "content": "正文",
+        "audience": "受众",
+        "role": "目标角色",
+        "email": "目标用户邮箱",
+        "link": "相关链接（可选）"
+      },
+      "placeholders": {
+        "title": "今晚维护窗口",
+        "content": "告诉用户需要注意的事项..."
+      },
+      "reset": "重置",
+      "send": "发送",
+      "sending": "发送中...",
+      "sent": "通知已发送",
+      "failed": "发送失败",
+      "required": "标题和正文不能为空",
+      "userRequired": "请填写目标用户邮箱"
+    }
   },
   "landingPage": {
     "title": "Payments Maps",
