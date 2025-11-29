@@ -1,13 +1,14 @@
-import { FormEvent, useMemo } from 'react'
-import { Eye, EyeOff, Languages, MapPin, Search, SlidersHorizontal } from 'lucide-react'
+import { useMemo } from 'react'
+import { Eye, EyeOff, Languages, MapPin, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { triggerTranslation } from '@/lib/translationTrigger'
+import GlobalSearchBar from './GlobalSearchBar'
 
 type ModernHeaderProps = {
   searchValue: string
   onSearchChange: (value: string) => void
-  onSearchSubmit: () => void
+  onSearchSubmit: (value?: string) => void
   onFilterClick: () => void
   onLocate: () => void
   locating: boolean
@@ -28,11 +29,6 @@ const ModernHeader = ({
   hideControls = false,
 }: ModernHeaderProps) => {
   const { t, i18n } = useTranslation()
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    onSearchSubmit()
-  }
 
   const greetingKey = useMemo(() => {
     const hour = new Date().getHours()
@@ -69,19 +65,18 @@ const ModernHeader = ({
             style={{ animationDelay: '0.3s' }}
           >
             <div className="flex items-center gap-2 sm:gap-3 w-full flex-nowrap sm:flex-wrap overflow-x-auto sm:overflow-visible no-scrollbar">
-              <form onSubmit={handleSubmit} className="relative group flex-1 min-w-[160px] sm:min-w-[220px]">
-                <Search
-                  className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 group-focus-within:text-accent-yellow transition-colors pointer-events-none"
-                  aria-hidden="true"
-                />
-                <input
-                  type="text"
+              <div className="flex-1 min-w-[240px]">
+                <GlobalSearchBar
                   value={searchValue}
-                  onChange={(event) => onSearchChange(event.target.value)}
-                  placeholder="Search merchants or locations..."
-                  className="bg-white dark:bg-slate-900 pl-10 pr-4 py-3 rounded-2xl text-sm w-full shadow-soft border border-transparent dark:border-slate-800 focus:border-accent-yellow/50 focus:outline-none focus:ring-4 focus:ring-accent-yellow/10 transition-all placeholder:text-gray-400 text-soft-black dark:text-gray-100"
+                  onChange={onSearchChange}
+                  onSubmit={(val) => {
+                    const next = typeof val === 'string' ? val : searchValue
+                    onSearchChange(next)
+                    onSearchSubmit(next)
+                  }}
+                  placeholder="全域搜索：商户 / 地址 / 坐标 / 收单机构 / 时间"
                 />
-              </form>
+              </div>
 
               <button
                 type="button"

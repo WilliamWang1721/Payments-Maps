@@ -84,6 +84,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
   const navigate = useNavigate()
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const markersRef = useRef<AMap.Marker[]>([])
+  const doubleClickHandlerRef = useRef<((e: any) => void) | null>(null)
   const [mapReady, setMapReady] = useState(false)
 
   const mapInstance = useMapStore((state) => state.mapInstance)
@@ -108,6 +109,27 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
           zoom: 12,
         })
 
+        // 禁用默认双击缩放，避免和快速添加位置的交互冲突
+        localMap.setStatus({ doubleClickZoom: false })
+
+        const handleDoubleClick = (e: any) => {
+          const lngLat = e?.lnglat
+          const lng = typeof lngLat?.getLng === 'function' ? lngLat.getLng() : lngLat?.lng
+          const lat = typeof lngLat?.getLat === 'function' ? lngLat.getLat() : lngLat?.lat
+
+          if (
+            typeof lng === 'number' &&
+            typeof lat === 'number' &&
+            Number.isFinite(lng) &&
+            Number.isFinite(lat)
+          ) {
+            navigate(`/app/add-pos?lat=${lat}&lng=${lng}`)
+          }
+        }
+
+        doubleClickHandlerRef.current = handleDoubleClick
+        localMap.on('dblclick', handleDoubleClick)
+
         setMapInstance(localMap)
         setMapReady(true)
 
@@ -129,8 +151,12 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       markersRef.current.forEach((marker) => marker.setMap(null))
       markersRef.current = []
       if (localMap) {
+        if (doubleClickHandlerRef.current) {
+          localMap.off('dblclick', doubleClickHandlerRef.current)
+        }
         localMap.destroy()
       }
+      doubleClickHandlerRef.current = null
       setMapInstance(null)
       setMapReady(false)
     }
@@ -170,9 +196,20 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       markers.push(marker)
     })
 
-    markersRef.current = markers
-    if (markers.length > 0) {
-      mapInstance.add(markers)
+    const overlays = markers.filter(Boolean)
+    markersRef.current = overlays
+
+    if (!mapInstance || typeof mapInstance.add !== 'function') {
+      console.warn('Map instance is unavailable or invalid, skip rendering markers')
+      return
+    }
+
+    if (overlays.length > 0) {
+      try {
+        mapInstance.add(overlays)
+      } catch (error) {
+        console.error('Failed to add markers to map:', error)
+      }
     }
   }, [mapInstance, posMachines, navigate, selectPOSMachine, showLabels])
 

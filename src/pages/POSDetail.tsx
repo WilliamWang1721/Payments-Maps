@@ -71,6 +71,7 @@ const POSDetail = () => {
   const [attempts, setAttempts] = useState<Attempt[]>([])
   const [loading, setLoading] = useState(true)
   const [isFavorite, setIsFavorite] = useState(false)
+  const [favoritesUnavailable, setFavoritesUnavailable] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [newReview, setNewReview] = useState({ rating: 5, comment: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
@@ -236,7 +237,7 @@ const POSDetail = () => {
   }
 
   const checkFavoriteStatus = async () => {
-    if (!user || !id) return
+    if (!user || !id || favoritesUnavailable) return
     
     try {
       // 从Supabase数据库查询用户收藏状态
@@ -247,10 +248,17 @@ const POSDetail = () => {
         .eq('pos_machine_id', id)
         .single()
       
-      if (error && error.code !== 'PGRST116') {
-        // PGRST116 表示没有找到记录，这是正常的
-        console.error('查询收藏状态失败:', error)
-        return
+      if (error) {
+        if (error.code === 'PGRST205' || error.code === '406') {
+          console.warn('收藏功能未启用或表不存在，已忽略:', error.message)
+          setFavoritesUnavailable(true)
+          return
+        }
+        if (error.code !== 'PGRST116') {
+          // PGRST116 表示没有找到记录，这是正常的
+          console.error('查询收藏状态失败:', error)
+          return
+        }
       }
       
       setIsFavorite(!!data)
@@ -284,7 +292,10 @@ const POSDetail = () => {
       return
     }
 
-    if (!id) return
+    if (!id || favoritesUnavailable) {
+      toast.error('收藏功能当前不可用')
+      return
+    }
 
     try {
       if (isFavorite) {
@@ -296,6 +307,11 @@ const POSDetail = () => {
           .eq('pos_machine_id', id)
         
         if (error) {
+          if (error.code === 'PGRST205' || error.code === '406') {
+            setFavoritesUnavailable(true)
+            toast.error('收藏功能当前不可用')
+            return
+          }
           console.error('取消收藏失败:', error)
           toast.error('取消收藏失败，请重试')
           return
@@ -313,6 +329,11 @@ const POSDetail = () => {
           })
         
         if (error) {
+          if (error.code === 'PGRST205' || error.code === '406') {
+            setFavoritesUnavailable(true)
+            toast.error('收藏功能当前不可用')
+            return
+          }
           console.error('添加收藏失败:', error)
           toast.error('添加收藏失败，请重试')
           return

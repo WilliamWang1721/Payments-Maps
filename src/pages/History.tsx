@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Star, Clock, Trash2 } from 'lucide-react'
-import { useAuthStore } from '@/stores/useAuthStore'
-import { supabase, type POSMachine } from '@/lib/supabase'
+import { Clock, MapPin, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { supabase } from '@/lib/supabase'
+import Loading from '@/components/ui/Loading'
 
 interface HistoryWithPOS {
   id: string
@@ -134,38 +135,45 @@ const History: React.FC = () => {
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusStyle = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-green-500'
+        return {
+          label: '正常运行',
+          badge: 'bg-green-50 text-green-700 border-green-100',
+          dot: 'bg-green-500'
+        }
       case 'inactive':
-        return 'bg-gray-500'
+        return {
+          label: '暂时不可用',
+          badge: 'bg-gray-50 text-gray-700 border-gray-100',
+          dot: 'bg-gray-500'
+        }
       case 'maintenance':
-        return 'bg-orange-500'
+        return {
+          label: '维修中',
+          badge: 'bg-orange-50 text-orange-700 border-orange-100',
+          dot: 'bg-orange-500'
+        }
       case 'disabled':
-        return 'bg-red-500'
+        return {
+          label: '已停用',
+          badge: 'bg-red-50 text-red-700 border-red-100',
+          dot: 'bg-red-500'
+        }
       default:
-        return 'bg-blue-500'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active':
-        return '正常运行'
-      case 'inactive':
-        return '暂时不可用'
-      case 'maintenance':
-        return '维修中'
-      case 'disabled':
-        return '已停用'
-      default:
-        return '未知状态'
+        return {
+          label: '未知状态',
+          badge: 'bg-blue-50 text-blue-700 border-blue-100',
+          dot: 'bg-blue-500'
+        }
     }
   }
 
   const formatVisitTime = (visitedAt: string) => {
     const date = new Date(visitedAt)
+    if (Number.isNaN(date.getTime())) return '未知时间'
+
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
@@ -183,153 +191,218 @@ const History: React.FC = () => {
     }
   }
 
+  const formatAbsoluteTime = (visitedAt: string) => {
+    const date = new Date(visitedAt)
+    if (Number.isNaN(date.getTime())) return '未知时间'
+
+    return date.toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="bg-white rounded-2xl shadow-soft border border-white/60 px-6 py-5 flex items-center gap-3">
+          <Loading text="正在加载浏览历史..." />
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate(-1)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-              </button>
-              <h1 className="text-xl font-semibold text-gray-900">浏览历史</h1>
-            </div>
-            {history.length > 0 && (
-              <button
-                onClick={() => setShowClearModal(true)}
-                className="flex items-center space-x-2 text-red-600 hover:text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>清空历史</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+  const validHistory = history.filter((item) => item.pos_machines)
+  const uniquePOSCount = new Set(history.map((item) => item.pos_id)).size
+  const latestVisitedText = history[0]?.visited_at ? formatAbsoluteTime(history[0].visited_at) : '暂无记录'
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {history.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="bg-white rounded-lg shadow-sm p-8">
-              <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">还没有浏览历史</h3>
-              <p className="text-gray-600 mb-6">访问POS机详情页后会自动记录浏览历史</p>
+  return (
+    <div className="space-y-6 pb-24">
+      <div className="bg-white rounded-[32px] shadow-soft border border-white/60 overflow-hidden animate-fade-in-up">
+        <div className="p-6 sm:p-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-gray-100">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-400">History</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-soft-black">浏览历史</h1>
+              <p className="text-sm text-gray-500">按最新访问排序，帮助你快速回到刚刚查看的地点。</p>
+            </div>
+          </div>
+
+          {history.length > 0 && (
+            <button
+              onClick={() => setShowClearModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:border-accent-yellow/50 hover:text-accent-yellow hover:shadow-soft transition-all bg-white"
+            >
+              <Trash2 className="w-4 h-4" />
+              清空历史
+            </button>
+          )}
+        </div>
+
+        <div className="px-6 sm:px-8 pb-8 pt-4 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-cream border border-white shadow-sm p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white shadow-soft flex items-center justify-center text-accent-yellow">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">总浏览次数</p>
+                <p className="text-xl font-bold text-soft-black">{history.length}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">独立地点</p>
+                <p className="text-xl font-bold text-soft-black">{uniquePOSCount}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-gradient-to-r from-accent-yellow/10 via-accent-purple/10 to-accent-salmon/10 border border-white shadow-sm p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white text-accent-purple flex items-center justify-center shadow-soft">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">最近一次</p>
+                <p className="text-sm font-semibold text-soft-black leading-tight">{latestVisitedText}</p>
+              </div>
+            </div>
+          </div>
+
+          {validHistory.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-blue-200 bg-cream px-8 py-12 text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-white shadow-soft flex items-center justify-center text-accent-yellow mx-auto">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-soft-black">还没有浏览历史</h3>
+                <p className="text-sm text-gray-500">访问 POS 机详情页后会自动记录浏览足迹。</p>
+              </div>
               <button
                 onClick={() => navigate('/app/map')}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-soft-black text-white hover:bg-accent-yellow transition-all shadow-soft text-sm font-semibold"
               >
-                去发现POS机
+                去发现 POS 机
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {history.map((historyItem) => {
-              const pos = historyItem.pos_machines
-              return (
-                <div key={historyItem.id} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
-                  <div className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        {/* Status */}
-                        <div className="flex items-center space-x-2 mb-3">
-                          <div className={`w-3 h-3 rounded-full ${getStatusColor(pos.status || 'active')}`}></div>
-                          <span className="text-sm text-gray-600">{getStatusText(pos.status || 'active')}</span>
+          ) : (
+            <div className="space-y-3">
+              {validHistory.map((historyItem, index) => {
+                const pos = historyItem.pos_machines
+                if (!pos) return null
+                const statusMeta = getStatusStyle(pos.status || 'active')
+
+                return (
+                  <article
+                    key={historyItem.id}
+                    className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-soft transition-all p-5 sm:p-6 group animate-fade-in-up"
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-100 to-transparent" aria-hidden="true" />
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-cream text-accent-yellow flex items-center justify-center shadow-inner">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          {formatVisitTime(historyItem.visited_at)}
+                        </span>
+                      </div>
+
+                      <div className="flex-1 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-lg font-semibold text-soft-black leading-tight">
+                              {pos.merchant_name}
+                            </h3>
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${statusMeta.badge}`}>
+                              <span className={`w-2 h-2 rounded-full ${statusMeta.dot}`} />
+                              {statusMeta.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-400 sm:ml-auto">
+                            <Clock className="w-3 h-3" />
+                            <span className="font-medium">{formatAbsoluteTime(historyItem.visited_at)}</span>
+                          </div>
                         </div>
 
-                        {/* POS Info */}
-                        <div className="mb-3">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                            {pos.merchant_name}
-                          </h3>
-                          <p className="text-gray-600 text-sm mb-1">
-                            <MapPin className="h-4 w-4 inline mr-1" />
-                            {pos.address}
-                          </p>
-                          {pos.basic_info?.model && (
-                            <p className="text-gray-600 text-sm">
-                              型号: {pos.basic_info.model}
-                            </p>
+                        <p className="text-sm text-gray-600 leading-relaxed flex items-start gap-2">
+                          <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                          {pos.address}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2">
+                          {pos.basic_info?.acquiring_institution && (
+                            <span className="px-3 py-1 rounded-full bg-cream border border-white text-xs font-medium text-soft-black shadow-sm">
+                              收单：{pos.basic_info.acquiring_institution}
+                            </span>
                           )}
-                        </div>
-
-                        {/* Basic Info and Visit Time */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            {pos.basic_info?.acquiring_institution && (
-                              <span className="text-sm text-gray-600">
-                                收单机构：{pos.basic_info.acquiring_institution}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-500">
-                            <Clock className="h-4 w-4 mr-1" />
-                            {formatVisitTime(historyItem.visited_at)}
-                          </div>
+                          {pos.basic_info?.model && (
+                            <span className="px-3 py-1 rounded-full bg-white border border-gray-100 text-xs text-gray-600 shadow-inner">
+                              型号：{pos.basic_info.model}
+                            </span>
+                          )}
+                          {pos.basic_info?.checkout_location && (
+                            <span className="px-3 py-1 rounded-full bg-white border border-gray-100 text-xs text-gray-600">
+                              {pos.basic_info.checkout_location}
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center space-x-2 ml-4">
+                      <div className="flex items-center gap-2 self-end sm:self-start">
                         <button
                           onClick={() => removeHistoryItem(historyItem.id, pos.merchant_name)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="h-11 w-11 rounded-xl border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all"
                           title="删除记录"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => navigate(`/app/pos/${pos.id}`)}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                          className="px-4 py-2.5 rounded-xl bg-soft-black text-white hover:bg-accent-yellow transition-all shadow-soft text-sm font-semibold"
                         >
                           查看详情
                         </button>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Clear All History Confirmation Modal */}
       {showClearModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">确认清空历史</h3>
-            <p className="text-gray-600 mb-6">
-              确定要清空所有浏览历史吗？此操作无法撤销。
-            </p>
-            <div className="flex space-x-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-soft border border-white/60 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-soft-black">确认清空历史</h3>
+                <p className="text-sm text-gray-500 mt-1">此操作无法撤销，将删除你的所有浏览足迹。</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowClearModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
                 disabled={clearing}
               >
-                取消
+                保留记录
               </button>
               <button
                 onClick={clearAllHistory}
                 disabled={clearing}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors shadow-soft disabled:opacity-60 text-sm font-semibold"
               >
                 {clearing ? '清空中...' : '确认清空'}
               </button>

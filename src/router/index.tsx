@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import React, { Suspense } from 'react'
+import RouteError from '@/components/RouteError'
 
 // Dynamically import pages
 const Home = React.lazy(() => import('@/pages/Home'))
@@ -39,10 +40,12 @@ const Loading = () => <div>Loading...</div>
 export const router = createBrowserRouter([
   {
     path: '/',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><LandingPage /></Suspense>,
   },
   {
     path: '/app',
+    errorElement: <RouteError />,
     element: (
       <ProtectedRoute>
         <Layout />
@@ -133,31 +136,38 @@ export const router = createBrowserRouter([
   },
   {
     path: '/onboarding',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><OnboardingFlow /></Suspense>,
   },
   // removed: /welcome route for SmartWelcome
   {
     path: '/login',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><Login /></Suspense>,
   },
   {
     path: '/auth/callback',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><AuthCallback /></Suspense>,
   },
   {
     path: '/auth/google/callback',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><GoogleCallback /></Suspense>,
   },
   {
     path: '/auth/github/callback',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><GitHubCallback /></Suspense>,
   },
   {
     path: '/auth/microsoft/callback',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><MicrosoftCallback /></Suspense>,
   },
   {
     path: '/auth/linuxdo/callback',
+    errorElement: <RouteError />,
     element: <Suspense fallback={<Loading />}><LinuxDOCallback /></Suspense>,
   },
   // {

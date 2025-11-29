@@ -1,11 +1,11 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Filter, MapPin, Star, Plus, CreditCard, Building2, Shield, Settings, Navigation, Calendar, MoreHorizontal, ArrowRight, Trash2, CheckSquare, Square } from 'lucide-react'
+import { Filter, MapPin, Star, Plus, Navigation, Calendar, MoreHorizontal, ArrowRight, Trash2, CheckSquare, Square } from 'lucide-react'
 import { useMapStore } from '@/stores/useMapStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import usePermissions from '@/hooks/usePermissions'
 import Button from '@/components/ui/Button'
-import AnimatedModal from '@/components/ui/AnimatedModal'
+import FilterPanel from '@/components/modern-dashboard/FilterPanel'
 import { AnimatedListItem } from '../components/AnimatedListItem'
 import { SkeletonCard } from '@/components/AnimatedLoading'
 import { supabase, type POSMachine } from '@/lib/supabase'
@@ -112,6 +112,7 @@ const List = () => {
     loadPOSMachines,
     setFilters,
     getCurrentLocation,
+    resetFilters,
   } = useMapStore()
   
   const { user } = useAuthStore()
@@ -289,6 +290,10 @@ const List = () => {
     return `${distance.toFixed(1)}km`
   }
 
+  const handleSearch = useCallback(() => {
+    loadPOSMachines().catch((error) => console.error('搜索 POS 机失败:', error))
+  }, [loadPOSMachines])
+
   useEffect(() => {
     const el = scrollContainerRef.current
     if (!el) return
@@ -307,7 +312,7 @@ const List = () => {
     }, 500) // 500ms防抖
     
     return () => clearTimeout(timeoutId)
-  }, [searchKeyword])
+  }, [searchKeyword, handleSearch])
 
   // 当列表长度变化，确保滚动条位置始终在有效范围内
   useEffect(() => {
@@ -869,474 +874,23 @@ const List = () => {
         </div>
       </div>
 
-      {/* 筛选弹窗 */}
-      <AnimatedModal
+      <FilterPanel
         isOpen={showFilters}
         onClose={() => setShowFilters(false)}
-        title="筛选条件"
-        size="lg"
-      >
-        <div className="space-y-6 max-h-96 overflow-y-auto">
-          {/* 支付方式筛选 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
-              支付方式
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsApplePay || false}
-                  onChange={(e) => setFilters({ supportsApplePay: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Apple Pay</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsGooglePay || false}
-                  onChange={(e) => setFilters({ supportsGooglePay: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Google Pay</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsContactless || false}
-                  onChange={(e) => setFilters({ supportsContactless: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">闪付支持</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsHCE || false}
-                  onChange={(e) => setFilters({ supportsHCE: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">HCE 模拟</span>
-              </label>
-            </div>
-          </div>
-          
-          {/* 卡组织筛选 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Building2 className="w-5 h-5 mr-2 text-green-600" />
-              卡组织支持
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsVisa || false}
-                  onChange={(e) => setFilters({ supportsVisa: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Visa</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsMastercard || false}
-                  onChange={(e) => setFilters({ supportsMastercard: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Mastercard</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsUnionPay || false}
-                  onChange={(e) => setFilters({ supportsUnionPay: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">银联</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsAmex || false}
-                  onChange={(e) => setFilters({ supportsAmex: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">American Express</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsJCB || false}
-                  onChange={(e) => setFilters({ supportsJCB: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">JCB</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsDiners || false}
-                  onChange={(e) => setFilters({ supportsDiners: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Diners Club</span>
-              </label>
-            </div>
-          </div>
-          
-          {/* 验证模式筛选 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Shield className="w-5 h-5 mr-2 text-purple-600" />
-              验证模式
-            </h3>
-            
-            <div className="grid grid-cols-1 gap-3">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsSmallAmountExemption || false}
-                  onChange={(e) => setFilters({ supportsSmallAmountExemption: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">小额免密</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsPinVerification || false}
-                  onChange={(e) => setFilters({ supportsPinVerification: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">PIN 验证</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsSignatureVerification || false}
-                  onChange={(e) => setFilters({ supportsSignatureVerification: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">签名验证</span>
-              </label>
-            </div>
-          </div>
-          
-          {/* 收单模式筛选 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Settings className="w-5 h-5 mr-2 text-orange-600" />
-              收单模式
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsDCC || false}
-                  onChange={(e) => setFilters({ supportsDCC: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">DCC 支持</span>
-              </label>
-              
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={filters.supportsEDC || false}
-                  onChange={(e) => setFilters({ supportsEDC: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">EDC 支持</span>
-              </label>
-            </div>
-          </div>
-          
-          {/* 其他筛选 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Filter className="w-5 h-5 mr-2 text-gray-600" />
-              其他条件
-            </h3>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  收单机构
-                </label>
-                <input
-                  type="text"
-                  value={filters.acquiringInstitution || ''}
-                  onChange={(e) => setFilters({ acquiringInstitution: e.target.value || undefined })}
-                  placeholder="输入收单机构名称"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              {/* 设备状态筛选 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  设备状态
-                </label>
-                <select
-                  value={filters.status || ''}
-                  onChange={(e) => setFilters({ status: e.target.value || undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">不限</option>
-                  <option value="active">正常运行</option>
-                  <option value="inactive">暂时不可用</option>
-                  <option value="maintenance">维修中</option>
-                  <option value="disabled">已停用</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  POS 机型号
-                </label>
-                <input
-                  type="text"
-                  value={filters.posModel || ''}
-                  onChange={(e) => setFilters({ posModel: e.target.value || undefined })}
-                  placeholder="输入POS机型号"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-          
-          {/* 高级筛选 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Star className="w-5 h-5 mr-2 text-yellow-600" />
-              高级筛选
-            </h3>
-            
-            <div className="space-y-4">
-              {/* 评分筛选 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  最低评分
-                </label>
-                <select
-                  value={filters.minRating || ''}
-                  onChange={(e) => setFilters({ minRating: e.target.value ? Number(e.target.value) : undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">不限</option>
-                  <option value="1">1星及以上</option>
-                  <option value="2">2星及以上</option>
-                  <option value="3">3星及以上</option>
-                  <option value="4">4星及以上</option>
-                  <option value="5">5星</option>
-                </select>
-              </div>
-              
-              {/* 距离筛选 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  最大距离
-                </label>
-                <select
-                  value={filters.maxDistance || ''}
-                  onChange={(e) => setFilters({ maxDistance: e.target.value ? Number(e.target.value) : undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">不限</option>
-                  <option value="0.5">500米内</option>
-                  <option value="1">1公里内</option>
-                  <option value="2">2公里内</option>
-                  <option value="5">5公里内</option>
-                </select>
-              </div>
-              
-              {/* 收银位置筛选 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  收银位置
-                </label>
-                <select
-                  value={filters.checkoutLocation || ''}
-                  onChange={(e) => setFilters({ checkoutLocation: e.target.value || undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">不限</option>
-                  <option value="自助收银">自助收银</option>
-                  <option value="人工收银">人工收银</option>
-                </select>
-              </div>
-              
-              {/* 商户类型筛选 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  商户类型
-                </label>
-                <input
-                  type="text"
-                  value={filters.merchantType || ''}
-                  onChange={(e) => setFilters({ merchantType: e.target.value || undefined })}
-                  placeholder="输入商户类型"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              {/* 最低免密金额筛选 */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    最小免密金额
-                  </label>
-                  <input
-                    type="number"
-                    value={filters.minAmountNoPin || ''}
-                    onChange={(e) => setFilters({ minAmountNoPin: e.target.value ? Number(e.target.value) : undefined })}
-                    placeholder="最小金额"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    最大免密金额
-                  </label>
-                  <input
-                    type="number"
-                    value={filters.maxAmountNoPin || ''}
-                    onChange={(e) => setFilters({ maxAmountNoPin: e.target.value ? Number(e.target.value) : undefined })}
-                    placeholder="最大金额"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-              
-              {/* 其他筛选选项 */}
-              <div className="space-y-3">
-                <label className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={filters.hasRemarks || false}
-                    onChange={(e) => setFilters({ hasRemarks: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">有备注信息</span>
-                </label>
-                
-                <label className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={filters.hasReviews || false}
-                    onChange={(e) => setFilters({ hasReviews: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">有评价</span>
-                </label>
-              </div>
-              
-              {/* 创建时间筛选 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  创建时间
-                </label>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">开始日期</label>
-                      <input
-                        type="date"
-                        value={filters.createdAfter || ''}
-                        onChange={(e) => setFilters({ createdAfter: e.target.value || undefined })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">结束日期</label>
-                      <input
-                        type="date"
-                        value={filters.createdBefore || ''}
-                        onChange={(e) => setFilters({ createdBefore: e.target.value || undefined })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const oneWeekAgo = new Date()
-                        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-                        setFilters({ createdAfter: oneWeekAgo.toISOString().split('T')[0] })
-                      }}
-                      className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition-colors"
-                    >
-                      最近一周
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const oneMonthAgo = new Date()
-                        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
-                        setFilters({ createdAfter: oneMonthAgo.toISOString().split('T')[0] })
-                      }}
-                      className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition-colors"
-                    >
-                      最近一个月
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const threeMonthsAgo = new Date()
-                        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
-                        setFilters({ createdAfter: threeMonthsAgo.toISOString().split('T')[0] })
-                      }}
-                      className="px-3 py-1 text-xs bg-purple-100 text-purple-700 rounded-full hover:bg-purple-200 transition-colors"
-                    >
-                      最近三个月
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <Button
-              onClick={() => {
-                setFilters({})
-                setShowFilters(false)
-                loadPOSMachines()
-              }}
-              variant="outline"
-              className="flex-1"
-            >
-              重置
-            </Button>
-            <Button
-              onClick={() => {
-                setShowFilters(false)
-                loadPOSMachines()
-              }}
-              className="flex-1"
-            >
-              应用筛选
-            </Button>
-          </div>
-        </div>
-      </AnimatedModal>
+        filters={filters}
+        setFilters={setFilters}
+        onReset={() => {
+          resetFilters()
+          loadPOSMachines()
+            .catch((error) => console.error('重置筛选失败:', error))
+          setShowFilters(false)
+        }}
+        onApply={() => {
+          loadPOSMachines()
+            .catch((error) => console.error('应用筛选失败:', error))
+          setShowFilters(false)
+        }}
+      />
     </div>
   )
 
