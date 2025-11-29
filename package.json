@@ -15,6 +15,7 @@
     "@simplewebauthn/server": "^9.0.1",
     "@supabase/supabase-js": "^2.39.0",
     "clsx": "^2.1.1",
+    "pg": "^8.13.1",
     "framer-motion": "^12.23.12",
     "html2canvas": "^1.4.1",
     "i18next": "^25.4.0",

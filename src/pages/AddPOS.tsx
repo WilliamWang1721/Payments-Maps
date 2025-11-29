@@ -9,6 +9,7 @@ import {
   CreditCard,
   HelpCircle,
   MapPin,
+  Loader2,
   Smartphone,
   Trash2,
   X,
@@ -21,6 +22,7 @@ import BrandSelector from '@/components/BrandSelector'
 import SystemSelect from '@/components/ui/SystemSelect'
 import SimpleMapPicker from '@/components/SimpleMapPicker'
 import { CARD_NETWORKS } from '@/lib/cardNetworks'
+import { locationUtils } from '@/lib/amap'
 import { FeeType, FeesConfiguration, DEFAULT_FEES_CONFIG, CardNetworkFee } from '@/types/fees'
 import { formatFeeDisplay } from '@/utils/feeUtils'
 import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
@@ -151,6 +153,9 @@ const ADD_POS_TEXTS = {
   addLinkButton: '添加链接',
   submitButton: '提交',
   backButton: '返回',
+  mapPrefillNotice: '已根据地图选定坐标，无需再次选择，直接填写表单即可',
+  mapPrefillAddressLoading: '正在根据坐标解析地址…',
+  mapPrefillAddressFailed: '自动获取地址失败，请手动填写地址',
 } as const
 
 const tapToThreeState = (state: TapState): ThreeStateValue => {
@@ -187,6 +192,8 @@ const AddPOS = () => {
   const [activeCvmTab, setActiveCvmTab] = useState<CvmTab>('noPin')
   const [cardNetworkStates, setCardNetworkStates] = useState<Partial<Record<SchemeID, ThreeStateValue>>>({})
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+  const [prefilledFromQuery, setPrefilledFromQuery] = useState(false)
+  const [isPrefillAddressLoading, setIsPrefillAddressLoading] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
@@ -254,6 +261,64 @@ const AddPOS = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const latParam = searchParams.get('lat')
+    const lngParam = searchParams.get('lng')
+    const addressFromQuery = searchParams.get('address')
+    const hasDraft = Boolean(searchParams.get('draftId'))
+    let cancelled = false
+
+    if (prefilledFromQuery || hasDraft) return
+    if (!latParam || !lngParam) return
+
+    const lat = Number(latParam)
+    const lng = Number(lngParam)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    const fallbackAddress = addressFromQuery || `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+
+    setPrefilledFromQuery(true)
+    setFormData((prev) => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      address: prev.address || fallbackAddress,
+    }))
+    toast.success(uiText.mapPrefillNotice)
+    setIsPrefillAddressLoading(true)
+
+    // 尝试反查地址，提升表单自动填充体验
+    locationUtils
+      .getAddress(lng, lat)
+      .then((resolved) => {
+        if (cancelled || !resolved) return
+        setFormData((prev) => {
+          if (prev.latitude !== lat || prev.longitude !== lng) {
+            return prev
+          }
+          return {
+            ...prev,
+            address:
+              prev.address && prev.address !== fallbackAddress ? prev.address : resolved || fallbackAddress,
+          }
+        })
+      })
+      .catch((error) => {
+        console.warn('[AddPOS] 解析地址失败:', error)
+        if (!cancelled) {
+          toast.error(uiText.mapPrefillAddressFailed)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPrefillAddressLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams, prefilledFromQuery, uiText.mapPrefillAddressFailed, uiText.mapPrefillNotice])
 
   useEffect(() => {
     const supported = formData.basic_info.supported_card_networks || []
@@ -351,6 +416,8 @@ const AddPOS = () => {
   }
 
   const handleLocationConfirm = (latitude: number, longitude: number, address?: string) => {
+    setPrefilledFromQuery(false)
+    setIsPrefillAddressLoading(false)
     setFormData((prev) => ({
       ...prev,
       latitude,
@@ -623,6 +690,21 @@ const AddPOS = () => {
           <MapPin className="w-4 h-4" />
           {formData.latitude && formData.longitude ? uiText.reselectLocationButton : uiText.pickLocationButton}
         </button>
+
+        {prefilledFromQuery && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+            <CheckCircle className="w-4 h-4 mt-[2px] text-blue-600" />
+            <div className="space-y-1">
+              <div className="font-semibold">{uiText.mapPrefillNotice}</div>
+              {isPrefillAddressLoading && (
+                <div className="flex items-center gap-2 text-[11px] text-blue-700">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>{uiText.mapPrefillAddressLoading}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
       </div>
 

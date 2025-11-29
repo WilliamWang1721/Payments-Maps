@@ -2,8 +2,9 @@ import { create } from 'zustand'
 import { type POSMachine, supabase } from '@/lib/supabase'
 import { locationUtils } from '@/lib/amap'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { parseSearchInput, type GlobalSearchQuery } from '@/utils/searchParser'
 
-interface MapState {
+export interface MapState {
   // 地图状态
   mapInstance: AMap.Map | null
   currentLocation: { longitude: number; latitude: number } | null
@@ -18,6 +19,7 @@ interface MapState {
   
   // 筛选和搜索
   searchKeyword: string
+  searchQuery: GlobalSearchQuery
   filters: {
     // 支付方式筛选
     supportsApplePay?: boolean
@@ -85,7 +87,9 @@ interface MapState {
   loadPOSMachines: (bounds?: { northeast: [number, number]; southwest: [number, number] }) => Promise<void>
   selectPOSMachine: (posMachine: POSMachine | null) => void
   setSearchKeyword: (keyword: string) => void
+  setSearchQuery: (query: GlobalSearchQuery) => void
   setFilters: (filters: Partial<MapState['filters']>) => void
+  resetFilters: () => void
   setViewMode: (mode: 'map' | 'list') => void
   addPOSMachine: (posMachine: Omit<POSMachine, 'id' | 'created_at' | 'updated_at'>) => Promise<POSMachine>
   updatePOSMachine: (id: string, updates: Partial<POSMachine>) => Promise<void>
@@ -101,6 +105,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   loading: false,
   locationLoading: false,
   searchKeyword: '',
+  searchQuery: { raw: '' },
   filters: {},
   viewMode: 'map',
 
@@ -132,7 +137,9 @@ export const useMapStore = create<MapState>((set, get) => ({
     try {
       set({ loading: true })
       
-      const { searchKeyword, filters } = get()
+      const { searchKeyword, searchQuery, filters } = get()
+      const parsedQuery = searchQuery?.raw ? searchQuery : parseSearchInput(searchKeyword)
+      const keyword = parsedQuery.keyword || (searchKeyword?.trim() || '')
       
       // 构建查询
       let query = supabase
@@ -140,18 +147,42 @@ export const useMapStore = create<MapState>((set, get) => ({
         .select('*')
       
       // 如果有搜索关键词，添加搜索条件（支持中文、英文、拼音）
-      if (searchKeyword && searchKeyword.trim()) {
-        const keyword = searchKeyword.trim().toLowerCase()
+      if (keyword) {
+        const normalized = keyword.toLowerCase()
         query = query.or(
-          `merchant_name.ilike.%${keyword}%,` +
-          `merchant_name_en.ilike.%${keyword}%,` +
-          `merchant_name_pinyin.ilike.%${keyword}%,` +
-          `address.ilike.%${keyword}%,` +
-          `address_en.ilike.%${keyword}%,` +
-          `address_pinyin.ilike.%${keyword}%,` +
-          `basic_info->>model.ilike.%${keyword}%,` +
-          `basic_info->>acquiring_institution.ilike.%${keyword}%`
+          `merchant_name.ilike.%${normalized}%,` +
+          `merchant_name_en.ilike.%${normalized}%,` +
+          `merchant_name_pinyin.ilike.%${normalized}%,` +
+          `address.ilike.%${normalized}%,` +
+          `address_en.ilike.%${normalized}%,` +
+          `address_pinyin.ilike.%${normalized}%,` +
+          `basic_info->>model.ilike.%${normalized}%,` +
+          `basic_info->>acquiring_institution.ilike.%${normalized}%`
         )
+      }
+
+      // 经纬度搜索（近似范围）
+      if (parsedQuery.coordinates) {
+        const { lat, lng } = parsedQuery.coordinates
+        const delta = 0.02 // 约 2km 范围
+        query = query
+          .gte('latitude', lat - delta)
+          .lte('latitude', lat + delta)
+          .gte('longitude', lng - delta)
+          .lte('longitude', lng + delta)
+      }
+
+      // 收单机构
+      if (parsedQuery.acquiringInstitution) {
+        query = query.ilike('basic_info->>acquiring_institution', `%${parsedQuery.acquiringInstitution}%`)
+      }
+
+      // 添加时间
+      if (parsedQuery.dateRange?.from) {
+        query = query.gte('created_at', parsedQuery.dateRange.from)
+      }
+      if (parsedQuery.dateRange?.to) {
+        query = query.lte('created_at', parsedQuery.dateRange.to)
       }
       
       // 添加筛选条件
@@ -348,11 +379,20 @@ export const useMapStore = create<MapState>((set, get) => ({
   },
 
   setSearchKeyword: (keyword) => {
-    set({ searchKeyword: keyword })
+    const parsed = parseSearchInput(keyword || '')
+    set({ searchKeyword: keyword, searchQuery: parsed })
+  },
+
+  setSearchQuery: (query) => {
+    set({ searchQuery: query, searchKeyword: query.raw || '' })
   },
 
   setFilters: (newFilters) => {
     set(state => ({ filters: { ...state.filters, ...newFilters } }))
+  },
+
+  resetFilters: () => {
+    set({ filters: {} })
   },
 
   setViewMode: (mode) => {
