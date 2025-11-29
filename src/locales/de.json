@@ -321,9 +321,64 @@
     "unread": "Sie haben {{count}} ungelesene Nachrichten",
     "caughtUp": "Alle Benachrichtigungen gelesen",
     "markAll": "Alle als gelesen markieren",
+    "markingAll": "Wird markiert...",
+    "markAllSuccess": "Alle Benachrichtigungen wurden als gelesen markiert",
+    "markAllError": "Konnte nicht alle als gelesen markieren",
+    "markReadError": "Konnte nicht als gelesen markieren",
+    "loadError": "Benachrichtigungen konnten nicht geladen werden",
+    "loading": "Lade Benachrichtigungen...",
     "newSection": "Neu",
     "earlierSection": "Früher",
-    "empty": "Keine Benachrichtigungen vorhanden"
+    "empty": "Keine Benachrichtigungen vorhanden",
+    "markAsRead": "Als gelesen markieren",
+    "openLink": "Zugehörigen Link öffnen",
+    "sentBy": "Gesendet von",
+    "close": "Schließen",
+    "audience": {
+      "all": "Alle Nutzer",
+      "role": "Rolle: {{role}}",
+      "roleShort": "Bestimmte Rolle",
+      "user": "Bestimmter Nutzer"
+    },
+    "types": {
+      "message": "Nachricht",
+      "promo": "Ankündigung",
+      "alert": "Alarm",
+      "success": "Erfolg",
+      "system": "System"
+    },
+    "time": {
+      "justNow": "Gerade eben",
+      "minutesAgo": "Vor {{count}} Minuten",
+      "hoursAgo": "Vor {{count}} Stunden",
+      "daysAgo": "Vor {{count}} Tagen"
+    },
+    "form": {
+      "admin": "Admin-Broadcast",
+      "title": "Benachrichtigung senden",
+      "subtitle": "Updates an alle, eine Rolle oder einen bestimmten Account schicken.",
+      "role": "Rolle: {{role}}",
+      "fields": {
+        "title": "Titel",
+        "type": "Typ",
+        "content": "Inhalt",
+        "audience": "Zielgruppe",
+        "role": "Zielrolle",
+        "email": "E-Mail des Nutzers",
+        "link": "Relevanter Link (optional)"
+      },
+      "placeholders": {
+        "title": "Wartungsfenster heute Abend",
+        "content": "Beschreibe, was Nutzer wissen müssen..."
+      },
+      "reset": "Zurücksetzen",
+      "send": "Senden",
+      "sending": "Senden...",
+      "sent": "Benachrichtigung gesendet",
+      "failed": "Senden fehlgeschlagen",
+      "required": "Titel und Inhalt sind erforderlich",
+      "userRequired": "E-Mail des Zielnutzers ist erforderlich"
+    }
   },
   "dashboardHeader": {
     "greeting": {

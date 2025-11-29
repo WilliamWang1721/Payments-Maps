@@ -1398,9 +1398,64 @@
     "unread": "You have {{count}} unread messages",
     "caughtUp": "You're all caught up",
     "markAll": "Mark all as read",
+    "markingAll": "Marking...",
+    "markAllSuccess": "All notifications marked as read",
+    "markAllError": "Failed to mark all as read",
+    "markReadError": "Failed to mark as read",
+    "loadError": "Failed to load notifications",
+    "loading": "Loading notifications...",
     "newSection": "New",
     "earlierSection": "Earlier",
-    "empty": "No notifications at the moment"
+    "empty": "No notifications at the moment",
+    "markAsRead": "Mark as read",
+    "openLink": "Open related link",
+    "sentBy": "Sent by",
+    "close": "Close",
+    "audience": {
+      "all": "All users",
+      "role": "Role: {{role}}",
+      "roleShort": "Specific role",
+      "user": "Specific user"
+    },
+    "types": {
+      "message": "Message",
+      "promo": "Announcement",
+      "alert": "Alert",
+      "success": "Success",
+      "system": "System"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}} minutes ago",
+      "hoursAgo": "{{count}} hours ago",
+      "daysAgo": "{{count}} days ago"
+    },
+    "form": {
+      "admin": "Admin broadcast",
+      "title": "Send a notification",
+      "subtitle": "Push updates to all users, a role, or a specific account.",
+      "role": "Role: {{role}}",
+      "fields": {
+        "title": "Title",
+        "type": "Type",
+        "content": "Content",
+        "audience": "Audience",
+        "role": "Target role",
+        "email": "Target user email",
+        "link": "Related link (optional)"
+      },
+      "placeholders": {
+        "title": "Maintenance window tonight",
+        "content": "Describe what users need to know..."
+      },
+      "reset": "Reset",
+      "send": "Send",
+      "sending": "Sending...",
+      "sent": "Notification sent",
+      "failed": "Failed to send notification",
+      "required": "Title and content are required",
+      "userRequired": "Target user email is required"
+    }
   },
   "errors": {
     "generic": "Something went wrong",
