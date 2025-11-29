@@ -146,16 +146,12 @@ export const useMapStore = create<MapState>((set, get) => ({
         .from('pos_machines')
         .select('*')
       
-      // 如果有搜索关键词，添加搜索条件（支持中文、英文、拼音）
+      // 如果有搜索关键词，添加搜索条件（仅使用存在的字段，避免 400）
       if (keyword) {
         const normalized = keyword.toLowerCase()
         query = query.or(
           `merchant_name.ilike.%${normalized}%,` +
-          `merchant_name_en.ilike.%${normalized}%,` +
-          `merchant_name_pinyin.ilike.%${normalized}%,` +
           `address.ilike.%${normalized}%,` +
-          `address_en.ilike.%${normalized}%,` +
-          `address_pinyin.ilike.%${normalized}%,` +
           `basic_info->>model.ilike.%${normalized}%,` +
           `basic_info->>acquiring_institution.ilike.%${normalized}%`
         )
