@@ -51,9 +51,9 @@
 
 ```env
 # Google OAuth Configuration
-VITE_GOOGLE_CLIENT_ID=你的真实客户端ID.apps.googleusercontent.com
-VITE_GOOGLE_CLIENT_SECRET=你的真实客户端密钥
-VITE_GOOGLE_API_KEY=AIzaSyAnIznwe2grePNXQw8amIJ2cWdRB96o2IM
+VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_SECRET=your_google_client_secret
+VITE_GOOGLE_API_KEY=your_google_api_key
 ```
 
 ### 8. 重启开发服务器
@@ -72,7 +72,7 @@ npm run dev
 - 确保重定向URI完全匹配（包括协议、域名、端口、路径）
 - 开发环境使用`http://localhost:5173`
 - 生产环境需要使用实际的域名和HTTPS
-- API密钥已经正确配置为：`AIzaSyAnIznwe2grePNXQw8amIJ2cWdRB96o2IM`
+- 不要将真实的客户端ID/客户端密钥/API Key提交到代码仓库，始终使用占位符或环境变量管理
 
 ## 常见问题
 
