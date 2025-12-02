@@ -1,0 +1,12 @@
+platform :ios, '17.0'
+use_frameworks!
+
+source 'https://github.com/CocoaPods/Specs.git'
+
+# CocoaPods dependencies for Payments Maps iOS app
+
+target 'Payments Maps' do
+  pod 'AMap3DMap'
+  pod 'AMapSearch'
+  pod 'AMapLocation'
+end

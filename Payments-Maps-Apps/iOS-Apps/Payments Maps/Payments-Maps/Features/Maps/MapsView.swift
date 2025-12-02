@@ -1,68 +1,189 @@
 import SwiftUI
 import MapKit
+import UIKit
+
+private enum TopContext: String, CaseIterable {
+    case paymentsMaps = "Payments Maps"
+    case paymentsCounter = "Payments Counter"
+}
+
+private enum MapFilter: String, CaseIterable {
+    case all = "All merchants"
+    case favorites = "Favorites only"
+}
 
 struct MapsView: View {
     @StateObject private var viewModel = MapViewModel()
+    @State private var showMerchantNames = true      // 控制“是否显示商户名”开关
+    @State private var selectedMapFilter: MapFilter = .all
+    @State private var selectedContext: TopContext = .paymentsMaps
+    @State private var searchText = ""
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            TabView(selection: $viewModel.selectedTab) {
-                // MARK: Maps Tab
-                NavigationStack {
-                    MapContent(viewModel: viewModel)
-                        .toolbar(.hidden, for: .navigationBar)
-                }
-                .tabItem {
-                    Label("Maps", systemImage: MapTab.maps.systemImage)
-                }
-                .tag(MapTab.maps)
-                
-                // MARK: Lists Tab
-                NavigationStack {
-                    placeholderTab(title: "Lists", systemImage: MapTab.lists.systemImage)
-                        .navigationTitle("Lists")
-                        .toolbar(.hidden, for: .navigationBar)
-                }
-                .tabItem {
-                    Label("Lists", systemImage: MapTab.lists.systemImage)
-                }
-                .tag(MapTab.lists)
-                
-                // MARK: Brand Tab
-                NavigationStack {
-                    placeholderTab(title: "Brand", systemImage: MapTab.brand.systemImage)
-                        .navigationTitle("Brand")
-                        .toolbar(.hidden, for: .navigationBar)
-                }
-                .tabItem {
-                    Label("Brand", systemImage: MapTab.brand.systemImage)
-                }
-                .tag(MapTab.brand)
-                
-                // MARK: My Tab
-                NavigationStack {
-                    placeholderTab(title: "My", systemImage: MapTab.my.systemImage)
-                        .navigationTitle("My")
-                        .toolbar(.hidden, for: .navigationBar)
-                }
-                .tabItem {
-                    Label("My", systemImage: MapTab.my.systemImage)
-                }
-                .tag(MapTab.my)
-            }
-            .background(Color(.systemBackground))
+        TabView(selection: $viewModel.selectedTab) {
             
-            // 自定义液态玻璃底部菜单栏
-            GlassTabBar(selection: $viewModel.selectedTab)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+            // MARK: - Maps tab
+            Tab("Maps",
+                systemImage: MapTab.maps.systemImage,
+                value: MapTab.maps) {
+                NavigationStack {
+                    MapContent(viewModel: viewModel, selectedContext: selectedContext)
+                        .navigationTitle("")
+                        .toolbarTitleDisplayMode(.inline)
+                        .toolbar {
+                            // 左侧：模式切换下拉菜单
+                            ToolbarItem(placement: .topBarLeading) {
+                                Menu {
+                                    Section {
+                                        ForEach(TopContext.allCases, id: \.self) { context in
+                                            Button {
+                                                selectedContext = context
+                                                // TODO: 可在此同步到 viewModel
+                                            } label: {
+                                                Label(
+                                                    context.rawValue,
+                                                    systemImage: selectedContext == context
+                                                        ? "checkmark.circle.fill"
+                                                        : "circle"
+                                                )
+                                            }
+                                        }
+                                    }
+                                    
+                                    Section {
+                                        Button {
+                                            if let url = URL(string: "https://your-web-url-here") {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        } label: {
+                                            Label("跳转到 Web", systemImage: "safari")
+                                        }
+                                        
+                                        Button {
+                                            if let url = URL(string: "https://your-cashback-url-here") {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        } label: {
+                                            Label("跳转到 Cashback Counter", systemImage: "creditcard")
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Text(selectedContext.rawValue)
+                                            .font(.headline.weight(.semibold))
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                }
+                            }
+                            
+                            // 右侧：＋ 按钮 + 更多下拉菜单
+                            ToolbarItem(placement: .topBarTrailing) {
+                                HStack(spacing: 24) {
+                                    ToolbarIconButton(systemName: "plus") {
+                                        print("Add tapped")
+                                        // TODO: 添加 action
+                                    }
+                                    
+                                    Menu {
+                                        // 子菜单：Filter ▸
+                                        Menu {
+                                            ForEach(MapFilter.allCases, id: \.self) { filter in
+                                                Button {
+                                                    selectedMapFilter = filter
+                                                } label: {
+                                                    Label(
+                                                        filter.rawValue,
+                                                        systemImage: selectedMapFilter == filter
+                                                            ? "checkmark.circle.fill"
+                                                        : "circle"
+                                                    )
+                                                }
+                                            }
+                                        } label: {
+                                            Label(
+                                                "Filter",
+                                                systemImage: selectedMapFilter == .all
+                                                    ? "line.3.horizontal.decrease.circle"
+                                                    : "line.3.horizontal.decrease.circle.fill"
+                                            )
+                                        }
+
+                                        Divider()
+
+                                        Button {
+                                            showMerchantNames.toggle()
+                                            // TODO: 同步状态给 viewModel，例如：
+                                            // viewModel.showMerchantNames = showMerchantNames
+                                        } label: {
+                                            Label(
+                                                "Show merchant names",
+                                                systemImage: showMerchantNames
+                                                    ? "checkmark.circle.fill"
+                                                    : "circle"
+                                            )
+                                        }
+                                    } label: {
+                                        Image(systemName: "ellipsis")
+                                            .font(.system(size: 20, weight: .medium))
+                                            .frame(width: 32, height: 32)
+                                            .contentShape(Rectangle())
+                                    }
+                                }
+                                .labelStyle(.iconOnly)
+                                .padding(.trailing, 4)
+                                .padding(.vertical, 2)
+                            }
+                        }
+                }
+            }
+            
+            // MARK: - Lists tab
+            Tab("Lists",
+                systemImage: MapTab.lists.systemImage,
+                value: MapTab.lists) {
+                NavigationStack {
+                    ListsView(viewModel: viewModel)
+                }
+            }
+            
+            // MARK: - Brand tab
+            Tab("Brand",
+                systemImage: MapTab.brand.systemImage,
+                value: MapTab.brand) {
+                NavigationStack {
+                    placeholderTab(title: "Brand",
+                                   systemImage: MapTab.brand.systemImage)
+                        .navigationTitle("Brand")
+                }
+            }
+            
+            // MARK: - My tab
+            Tab("My",
+                systemImage: MapTab.my.systemImage,
+                value: MapTab.my) {
+                NavigationStack {
+                    placeholderTab(title: "My",
+                                   systemImage: MapTab.my.systemImage)
+                        .navigationTitle("My")
+                }
+            }
+            
+            // MARK: - Search tab（iOS 18+ 搜索角色）
+            if #available(iOS 26.0, *) {
+                Tab(value: MapTab.search, role: .search) {
+                    NavigationStack {
+                        SearchContent(searchText: $searchText)
+                            .navigationTitle("Search")
+                    }
+                }
+            }
         }
-        // 隐藏系统 TabBar，只用自定义玻璃 TabBar
-        .toolbar(.hidden, for: .tabBar)
+        .background(Color(.systemBackground))
     }
 }
 
-// MARK: - 占位 Tab 内容（Lists / Brand / My）
+// MARK: - 其他 Tab 的占位页面
 
 private func placeholderTab(title: String, systemImage: String) -> some View {
     VStack {
@@ -72,148 +193,32 @@ private func placeholderTab(title: String, systemImage: String) -> some View {
             .foregroundStyle(.secondary)
         Spacer()
     }
+    .toolbar(.hidden, for: .navigationBar)
 }
 
-// MARK: - Map 内容
+// MARK: - 地图页面（无蒙版）
 
 private struct MapContent: View {
     @ObservedObject var viewModel: MapViewModel
+    let selectedContext: TopContext
+    @Namespace private var mapScope          // ✅ 用于把 Map 和 控件 绑在一起
     
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             mapLayer
                 .ignoresSafeArea()
-                .safeAreaInset(edge: .top) {
-                    // 顶部渐变 + 左「添加/更多」、右「Payments Maps」
-                    ZStack(alignment: .bottom) {
-                        // 顶部轻微渐变：避免按钮太透明
-                        LinearGradient(
-                            colors: [
-                                Color(.systemBackground).opacity(0.98),
-                                Color(.systemBackground).opacity(0.80),
-                                Color(.systemBackground).opacity(0.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 120)
-                        .ignoresSafeArea(edges: .top)
-                        
-                        HStack(spacing: 16) {
-                            // 左：添加 + 更多 两个系统图标，液态玻璃胶囊
-                            HStack(spacing: 8) {
-                                Button {
-                                    // 添加 action
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .frame(width: 28, height: 28)
-                                        .contentShape(Circle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("添加")
-                                
-                                Button {
-                                    // 更多 action
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .frame(width: 28, height: 28)
-                                        .contentShape(Circle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("更多")
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(.ultraThinMaterial) // Liquid Glass
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(Color.white.opacity(0.45), lineWidth: 0.7)
-                            )
-                            .shadow(color: Color.black.opacity(0.25), radius: 12, y: 6)
-                            
-                            Spacer(minLength: 12)
-                            
-                            // 右：Payments Maps 文本，参考 Today 风格
-                            Button {
-                                // header 主动作，比如切换模式 / 过滤
-                            } label: {
-                                Text("Payments Maps")
-                                    .font(.system(.title3, design: .rounded).weight(.semibold))
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                            }
-                            .buttonStyle(.plain)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(.thinMaterial)
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(Color.white.opacity(0.6), lineWidth: 0.7)
-                            )
-                            .shadow(color: Color.black.opacity(0.2), radius: 14, y: 8)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                        .padding(.bottom, 10)
-                    }
-                }
-            
-            // 右下角浮动按钮：搜索 + 定位，竖排
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        // 搜索按钮
-                        Button {
-                            // 搜索 action
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 17, weight: .semibold))
-                                .padding(12)
-                                .background(.ultraThinMaterial, in: Circle())
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white.opacity(0.45), lineWidth: 0.7)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .shadow(color: Color.black.opacity(0.25), radius: 12, y: 6)
-                        .accessibilityLabel("搜索地点")
-                        
-                        // 定位按钮（系统 MapUserLocationButton）
-                        MapUserLocationButton()
-                            .labelStyle(.iconOnly)
-                            .tint(.primary)
-                            .controlSize(.large)
-                            .buttonBorderShape(.circle)
-                            .padding(10)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.45), lineWidth: 0.7)
-                            )
-                            .shadow(color: Color.black.opacity(0.25), radius: 12, y: 6)
-                            .accessibilityLabel("定位到当前位置")
-                    }
-                }
-                .padding(.trailing, 20)
-                .padding(.bottom, 28)
-            }
-            .allowsHitTesting(true)
         }
+        .mapScope(mapScope)                    // ✅ 把 scope 挂在容器上
     }
     
-    // MARK: Map 图层 + 注释气泡
-    
+    // MARK: Map 图层：绑定到同一个 scope
     private var mapLayer: some View {
-        Map(position: $viewModel.cameraPosition, interactionModes: [.all]) {
+        Map(
+            position: $viewModel.cameraPosition,
+            bounds: nil,
+            interactionModes: [.all],
+            scope: mapScope                     // ✅ 告诉 Map 自己属于哪个 scope
+        ) {
             ForEach(viewModel.filteredPoints) { point in
                 Annotation(point.name, coordinate: point.coordinate) {
                     VStack(spacing: 6) {
@@ -230,7 +235,6 @@ private struct MapContent: View {
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.35), lineWidth: 0.5)
                             }
-                        
                         Circle()
                             .fill(point.isFavorite ? PMColor.accentPurple : PMColor.accentBlue)
                             .frame(width: 12, height: 12)
@@ -238,91 +242,119 @@ private struct MapContent: View {
                     }
                 }
             }
-            // 自定义当前用户位置
             UserAnnotation()
         }
         .mapStyle(.standard(elevation: .realistic))
-        // 背景彩色光晕（保留你原来的氛围）
-        .overlay(alignment: .topTrailing) {
-            Circle()
-                .fill(PMColor.accentBlue.opacity(0.12))
-                .frame(width: 260)
-                .offset(x: 80, y: -220)
-                .blur(radius: 40)
+        .mapControls {
+            MapCompass()
         }
-        .overlay(alignment: .bottomLeading) {
-            Circle()
-                .fill(PMColor.accentPurple.opacity(0.10))
-                .frame(width: 220)
-                .offset(x: -160, y: 240)
-                .blur(radius: 42)
+        .overlay(alignment: .bottomTrailing) {
+            VStack(spacing: 12) {
+                MapCompass()
+                MapUserLocationButton()
+                    .labelStyle(.iconOnly)
+                    .controlSize(.large)
+                    .buttonBorderShape(.circle)
+                    .tint(.accentColor)
+            }
+            .padding(.trailing, 16)
+            .padding(.bottom, 40)
         }
     }
 }
 
-// MARK: - 液态玻璃底部 TabBar
-
-private struct GlassTabBar: View {
-    @Binding var selection: MapTab
-    
-    private let tabs: [MapTab] = [.maps, .lists, .brand, .my]
+/// 导航栏右上角用的 SF Symbol 按钮：扩大点击区域和与边框的距离
+private struct ToolbarIconButton: View {
+    let systemName: String
+    let action: () -> Void
     
     var body: some View {
-        HStack(spacing: 12) {
-            ForEach(tabs, id: \.self) { tab in
-                Button {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        selection = tab
-                    }
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: tab.systemImage)
-                            .imageScale(.medium)
-                            .symbolVariant(selection == tab ? .fill : .none)
-                        
-                        Text(title(for: tab))
-                            .font(.caption2.weight(selection == tab ? .semibold : .regular))
-                    }
-                    .foregroundStyle(selection == tab ? .primary : .secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(
-                                selection == tab
-                                ? Color.white.opacity(0.22)
-                                : Color.white.opacity(0.02)
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-            }
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 20, weight: .medium))
+                .frame(width: 32, height: 32, alignment: .center)
+                .contentShape(Rectangle())
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial) // 顶级 Liquid Glass
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.35), lineWidth: 0.7)
-        )
-        .shadow(color: Color.black.opacity(0.25), radius: 20, y: 12)
-    }
-    
-    private func title(for tab: MapTab) -> String {
-        switch tab {
-        case .maps:  return "Maps"
-        case .lists: return "Lists"
-        case .brand: return "Brand"
-        case .my:    return "My"
-        }
+        .buttonStyle(.plain)
     }
 }
 
-// MARK: - Canvas 预览
+// 单颗图标按钮：带 iOS 26 式点击动效（轻微缩放 + 变暗）
+
+private struct UltraGlassIconButton: View {
+    static let size: CGFloat = 26
+    let systemName: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: Self.size, height: Self.size)
+        }
+        .buttonStyle(.plain)
+        .background(
+            Circle()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.5), lineWidth: 0.6)
+                        .allowsHitTesting(false)
+                )
+            .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 5)
+        )
+    }
+}
+
+// MARK: - Search content with voice input
+
+private struct SearchContent: View {
+    @Binding var searchText: String
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            VoiceInputButton {
+                print("Voice input tapped")
+                // TODO: 接入语音识别后在此更新 searchText
+            }
+            
+            TextField("Search", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(.systemBackground))
+    }
+}
+
+private struct VoiceInputButton: View {
+    let action: () -> Void
+    @State private var isListening = false
+    
+    var body: some View {
+        Button {
+            isListening.toggle()
+            action()
+        } label: {
+            Label(isListening ? "正在语音输入…" : "语音键入",
+                  systemImage: isListening ? "mic.circle.fill" : "mic.circle")
+                .font(.subheadline.weight(.semibold))
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.clear, in: .capsule)
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Preview
 
 #Preview {
     MapsView()
