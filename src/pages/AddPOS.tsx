@@ -1262,9 +1262,8 @@ const AddPOS = () => {
   const goPrev = () => setStep((prev) => Math.max(prev - 1, 1))
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div className="flex-1 p-4 md:p-6 lg:p-8">
-        <div className="bg-white rounded-[32px] shadow-soft border border-white/50 flex flex-col relative overflow-hidden min-h-[600px]">
+    <div className="flex-1 p-4 sm:p-6 lg:p-8">
+      <div className="bg-white rounded-[32px] shadow-soft flex flex-col relative overflow-hidden min-h-[600px]">
           <div className="p-8 pb-4 border-b border-gray-50 z-10 bg-white">
             <div className="flex items-center justify-between">
               <button
@@ -1314,16 +1313,15 @@ const AddPOS = () => {
             </button>
           </div>
         </div>
-      </div>
 
-      <SimpleMapPicker
-        isOpen={showLocationModal}
-        onClose={() => setShowLocationModal(false)}
-        onConfirm={(lat, lng, address) => handleLocationConfirm(lat, lng, address)}
-        initialLat={formData.latitude || 39.9042}
-        initialLng={formData.longitude || 116.4074}
-      />
-    </div>
+        <SimpleMapPicker
+          isOpen={showLocationModal}
+          onClose={() => setShowLocationModal(false)}
+          onConfirm={(lat, lng, address) => handleLocationConfirm(lat, lng, address)}
+          initialLat={formData.latitude || 39.9042}
+          initialLng={formData.longitude || 116.4074}
+        />
+      </div>
   )
 }
 
