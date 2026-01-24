@@ -152,6 +152,7 @@ const ADD_POS_TEXTS = {
   customLinksTitle: '自定义链接',
   addLinkButton: '添加链接',
   submitButton: '提交',
+  nextButton: '下一步',
   backButton: '返回',
   mapPrefillNotice: '已根据地图选定坐标，无需再次选择，直接填写表单即可',
   mapPrefillAddressLoading: '正在根据坐标解析地址…',
@@ -1300,7 +1301,7 @@ const AddPOS = () => {
                 onClick={goPrev}
                 className="px-6 py-3 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-colors flex items-center gap-2"
               >
-                <ArrowLeft className="w-4 h-4" /> Back
+                <ArrowLeft className="w-4 h-4" /> {uiText.backButton}
               </button>
             ) : (
               <div />
@@ -1309,7 +1310,7 @@ const AddPOS = () => {
               onClick={step === 5 ? handleSubmit : goNext}
               className="px-8 py-3 rounded-2xl font-bold text-white bg-soft-black hover:bg-accent-yellow shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
             >
-              {step === 5 ? uiText.submitButton : 'Next'} <ChevronRight className="w-4 h-4" />
+              {step === 5 ? uiText.submitButton : uiText.nextButton} <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

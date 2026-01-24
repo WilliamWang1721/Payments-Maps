@@ -1295,7 +1295,10 @@
       "evening": "晚上好！",
       "night": "夜深了，注意休息！"
     },
-    "subtitle": "发现身边支持国际支付的商户与服务。"
+    "subtitle": "发现身边支持国际支付的商户与服务。",
+    "locate": "定位到我",
+    "location": "定位",
+    "locating": "定位中…"
   },
   "smartWelcome": {
       "title": "智能欢迎",

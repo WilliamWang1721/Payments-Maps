@@ -286,7 +286,10 @@
       "evening": "Good evening!",
       "night": "Good night!"
     },
-    "subtitle": "Discover local gems and card-friendly spots around you."
+    "subtitle": "Discover local gems and card-friendly spots around you.",
+    "locate": "Locate me",
+    "location": "Location",
+    "locating": "Locating…"
   },
   "onboarding": {
     "progress": {
