@@ -53,10 +53,22 @@ function App() {
     <>
       <RouterProvider router={router} />
       <Toaster
+        className="toast-notification app-toast-container"
         position="top-center"
-        richColors
         closeButton
-        duration={3000}
+        offset={16}
+        duration={3500}
+        toastOptions={{
+          unstyled: true,
+          classNames: {
+            toast: 'app-banner-toast',
+            title: 'app-banner-title',
+            description: 'app-banner-description',
+            closeButton: 'app-banner-close',
+            actionButton: 'app-banner-action',
+            cancelButton: 'app-banner-cancel',
+          },
+        }}
       />
     </>
   )
