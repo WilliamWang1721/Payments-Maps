@@ -86,8 +86,12 @@ const ModernHeader = ({
                 aria-label={t('dashboardHeader.locate', 'Locate me')}
               >
                 <MapPin className="w-4 h-4" />
-                <span className="hidden sm:inline">{locating ? 'Locating…' : 'Location'}</span>
-                <span className="sr-only sm:hidden">{locating ? 'Locating…' : 'Location'}</span>
+                <span className="hidden sm:inline">
+                  {locating ? t('dashboardHeader.locating', 'Locating…') : t('dashboardHeader.location', 'Location')}
+                </span>
+                <span className="sr-only sm:hidden">
+                  {locating ? t('dashboardHeader.locating', 'Locating…') : t('dashboardHeader.location', 'Location')}
+                </span>
               </button>
 
               <button
