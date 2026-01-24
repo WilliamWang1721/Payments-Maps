@@ -33,9 +33,6 @@ dist-ssr
 # Sensitive files
 *.csv
 *.sql
-*.JPG
-*.jpg
-*.png
 add_remarks_field.sql
 schema.sql
 
@@ -47,7 +44,6 @@ schema.sql
 # Local documentation
 LinuxDO推广说明.md
 上海地区接受刷卡的商户汇总.csv
-
 # Temporary and test files
 temp-*
 *temp*
