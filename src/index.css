@@ -150,3 +150,136 @@ input, textarea, select {
     radial-gradient(circle at 0% 50%, rgba(255, 255, 255, 0.3) 0, transparent 50%);
   background-size: 200% 200%;
 }
+
+/* Toast banner redesign */
+.app-toast-container {
+  padding: 0 1rem;
+  top: 16px !important;
+  left: 0;
+  right: 0;
+}
+
+.app-banner-toast {
+  --banner-accent: #3b82f6;
+  --banner-bg: rgba(255, 255, 255, 0.92);
+  --banner-border: rgba(148, 163, 184, 0.35);
+  --banner-text: #0f172a;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 0.75rem;
+  width: min(720px, 90vw);
+  padding: 0.85rem 1rem 0.85rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--banner-border);
+  background: var(--banner-bg);
+  box-shadow: 0 20px 45px -30px rgba(15, 23, 42, 0.5);
+  color: var(--banner-text);
+  backdrop-filter: blur(12px);
+}
+
+.app-banner-toast::before {
+  content: '';
+  position: absolute;
+  left: 0.45rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--banner-accent);
+}
+
+.app-banner-toast[data-type='success'] {
+  --banner-accent: #22c55e;
+  --banner-bg: rgba(236, 253, 245, 0.95);
+  --banner-border: rgba(34, 197, 94, 0.3);
+  --banner-text: #065f46;
+}
+
+.app-banner-toast[data-type='error'] {
+  --banner-accent: #ef4444;
+  --banner-bg: rgba(254, 242, 242, 0.95);
+  --banner-border: rgba(248, 113, 113, 0.35);
+  --banner-text: #7f1d1d;
+}
+
+.app-banner-toast[data-type='warning'] {
+  --banner-accent: #f59e0b;
+  --banner-bg: rgba(255, 247, 237, 0.96);
+  --banner-border: rgba(251, 191, 36, 0.4);
+  --banner-text: #92400e;
+}
+
+.app-banner-toast[data-type='info'] {
+  --banner-accent: #6366f1;
+  --banner-bg: rgba(238, 242, 255, 0.96);
+  --banner-border: rgba(129, 140, 248, 0.35);
+  --banner-text: #3730a3;
+}
+
+.app-banner-toast svg {
+  color: var(--banner-accent);
+}
+
+.app-banner-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.app-banner-description {
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--banner-text) 78%, transparent);
+}
+
+.app-banner-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--banner-accent) 12%, transparent);
+  color: var(--banner-text);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.app-banner-close:hover {
+  transform: scale(1.05);
+  border-color: var(--banner-border);
+}
+
+.app-banner-action,
+.app-banner-cancel {
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.app-banner-action {
+  background: var(--banner-accent);
+  color: white;
+}
+
+.app-banner-cancel {
+  background: transparent;
+  border: 1px solid var(--banner-border);
+  color: var(--banner-text);
+}
+
+@media (max-width: 640px) {
+  .app-banner-toast {
+    grid-template-columns: auto 1fr;
+    row-gap: 0.35rem;
+    border-radius: 20px;
+    padding: 0.85rem 0.85rem 0.85rem 1.1rem;
+  }
+
+  .app-banner-close {
+    grid-column: 2 / 3;
+    justify-self: end;
+  }
+}
