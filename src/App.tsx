@@ -57,6 +57,11 @@ function App() {
         richColors
         closeButton
         duration={3000}
+        offset={24}
+        toastOptions={{
+          className: 'toast-notification app-toast',
+          descriptionClassName: 'app-toast__description',
+        }}
       />
     </>
   )
