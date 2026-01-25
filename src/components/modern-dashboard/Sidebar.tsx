@@ -10,10 +10,10 @@ const ModernSidebar = () => {
   const logout = useAuthStore((state) => state.logout)
 
   const navItems = [
-    { icon: BookOpen, label: '卡册', to: '/app/card-album', delay: 0.25 },
     { icon: Map, label: 'Map', to: '/app/map', delay: 0.3 },
     { icon: List, label: 'List', to: '/app/list', delay: 0.4 },
-    { icon: Tag, label: 'Brands', to: '/app/brands', delay: 0.5 },
+    { icon: BookOpen, label: '卡册', to: '/app/card-album', delay: 0.5 },
+    { icon: Tag, label: 'Brands', to: '/app/brands', delay: 0.6 },
   ]
 
   const secondaryNav = [
