@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
+import { useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { usePermissions } from '@/hooks/usePermissions'
 import BrandSelector from '@/components/BrandSelector'
 import SystemSelect from '@/components/ui/SystemSelect'
@@ -183,6 +184,7 @@ const AddPOS = () => {
   const [searchParams] = useSearchParams()
   const { user: _ } = useAuthStore()
   const { addPOSMachine } = useMapStore()
+  const cardAlbumCards = useCardAlbumStore((state) => state.cards)
   const _permissions = usePermissions()
   const uiText = useAutoTranslatedTextMap(ADD_POS_TEXTS)
 
@@ -195,6 +197,15 @@ const AddPOS = () => {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
   const [prefilledFromQuery, setPrefilledFromQuery] = useState(false)
   const [isPrefillAddressLoading, setIsPrefillAddressLoading] = useState(false)
+
+  const availableAlbumCards = useMemo(
+    () =>
+      cardAlbumCards.map((card) => ({
+        ...card,
+        displayLabel: `${card.title} · ${card.issuer} · ${card.organization}`,
+      })),
+    [cardAlbumCards]
+  )
 
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
@@ -587,6 +598,13 @@ const AddPOS = () => {
     if (!card) return
     updateAttempt(index, 'card_name', card.name)
     updateAttempt(index, 'payment_method', card.method || '')
+  }
+
+  const applyAlbumCard = (index: number, cardIndex: number) => {
+    const card = availableAlbumCards[cardIndex]
+    if (!card) return
+    updateAttempt(index, 'card_name', `${card.title}（${card.issuer}）`)
+    updateAttempt(index, 'payment_method', card.organization)
   }
 
   const handleSaveDraft = () => {
@@ -1233,6 +1251,23 @@ const AddPOS = () => {
                     {formData.common_cards.map((card, cardIndex) => (
                       <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
                         {card.name}{card.method ? ` · ${card.method}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {availableAlbumCards.length > 0 && (
+                  <select
+                    className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selected = parseInt(e.target.value, 10)
+                      if (!Number.isNaN(selected)) applyAlbumCard(index, selected)
+                    }}
+                  >
+                    <option value="">从卡册选择</option>
+                    {availableAlbumCards.map((card, cardIndex) => (
+                      <option key={card.id} value={cardIndex}>
+                        {card.displayLabel}{card.scope === 'personal' ? ' · 我的卡册' : ' · 公共卡册'}
                       </option>
                     ))}
                   </select>
