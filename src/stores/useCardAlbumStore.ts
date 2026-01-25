@@ -62,6 +62,8 @@ type CardAlbumState = {
   cards: CardAlbumItem[]
   addCard: (card: CardAlbumItem) => void
   addToPersonal: (card: CardAlbumItem) => { added: boolean }
+  updateCard: (card: CardAlbumItem) => void
+  removeCard: (cardId: string) => void
 }
 
 export const useCardAlbumStore = create<CardAlbumState>()(
@@ -87,6 +89,16 @@ export const useCardAlbumStore = create<CardAlbumState>()(
         }
         set((state) => ({ cards: [newCard, ...state.cards] }))
         return { added: true }
+      },
+      updateCard: (card) => {
+        set((state) => ({
+          cards: state.cards.map((item) => (item.id === card.id ? card : item)),
+        }))
+      },
+      removeCard: (cardId) => {
+        set((state) => ({
+          cards: state.cards.filter((item) => item.id !== cardId),
+        }))
       },
     }),
     {
