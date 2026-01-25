@@ -27,6 +27,10 @@ const Layout = () => {
   const hideHeaderControls =
     location.pathname.startsWith('/app/profile') || location.pathname.startsWith('/app/brands')
   const isMapPage = location.pathname.startsWith('/app/map')
+  const isCardAlbumPage = location.pathname.startsWith('/app/card-album')
+  const searchPlaceholder = isCardAlbumPage
+    ? '搜索卡片：卡BIN / 卡名 / 发卡行 / 卡组织'
+    : '全域搜索：商户 / 地址 / 坐标 / 收单机构 / 时间'
 
   useEffect(() => {
     setSearchValue(searchKeyword)
@@ -42,6 +46,9 @@ const Layout = () => {
     const parsed = parseSearchInput(nextValue || '')
     setSearchValue(nextValue)
     setSearchQuery(parsed)
+    if (isCardAlbumPage) {
+      return
+    }
     loadPOSMachines()
       .catch((error) => console.error('搜索 POS 机失败:', error))
   }
@@ -72,6 +79,7 @@ const Layout = () => {
                 showLabels={showLabels}
                 onToggleLabels={() => setShowLabels((prev) => !prev)}
                 hideControls={hideHeaderControls}
+                searchPlaceholder={searchPlaceholder}
               />
             </div>
 

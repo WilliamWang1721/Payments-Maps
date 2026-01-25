@@ -15,6 +15,7 @@ type ModernHeaderProps = {
   showLabels: boolean
   onToggleLabels: () => void
   hideControls?: boolean
+  searchPlaceholder?: string
 }
 
 const ModernHeader = ({
@@ -27,6 +28,7 @@ const ModernHeader = ({
   showLabels,
   onToggleLabels,
   hideControls = false,
+  searchPlaceholder,
 }: ModernHeaderProps) => {
   const { t, i18n } = useTranslation()
 
@@ -74,7 +76,7 @@ const ModernHeader = ({
                     onSearchChange(next)
                     onSearchSubmit(next)
                   }}
-                  placeholder="全域搜索：商户 / 地址 / 坐标 / 收单机构 / 时间"
+                  placeholder={searchPlaceholder ?? '全域搜索：商户 / 地址 / 坐标 / 收单机构 / 时间'}
                 />
               </div>
 
