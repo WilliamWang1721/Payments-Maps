@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -198,6 +198,12 @@ const AddPOS = () => {
   const [prefilledFromQuery, setPrefilledFromQuery] = useState(false)
   const [isPrefillAddressLoading, setIsPrefillAddressLoading] = useState(false)
   const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
+  const [touchedFields, setTouchedFields] = useState({
+    merchant_name: false,
+    address: false,
+    location: false,
+  })
+  const lastValidationToast = useRef<Record<string, string>>({})
 
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
@@ -340,6 +346,37 @@ const AddPOS = () => {
     })
   }, [formData.basic_info.supported_card_networks])
 
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {}
+    if (!formData.merchant_name?.trim()) {
+      errors.merchant_name = '请填写商家名称'
+    }
+    if (!formData.address?.trim()) {
+      errors.address = '请填写详细地址'
+    }
+    if (!formData.latitude || !formData.longitude || formData.latitude === 0 || formData.longitude === 0) {
+      errors.location = '请在地图上选择准确位置'
+    }
+    return errors
+  }, [formData.address, formData.latitude, formData.longitude, formData.merchant_name])
+
+  useEffect(() => {
+    Object.entries(validationErrors).forEach(([field, message]) => {
+      if (message && touchedFields[field as keyof typeof touchedFields]) {
+        if (lastValidationToast.current[field] !== message) {
+          toast.error(message)
+          lastValidationToast.current[field] = message
+        }
+      } else if (!message && lastValidationToast.current[field]) {
+        delete lastValidationToast.current[field]
+      }
+    })
+  }, [touchedFields, validationErrors])
+
+  const markTouched = (field: keyof typeof touchedFields) => {
+    setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
+  }
+
   const syncSupportedNetworks = (states: Partial<Record<SchemeID, ThreeStateValue>>) => {
     const supported = Object.entries(states)
       .filter(([, status]) => status === 'supported')
@@ -393,18 +430,17 @@ const AddPOS = () => {
   }
 
   const validateForm = () => {
-    if (!formData.merchant_name?.trim()) {
-      toast.error('请填写商家名称')
-      return false
-    }
-
-    if (!formData.address?.trim()) {
-      toast.error('请填写详细地址')
-      return false
-    }
-
-    if (!formData.latitude || !formData.longitude || formData.latitude === 0 || formData.longitude === 0) {
-      toast.error('请在地图上选择准确位置')
+    setTouchedFields((prev) => ({
+      ...prev,
+      merchant_name: true,
+      address: true,
+      location: true,
+    }))
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0]
+      if (firstError) {
+        toast.error(firstError)
+      }
       return false
     }
 
@@ -422,6 +458,7 @@ const AddPOS = () => {
   const handleLocationConfirm = (latitude: number, longitude: number, address?: string) => {
     setPrefilledFromQuery(false)
     setIsPrefillAddressLoading(false)
+    markTouched('location')
     setFormData((prev) => ({
       ...prev,
       latitude,
@@ -664,7 +701,11 @@ const AddPOS = () => {
             className="w-full bg-cream rounded-xl px-4 py-3 text-soft-black font-medium focus:outline-none focus:ring-2 focus:ring-accent-yellow/20"
             placeholder="e.g. Starbucks Coffee"
             value={formData.merchant_name}
-            onChange={(e) => handleInputChange('merchant_name', e.target.value)}
+            onChange={(e) => {
+              markTouched('merchant_name')
+              handleInputChange('merchant_name', e.target.value)
+            }}
+            onBlur={() => markTouched('merchant_name')}
           />
         </div>
 
@@ -676,7 +717,11 @@ const AddPOS = () => {
               className="w-full bg-cream rounded-xl px-4 py-3 text-soft-black font-medium focus:outline-none focus:ring-2 focus:ring-accent-yellow/20 pr-12"
               placeholder="Search address..."
               value={formData.address}
-              onChange={(e) => handleInputChange('address', e.target.value)}
+              onChange={(e) => {
+                markTouched('address')
+                handleInputChange('address', e.target.value)
+              }}
+              onBlur={() => markTouched('address')}
             />
             <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           </div>
@@ -689,7 +734,10 @@ const AddPOS = () => {
 
         <button
           className="w-full py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 font-bold hover:border-accent-yellow hover:text-accent-yellow transition-all flex items-center justify-center gap-2"
-          onClick={() => setShowLocationModal(true)}
+          onClick={() => {
+            markTouched('location')
+            setShowLocationModal(true)
+          }}
         >
           <MapPin className="w-4 h-4" />
           {formData.latitude && formData.longitude ? uiText.reselectLocationButton : uiText.pickLocationButton}
