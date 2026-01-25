@@ -44,7 +44,7 @@ const Map = () => {
 
   return (
     <>
-      <div className="w-full h-full overflow-hidden">
+      <div className={`w-full h-full overflow-hidden transition-all duration-300 ${filterOpen ? 'blur-sm' : ''}`}>
         <MapCanvas showLabels={showLabels} />
       </div>
       <FilterPanel
@@ -54,6 +54,7 @@ const Map = () => {
         setFilters={setFilters}
         onApply={handleApplyFilters}
         onReset={handleResetFilters}
+        variant="map"
       />
     </>
   )
