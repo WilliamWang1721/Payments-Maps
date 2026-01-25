@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { Building2, CalendarClock, CreditCard, Filter, GaugeCircle, RefreshCw, Settings, Shield, SlidersHorizontal } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Building2, CalendarClock, CreditCard, Filter, GaugeCircle, RefreshCw, Settings, Shield, SlidersHorizontal, X } from 'lucide-react'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import Button from '@/components/ui/Button'
 import type { MapState } from '@/stores/useMapStore'
@@ -13,6 +14,7 @@ type FilterPanelProps = {
   setFilters: (filters: Partial<FiltersState>) => void
   onApply: () => void
   onReset: () => void
+  variant?: 'modal' | 'map'
 }
 
 const pillBase =
@@ -28,41 +30,36 @@ const FilterPanel = ({
   setFilters,
   onApply,
   onReset,
+  variant = 'modal',
 }: FilterPanelProps) => {
   const appliedCount = useMemo(() => {
     return Object.entries(filters).filter(([_, val]) => val !== undefined && val !== '' && val !== false).length
   }, [filters])
 
-  return (
-    <AnimatedModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="筛选条件"
-      size="4xl"
-      className="rounded-3xl"
-      footer={
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              onReset()
-            }}
-            className="flex-1"
-          >
-            重置
-          </Button>
-          <Button
-            onClick={() => {
-              onApply()
-            }}
-            className="flex-1"
-          >
-            应用筛选
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-8">
+  const footer = (
+    <div className="flex gap-3">
+      <Button
+        variant="outline"
+        onClick={() => {
+          onReset()
+        }}
+        className="flex-1"
+      >
+        重置
+      </Button>
+      <Button
+        onClick={() => {
+          onApply()
+        }}
+        className="flex-1"
+      >
+        应用筛选
+      </Button>
+    </div>
+  )
+
+  const panelContent = (
+    <div className="space-y-8">
         <div className="flex items-center gap-3 text-sm text-gray-600 bg-cream rounded-2xl px-4 py-3 border border-gray-100">
           <Filter className="w-4 h-4 text-accent-yellow" />
           <span>已选择 {appliedCount} 项条件</span>
@@ -405,6 +402,63 @@ const FilterPanel = ({
           调整筛选后，点击“应用筛选”立即刷新列表 / 地图数据。
         </div>
       </div>
+  )
+
+  if (variant === 'map') {
+    return (
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="fixed inset-0 z-40"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0" onClick={onClose} />
+            <motion.div
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 40 }}
+              transition={{ duration: 0.25 }}
+              className="absolute right-6 top-6 bottom-6 w-[min(48%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <Filter className="w-4 h-4 text-accent-yellow" />
+                  筛选条件
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {panelContent}
+              </div>
+              <div className="border-t border-gray-100 p-5 bg-white/80">
+                {footer}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    )
+  }
+
+  return (
+    <AnimatedModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="筛选条件"
+      size="4xl"
+      className="rounded-3xl"
+      footer={footer}
+    >
+      {panelContent}
     </AnimatedModal>
   )
 }

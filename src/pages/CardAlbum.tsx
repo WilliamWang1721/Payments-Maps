@@ -98,6 +98,16 @@ const CardAlbum = () => {
   }
 
   const baseCards = useMemo(() => cards.filter((card) => card.scope === activeTab), [cards, activeTab])
+  const getCardKey = (card: CardAlbumItem) => `${card.issuer}-${card.title}-${card.bin}`
+  const personalCardKeys = useMemo(() => {
+    const keys = new Set<string>()
+    cards
+      .filter((card) => card.scope === 'personal')
+      .forEach((card) => {
+        keys.add(getCardKey(card))
+      })
+    return keys
+  }, [cards])
 
   const filterOptions = useMemo(() => {
     const issuers = new Set<string>()
@@ -159,11 +169,6 @@ const CardAlbum = () => {
       return
     }
 
-    if (formData.scope === 'public' && !permissions.isAdmin) {
-      toast.error('只有管理员可以保存到公共卡册')
-      return
-    }
-
     const updatedAt = new Date().toISOString().slice(0, 10)
     if (editingCard) {
       updateCard({
@@ -201,8 +206,8 @@ const CardAlbum = () => {
   }
 
   const handleEditCard = (card: CardAlbumItem) => {
-    if (card.scope === 'public' && !permissions.isAdmin) {
-      toast.error('只有管理员可以编辑公共卡册')
+    if (!permissions.isAdmin) {
+      toast.error('只有管理员可以编辑卡片')
       return
     }
     setShowDetailModal(false)
@@ -223,8 +228,8 @@ const CardAlbum = () => {
 
   const handleDeleteCard = () => {
     if (!cardToDelete) return
-    if (cardToDelete.scope === 'public' && !permissions.isAdmin) {
-      toast.error('只有管理员可以删除公共卡册')
+    if (!permissions.isAdmin) {
+      toast.error('只有管理员可以删除卡片')
       return
     }
     removeCard(cardToDelete.id)
@@ -271,7 +276,7 @@ const CardAlbum = () => {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 w-full min-w-0">
       {showAddPage ? (
         <div className="flex min-h-screen flex-col gap-6">
           <div className="bg-white rounded-[32px] shadow-soft border border-white/50 p-6 sm:p-8 flex flex-col gap-6">
@@ -495,35 +500,64 @@ const CardAlbum = () => {
               </p>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full">
               {filteredCards.map((card, index) => (
                 <AnimatedListItem
                   key={card.id}
                   index={index}
                   delay={0.05}
                   direction="up"
-                  className="group relative rounded-2xl border border-white/70 dark:border-slate-800 bg-gradient-to-br from-white/90 via-white/70 to-blue-50/80 dark:from-slate-900/80 dark:via-slate-900/60 dark:to-slate-800/70 p-5 shadow-soft hover:shadow-xl transition-shadow"
+                  onClick={() => handleOpenDetail(card)}
+                  className="group relative rounded-2xl border border-white/70 dark:border-slate-800 bg-gradient-to-br from-white/90 via-white/70 to-blue-50/80 dark:from-slate-900/80 dark:via-slate-900/60 dark:to-slate-800/70 p-5 shadow-soft hover:shadow-xl transition-shadow cursor-pointer"
                 >
-                  <div className="absolute top-4 right-4">
-                    {card.scope === 'public' ? (
-                      <button
-                        type="button"
-                        onClick={() => handleAddToPersonal(card)}
-                        className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full"
-                      >
-                        <Plus className="w-3 h-3" />
-                        添加到我的卡册
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full cursor-default"
-                      >
-                        <Check className="w-3 h-3" />
-                        已在我的卡册
-                      </button>
+                  <div className="absolute top-4 right-4 flex items-center gap-2">
+                    {card.scope === 'public' && (
+                      personalCardKeys.has(getCardKey(card)) ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                          <Check className="w-3 h-3" />
+                          已加入
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleAddToPersonal(card)
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full pointer-events-auto"
+                        >
+                          <Plus className="w-3 h-3" />
+                          添加到我的卡册
+                        </button>
+                      )
                     )}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleEditCard(card)
+                      }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-600 bg-white/80 hover:bg-gray-100 transition-colors"
+                      disabled={!permissions.isAdmin}
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!permissions.isAdmin) {
+                          toast.error('只有管理员可以删除卡片')
+                          return
+                        }
+                        setCardToDelete(card)
+                        setShowDeleteModal(true)
+                      }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                      disabled={!permissions.isAdmin}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -564,41 +598,6 @@ const CardAlbum = () => {
 
                   <div className="flex items-center justify-between mt-4 text-xs text-gray-400">
                     <span>更新于 {card.updatedAt}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDetail(card)}
-                      className="text-accent-yellow font-medium hover:text-soft-black transition-colors"
-                    >
-                      查看详情
-                    </button>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleEditCard(card)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium text-gray-600 bg-white/80 hover:bg-gray-100 transition-colors"
-                      disabled={card.scope === 'public' && !permissions.isAdmin}
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (card.scope === 'public' && !permissions.isAdmin) {
-                          toast.error('只有管理员可以删除公共卡册')
-                          return
-                        }
-                        setCardToDelete(card)
-                        setShowDeleteModal(true)
-                      }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
-                      disabled={card.scope === 'public' && !permissions.isAdmin}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      删除
-                    </button>
                   </div>
                 </AnimatedListItem>
               ))}
@@ -612,7 +611,8 @@ const CardAlbum = () => {
           isOpen={showDetailModal}
           onClose={() => setShowDetailModal(false)}
           title="卡片详情"
-          size="lg"
+          size="full"
+          className="rounded-3xl !max-h-[95vh] h-[95vh]"
         >
           <div className="space-y-6">
             <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm space-y-3">
@@ -697,7 +697,7 @@ const CardAlbum = () => {
                 type="button"
                 onClick={() => handleEditCard(selectedCard)}
                 className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                disabled={selectedCard.scope === 'public' && !permissions.isAdmin}
+                disabled={!permissions.isAdmin}
               >
                 <Edit className="w-4 h-4" />
                 编辑卡片
@@ -705,8 +705,8 @@ const CardAlbum = () => {
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedCard.scope === 'public' && !permissions.isAdmin) {
-                    toast.error('只有管理员可以删除公共卡册')
+                  if (!permissions.isAdmin) {
+                    toast.error('只有管理员可以删除卡片')
                     return
                   }
                   setCardToDelete(selectedCard)
@@ -714,7 +714,7 @@ const CardAlbum = () => {
                   setShowDetailModal(false)
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
-                disabled={selectedCard.scope === 'public' && !permissions.isAdmin}
+                disabled={!permissions.isAdmin}
               >
                 <Trash2 className="w-4 h-4" />
                 删除卡片
