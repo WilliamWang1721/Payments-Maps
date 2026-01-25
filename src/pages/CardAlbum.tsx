@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Check, Filter, Plus, User, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { motion } from 'framer-motion'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import AnimatedButton from '@/components/ui/AnimatedButton'
+import AnimatedListItem from '@/components/AnimatedListItem'
 import clsx from 'clsx'
 import { useMapStore } from '@/stores/useMapStore'
 
@@ -171,7 +173,12 @@ const CardAlbum = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+      >
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-full bg-white/80 dark:bg-slate-900/70 border border-white/60 dark:border-slate-800 p-1 shadow-soft">
             {TAB_OPTIONS.map((option) => {
@@ -243,10 +250,15 @@ const CardAlbum = () => {
             添加卡片
           </AnimatedButton>
         </div>
-      </div>
+      </motion.div>
 
       {filteredCards.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-gray-200 dark:border-slate-700 p-10 text-center bg-white/50 dark:bg-slate-900/40">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-gray-200 dark:border-slate-700 p-10 text-center bg-white/50 dark:bg-slate-900/40"
+        >
           <div className="w-14 h-14 rounded-full bg-blue-50 dark:bg-slate-800 flex items-center justify-center mb-4">
             <Plus className="w-6 h-6 text-blue-500" />
           </div>
@@ -254,12 +266,15 @@ const CardAlbum = () => {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
             点击右上角“添加卡片”，将银行卡片归档到公共或个人卡册。
           </p>
-        </div>
+        </motion.div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredCards.map((card) => (
-            <div
+          {filteredCards.map((card, index) => (
+            <AnimatedListItem
               key={card.id}
+              index={index}
+              delay={0.05}
+              direction="up"
               className="group relative rounded-2xl border border-white/70 dark:border-slate-800 bg-gradient-to-br from-white/90 via-white/70 to-blue-50/80 dark:from-slate-900/80 dark:via-slate-900/60 dark:to-slate-800/70 p-5 shadow-soft hover:shadow-xl transition-shadow"
             >
               <div className="absolute top-4 right-4">
@@ -324,7 +339,7 @@ const CardAlbum = () => {
                 <span>更新于 {card.updatedAt}</span>
                 <span className="text-accent-yellow font-medium">查看详情</span>
               </div>
-            </div>
+            </AnimatedListItem>
           ))}
         </div>
       )}
