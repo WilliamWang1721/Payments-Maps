@@ -14,6 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
@@ -197,6 +198,8 @@ const AddPOS = () => {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
   const [prefilledFromQuery, setPrefilledFromQuery] = useState(false)
   const [isPrefillAddressLoading, setIsPrefillAddressLoading] = useState(false)
+  const [isAlbumPickerOpen, setIsAlbumPickerOpen] = useState(false)
+  const [albumScopeFilter, setAlbumScopeFilter] = useState<'personal' | 'public'>('personal')
   const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
   const [touchedFields, setTouchedFields] = useState({
     merchant_name: false,
@@ -1203,48 +1206,19 @@ const AddPOS = () => {
             <div className="text-xs font-semibold text-gray-500">从卡册选择</div>
             <p className="text-[11px] text-gray-400 mt-1">选择卡片后会自动填充到最新一条尝试记录。</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-            <select
-              className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-              value={selectedAlbumCard}
-              onChange={(e) => setSelectedAlbumCard(e.target.value)}
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsAlbumPickerOpen(true)}
+              className="flex-1 px-4 py-3 rounded-lg text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
             >
-              <option value="">请选择卡册中的卡片</option>
-              {albumCards.map((card) => {
-                const label = `${card.title} · ${card.issuer} · ${card.organization}`
-                return (
-                  <option key={card.id} value={card.id}>
-                    {label} ({getAlbumScopeLabel(card.scope)})
-                  </option>
-                )
-              })}
-            </select>
+              <span>{selectedAlbumCardLabel || '从卡册中选择卡片'}</span>
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            </button>
             <button
               type="button"
               className="px-4 py-2 rounded-lg text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
-              onClick={() => {
-                if (!selectedAlbumCard) {
-                  toast.error('请选择要使用的卡片')
-                  return
-                }
-                const selectedCard = albumCards.find((card) => card.id === selectedAlbumCard)
-                if (!selectedCard) {
-                  toast.error('未找到卡片信息')
-                  return
-                }
-                const targetIndex = (formData.attempts?.length || 0) - 1
-                if (targetIndex < 0) {
-                  toast.error('请先添加一条尝试记录')
-                  return
-                }
-                const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
-                const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.group]
-                  .filter(Boolean)
-                  .join(' · ')
-                updateAttempt(targetIndex, 'card_name', cardLabel)
-                updateAttempt(targetIndex, 'payment_method', methodLabel)
-                toast.success('已填充卡片信息')
-              }}
+              onClick={handleApplyAlbumCard}
             >
               填充到最新记录
             </button>
@@ -1367,10 +1341,45 @@ const AddPOS = () => {
 
   const goNext = () => setStep((prev) => Math.min(prev + 1, 5))
   const goPrev = () => setStep((prev) => Math.max(prev - 1, 1))
+  const selectedAlbumCardLabel = useMemo(() => {
+    if (!selectedAlbumCard) return ''
+    const card = albumCards.find((item) => item.id === selectedAlbumCard)
+    if (!card) return ''
+    return `${card.title} · ${card.issuer} · ${card.organization} (${getAlbumScopeLabel(card.scope)})`
+  }, [albumCards, selectedAlbumCard])
+
+  const filteredAlbumCards = useMemo(() => {
+    return albumCards.filter((card) => card.scope === albumScopeFilter)
+  }, [albumCards, albumScopeFilter])
+
+  const handleApplyAlbumCard = () => {
+    if (!selectedAlbumCard) {
+      toast.error('请选择要使用的卡片')
+      return
+    }
+    const selectedCard = albumCards.find((card) => card.id === selectedAlbumCard)
+    if (!selectedCard) {
+      toast.error('未找到卡片信息')
+      return
+    }
+    const targetIndex = (formData.attempts?.length || 0) - 1
+    if (targetIndex < 0) {
+      toast.error('请先添加一条尝试记录')
+      return
+    }
+    const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
+    const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.group]
+      .filter(Boolean)
+      .join(' · ')
+    updateAttempt(targetIndex, 'card_name', cardLabel)
+    updateAttempt(targetIndex, 'payment_method', methodLabel)
+    toast.success('已填充卡片信息')
+    setIsAlbumPickerOpen(false)
+  }
 
   return (
     <div className="flex-1 p-4 sm:p-6 lg:p-8">
-      <div className="bg-white rounded-[32px] shadow-soft flex flex-col relative overflow-hidden min-h-[600px]">
+      <div className={`bg-white rounded-[32px] shadow-soft flex flex-col relative overflow-hidden min-h-[600px] transition-all duration-300 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
           <div className="p-8 pb-4 border-b border-gray-50 z-10 bg-white">
             <div className="flex items-center justify-between">
               <button
@@ -1428,6 +1437,103 @@ const AddPOS = () => {
           initialLat={formData.latitude || 39.9042}
           initialLng={formData.longitude || 116.4074}
         />
+
+        <AnimatePresence>
+          {isAlbumPickerOpen && (
+            <motion.div
+              className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAlbumPickerOpen(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 40 }}
+                transition={{ duration: 0.25 }}
+                className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <div className="text-sm font-semibold text-gray-900">选择卡册中的卡片</div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAlbumPickerOpen(false)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="p-6 border-b border-gray-100">
+                  <div className="inline-flex bg-cream rounded-full p-1">
+                    {(['personal', 'public'] as const).map((scope) => (
+                      <button
+                        key={scope}
+                        type="button"
+                        onClick={() => setAlbumScopeFilter(scope)}
+                        className={`px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+                          albumScopeFilter === scope
+                            ? 'bg-soft-black text-white shadow-sm'
+                            : 'text-gray-500 hover:text-soft-black'
+                        }`}
+                      >
+                        {scope === 'personal' ? '个人卡册' : '公共卡册'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-2">请选择要填充到最新尝试记录的卡片。</div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                  {filteredAlbumCards.length === 0 && (
+                    <div className="text-sm text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 p-6 text-center">
+                      暂无{albumScopeFilter === 'personal' ? '个人' : '公共'}卡册卡片
+                    </div>
+                  )}
+                  {filteredAlbumCards.map((card) => {
+                    const label = `${card.title} · ${card.issuer} · ${card.organization}`
+                    const isActive = selectedAlbumCard === card.id
+                    return (
+                      <button
+                        key={card.id}
+                        type="button"
+                        onClick={() => setSelectedAlbumCard(card.id)}
+                        className={`w-full text-left border rounded-2xl px-4 py-3 transition-all ${
+                          isActive
+                            ? 'border-soft-black bg-soft-black/5'
+                            : 'border-gray-100 hover:border-accent-yellow/50 hover:bg-cream/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-soft-black">{label}</div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              {getAlbumScopeLabel(card.scope)} · BIN {card.bin || '—'} · {card.group || '未分组'}
+                            </div>
+                          </div>
+                          {isActive && (
+                            <span className="text-xs font-semibold text-soft-black bg-accent-yellow/20 px-3 py-1 rounded-full">
+                              已选择
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="border-t border-gray-100 p-5 bg-white/80">
+                  <button
+                    type="button"
+                    onClick={handleApplyAlbumCard}
+                    className="w-full px-4 py-3 rounded-2xl text-sm font-semibold text-white bg-soft-black hover:bg-accent-yellow transition-colors"
+                  >
+                    填充到最新记录
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
   )
 }
