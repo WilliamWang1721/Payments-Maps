@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Filter, Grid, List, Globe, Calendar, Plus, Trash2, User, FileText, Building, Tag, Settings } from 'lucide-react';
 import { Brand, BrandCategory, BrandBusinessType, BrandFilterOptions } from '../types/brands';
 import { supabase } from '../lib/supabase';
@@ -21,6 +21,10 @@ const Brands: React.FC = () => {
   const [activeTab, setActiveTab] = useState<BrandBusinessType | 'all'>('all');
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [headerScale, setHeaderScale] = useState(1);
+  const [filterScale, setFilterScale] = useState(1);
+  const [listScale, setListScale] = useState(1);
   const [filters, setFilters] = useState<BrandFilterOptions>({
     category: [],
     businessType: activeTab === 'all' ? [] : [activeTab as BrandBusinessType],
@@ -64,6 +68,61 @@ const Brands: React.FC = () => {
       businessType: activeTab === 'all' ? [] : [activeTab as BrandBusinessType] 
     }));
   }, [activeTab]);
+
+  useEffect(() => {
+    const container =
+      pageRef.current?.closest('.custom-scrollbar') ||
+      pageRef.current?.closest('[data-scroll-container]') ||
+      window;
+
+    let rafId = 0;
+
+    const updateScales = () => {
+      const scrollTop = container instanceof Window
+        ? window.scrollY
+        : (container as HTMLElement).scrollTop;
+      const scrollHeight = container instanceof Window
+        ? document.documentElement.scrollHeight
+        : (container as HTMLElement).scrollHeight;
+      const clientHeight = container instanceof Window
+        ? window.innerHeight
+        : (container as HTMLElement).clientHeight;
+      const maxScroll = Math.max(scrollHeight - clientHeight, 1);
+      const progress = Math.min(Math.max(scrollTop / maxScroll, 0), 1);
+      const nextHeaderScale = 1 - progress * 0.06;
+      const nextFilterScale = 1 - progress * 0.04;
+      const nextListScale = 1 + progress * 0.06;
+      setHeaderScale(Math.max(nextHeaderScale, 0.92));
+      setFilterScale(Math.max(nextFilterScale, 0.94));
+      setListScale(Math.min(nextListScale, 1.08));
+    };
+
+    const handleScroll = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateScales);
+    };
+
+    updateScales();
+
+    if (container instanceof Window) {
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      window.addEventListener('resize', handleScroll);
+    } else {
+      (container as HTMLElement).addEventListener('scroll', handleScroll, { passive: true });
+      window.addEventListener('resize', handleScroll);
+    }
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      if (container instanceof Window) {
+        window.removeEventListener('scroll', handleScroll);
+        window.removeEventListener('resize', handleScroll);
+      } else {
+        (container as HTMLElement).removeEventListener('scroll', handleScroll);
+        window.removeEventListener('resize', handleScroll);
+      }
+    };
+  }, []);
 
   // 获取筛选后的品牌列表
   const filteredBrands = useMemo(() => {
@@ -351,8 +410,11 @@ const Brands: React.FC = () => {
 
   return (
     <PageTransition>
-      <div className="space-y-6 pb-24">
-        <section className="bg-white rounded-[32px] shadow-soft border border-white/60 overflow-hidden animate-fade-in-up">
+      <div ref={pageRef} className="space-y-6 pb-24">
+        <section
+          className="bg-white rounded-[32px] shadow-soft border border-white/60 overflow-hidden animate-fade-in-up"
+          style={{ transform: `scale(${headerScale})`, transformOrigin: 'top center', willChange: 'transform' }}
+        >
           <div className="p-6 sm:p-8 flex flex-col gap-6 border-b border-gray-100">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div className="flex items-start gap-4">
@@ -453,7 +515,10 @@ const Brands: React.FC = () => {
           </div>
         </section>
 
-        <section className="bg-white rounded-[32px] shadow-soft border border-white/60 p-6 sm:p-8 space-y-4">
+        <section
+          className="bg-white rounded-[32px] shadow-soft border border-white/60 p-6 sm:p-8 space-y-4"
+          style={{ transform: `scale(${filterScale})`, transformOrigin: 'top center', willChange: 'transform' }}
+        >
           <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:items-center sm:space-x-4">
             <div className="flex-1">
               <div className="relative">
@@ -522,7 +587,10 @@ const Brands: React.FC = () => {
           )}
         </section>
 
-        <section className="bg-white rounded-[32px] shadow-soft border border-white/60 p-6 sm:p-8">
+        <section
+          className="bg-white rounded-[32px] shadow-soft border border-white/60 p-6 sm:p-8"
+          style={{ transform: `scale(${listScale})`, transformOrigin: 'top center', willChange: 'transform' }}
+        >
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="bg-cream rounded-2xl border border-white/70 px-6 py-4 text-sm text-gray-500 shadow-soft">
