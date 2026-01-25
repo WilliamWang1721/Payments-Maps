@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Filter, Plus, User, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
@@ -37,6 +37,47 @@ const CardAlbum = () => {
     organization: 'all',
     bin: 'all',
   })
+  const [touchedFields, setTouchedFields] = useState({
+    issuer: false,
+    title: false,
+    bin: false,
+  })
+  const lastValidationToast = useRef<Record<string, string>>({})
+
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {}
+    if (!formData.title.trim()) {
+      errors.title = '请补充卡片名称'
+    }
+    if (!formData.issuer.trim()) {
+      errors.issuer = '请补充发卡行'
+    }
+    if (!formData.bin.trim()) {
+      errors.bin = '请补充卡BIN'
+    } else if (!/^\d+$/.test(formData.bin.trim())) {
+      errors.bin = '卡BIN仅支持数字'
+    } else if (formData.bin.trim().length < 6 || formData.bin.trim().length > 8) {
+      errors.bin = '卡BIN需要6-8位数字'
+    }
+    return errors
+  }, [formData.bin, formData.issuer, formData.title])
+
+  useEffect(() => {
+    Object.entries(validationErrors).forEach(([field, message]) => {
+      if (message && touchedFields[field as keyof typeof touchedFields]) {
+        if (lastValidationToast.current[field] !== message) {
+          toast.error(message)
+          lastValidationToast.current[field] = message
+        }
+      } else if (!message && lastValidationToast.current[field]) {
+        delete lastValidationToast.current[field]
+      }
+    })
+  }, [touchedFields, validationErrors])
+
+  const markTouched = (field: keyof typeof touchedFields) => {
+    setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
+  }
 
   const baseCards = useMemo(() => cards.filter((card) => card.scope === activeTab), [cards, activeTab])
 
@@ -80,12 +121,18 @@ const CardAlbum = () => {
       description: '',
       scope: activeTab,
     })
+    setTouchedFields({ issuer: false, title: false, bin: false })
+    lastValidationToast.current = {}
     setShowAddPage(true)
   }
 
   const handleAddCard = () => {
-    if (!formData.title.trim() || !formData.issuer.trim() || !formData.bin.trim()) {
-      toast.error('请补充卡片名称、发卡行与卡BIN')
+    setTouchedFields({ issuer: true, title: true, bin: true })
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0]
+      if (firstError) {
+        toast.error(firstError)
+      }
       return
     }
 
@@ -148,7 +195,11 @@ const CardAlbum = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">卡片名称</label>
                 <input
                   value={formData.title}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
+                  onChange={(event) => {
+                    markTouched('title')
+                    setFormData((prev) => ({ ...prev, title: event.target.value }))
+                  }}
+                  onBlur={() => markTouched('title')}
                   placeholder="请输入卡片名称"
                   className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
                 />
@@ -157,7 +208,11 @@ const CardAlbum = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">发卡行</label>
                 <input
                   value={formData.issuer}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, issuer: event.target.value }))}
+                  onChange={(event) => {
+                    markTouched('issuer')
+                    setFormData((prev) => ({ ...prev, issuer: event.target.value }))
+                  }}
+                  onBlur={() => markTouched('issuer')}
                   placeholder="请输入发卡行名称"
                   className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
                 />
@@ -166,7 +221,11 @@ const CardAlbum = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">卡BIN</label>
                 <input
                   value={formData.bin}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, bin: event.target.value }))}
+                  onChange={(event) => {
+                    markTouched('bin')
+                    setFormData((prev) => ({ ...prev, bin: event.target.value }))
+                  }}
+                  onBlur={() => markTouched('bin')}
                   placeholder="例如 622848"
                   className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
                 />
