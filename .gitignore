@@ -33,6 +33,7 @@ dist-ssr
 # Sensitive files
 *.csv
 *.sql
+!supabase/migrations/*.sql
 add_remarks_field.sql
 schema.sql
 
