@@ -139,6 +139,41 @@ input, textarea, select {
   border-radius: 9999px;
 }
 
+/* Toast notification styling */
+[data-sonner-toaster] {
+  z-index: var(--z-notification);
+}
+
+.app-toast {
+  width: min(92vw, 420px);
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+  color: #0f172a;
+  padding: 16px 20px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  backdrop-filter: blur(12px);
+}
+
+.app-toast__description {
+  margin-top: 4px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.dark .app-toast {
+  border-color: rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.95);
+  color: #f8fafc;
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.6);
+}
+
+.dark .app-toast__description {
+  color: #cbd5f5;
+}
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #718096;
 }
