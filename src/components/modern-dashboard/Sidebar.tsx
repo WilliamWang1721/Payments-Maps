@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Clock, List, LogOut, Map, Plus, Settings, Tag } from 'lucide-react'
+import { Bell, BookOpen, Clock, List, LogOut, Map, Plus, Settings, Tag } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 
 const ModernSidebar = () => {
@@ -12,7 +12,8 @@ const ModernSidebar = () => {
   const navItems = [
     { icon: Map, label: 'Map', to: '/app/map', delay: 0.3 },
     { icon: List, label: 'List', to: '/app/list', delay: 0.4 },
-    { icon: Tag, label: 'Brands', to: '/app/brands', delay: 0.5 },
+    { icon: BookOpen, label: '卡册', to: '/app/card-album', delay: 0.5 },
+    { icon: Tag, label: 'Brands', to: '/app/brands', delay: 0.6 },
   ]
 
   const secondaryNav = [
