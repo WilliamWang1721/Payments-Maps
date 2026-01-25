@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Filter, Plus, User, Users } from 'lucide-react'
+import { Check, Edit, FileText, Filter, Plus, Trash2, User, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedListItem from '@/components/AnimatedListItem'
 import clsx from 'clsx'
 import { useMapStore } from '@/stores/useMapStore'
+import AnimatedModal from '@/components/ui/AnimatedModal'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   type AlbumScope,
   type CardAlbumItem,
   getAlbumScopeLabel,
   useCardAlbumStore,
 } from '@/stores/useCardAlbumStore'
+import { useIssueReportStore } from '@/stores/useIssueReportStore'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 const TAB_OPTIONS = [
   { key: 'public', label: '公共卡册', icon: Users },
@@ -20,8 +24,22 @@ const TAB_OPTIONS = [
 
 const CardAlbum = () => {
   const [activeTab, setActiveTab] = useState<AlbumScope>('public')
-  const { cards, addCard, addToPersonal } = useCardAlbumStore()
+  const { cards, addCard, addToPersonal, updateCard, removeCard } = useCardAlbumStore()
+  const permissions = usePermissions()
+  const { user } = useAuthStore()
+  const { reports, addReport, resolveReport } = useIssueReportStore()
   const [showAddPage, setShowAddPage] = useState(false)
+  const [editingCard, setEditingCard] = useState<CardAlbumItem | null>(null)
+  const [selectedCard, setSelectedCard] = useState<CardAlbumItem | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [cardToDelete, setCardToDelete] = useState<CardAlbumItem | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportForm, setReportForm] = useState({
+    issueType: '',
+    description: '',
+    contact: '',
+  })
   const [formData, setFormData] = useState({
     issuer: '',
     title: '',
@@ -111,6 +129,11 @@ const CardAlbum = () => {
     })
   }, [baseCards, filters, searchKeyword])
 
+  const selectedCardReports = useMemo(() => {
+    if (!selectedCard) return []
+    return reports.filter((report) => report.itemType === 'card' && report.itemId === selectedCard.id)
+  }, [reports, selectedCard])
+
   const handleOpenAddPage = () => {
     setFormData({
       issuer: '',
@@ -126,13 +149,37 @@ const CardAlbum = () => {
     setShowAddPage(true)
   }
 
-  const handleAddCard = () => {
+  const handleSaveCard = () => {
     setTouchedFields({ issuer: true, title: true, bin: true })
     if (Object.keys(validationErrors).length > 0) {
       const firstError = Object.values(validationErrors)[0]
       if (firstError) {
         toast.error(firstError)
       }
+      return
+    }
+
+    if (formData.scope === 'public' && !permissions.isAdmin) {
+      toast.error('只有管理员可以保存到公共卡册')
+      return
+    }
+
+    const updatedAt = new Date().toISOString().slice(0, 10)
+    if (editingCard) {
+      updateCard({
+        ...editingCard,
+        issuer: formData.issuer.trim(),
+        title: formData.title.trim(),
+        bin: formData.bin.trim(),
+        organization: formData.organization.trim() || '未知卡组织',
+        group: formData.group.trim() || '未分类卡组',
+        description: formData.description.trim() || '暂无描述',
+        scope: formData.scope,
+        updatedAt,
+      })
+      setShowAddPage(false)
+      setEditingCard(null)
+      toast.success('卡片信息已更新')
       return
     }
 
@@ -145,12 +192,73 @@ const CardAlbum = () => {
       group: formData.group.trim() || '未分类卡组',
       description: formData.description.trim() || '暂无描述',
       scope: formData.scope,
-      updatedAt: new Date().toISOString().slice(0, 10),
+      updatedAt,
     }
 
     addCard(newCard)
     setShowAddPage(false)
     toast.success('已添加卡片')
+  }
+
+  const handleEditCard = (card: CardAlbumItem) => {
+    if (card.scope === 'public' && !permissions.isAdmin) {
+      toast.error('只有管理员可以编辑公共卡册')
+      return
+    }
+    setShowDetailModal(false)
+    setEditingCard(card)
+    setFormData({
+      issuer: card.issuer,
+      title: card.title,
+      bin: card.bin,
+      organization: card.organization,
+      group: card.group,
+      description: card.description,
+      scope: card.scope,
+    })
+    setTouchedFields({ issuer: false, title: false, bin: false })
+    lastValidationToast.current = {}
+    setShowAddPage(true)
+  }
+
+  const handleDeleteCard = () => {
+    if (!cardToDelete) return
+    if (cardToDelete.scope === 'public' && !permissions.isAdmin) {
+      toast.error('只有管理员可以删除公共卡册')
+      return
+    }
+    removeCard(cardToDelete.id)
+    setShowDeleteModal(false)
+    setCardToDelete(null)
+    toast.success('卡片已删除')
+  }
+
+  const handleOpenDetail = (card: CardAlbumItem) => {
+    setSelectedCard(card)
+    setShowDetailModal(true)
+  }
+
+  const handleSubmitReport = () => {
+    if (!selectedCard) return
+    if (!reportForm.issueType.trim() || !reportForm.description.trim()) {
+      toast.error('请补充申报类型与问题描述')
+      return
+    }
+    addReport({
+      itemType: 'card',
+      itemId: selectedCard.id,
+      itemLabel: selectedCard.title,
+      issueType: reportForm.issueType.trim(),
+      description: reportForm.description.trim(),
+      contact: reportForm.contact.trim() || undefined,
+      reporter: {
+        id: user?.id,
+        name: user?.user_metadata?.display_name || user?.email || '匿名用户',
+      },
+    })
+    setReportForm({ issueType: '', description: '', contact: '' })
+    setShowReportModal(false)
+    toast.success('申报已提交')
   }
 
   const handleAddToPersonal = (card: CardAlbumItem) => {
@@ -175,17 +283,20 @@ const CardAlbum = () => {
               <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowAddPage(false)}
+                  onClick={() => {
+                    setShowAddPage(false)
+                    setEditingCard(null)
+                  }}
                   className="px-6 py-3 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
                 >
                   取消
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddCard}
+                  onClick={handleSaveCard}
                   className="px-8 py-3 rounded-2xl font-bold text-white bg-soft-black hover:bg-accent-yellow shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95"
                 >
-                  添加
+                  {editingCard ? '保存' : '添加'}
                 </button>
               </div>
             </div>
@@ -453,13 +564,263 @@ const CardAlbum = () => {
 
                   <div className="flex items-center justify-between mt-4 text-xs text-gray-400">
                     <span>更新于 {card.updatedAt}</span>
-                    <span className="text-accent-yellow font-medium">查看详情</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetail(card)}
+                      className="text-accent-yellow font-medium hover:text-soft-black transition-colors"
+                    >
+                      查看详情
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEditCard(card)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium text-gray-600 bg-white/80 hover:bg-gray-100 transition-colors"
+                      disabled={card.scope === 'public' && !permissions.isAdmin}
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (card.scope === 'public' && !permissions.isAdmin) {
+                          toast.error('只有管理员可以删除公共卡册')
+                          return
+                        }
+                        setCardToDelete(card)
+                        setShowDeleteModal(true)
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                      disabled={card.scope === 'public' && !permissions.isAdmin}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      删除
+                    </button>
                   </div>
                 </AnimatedListItem>
               ))}
             </div>
           )}
         </>
+      )}
+
+      {showDetailModal && selectedCard && (
+        <AnimatedModal
+          isOpen={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          title="卡片详情"
+          size="lg"
+        >
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-soft-black">{selectedCard.title}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{selectedCard.description}</p>
+                </div>
+                <span
+                  className={clsx(
+                    'px-3 py-1 rounded-full text-xs font-semibold',
+                    selectedCard.scope === 'public'
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'bg-purple-50 text-purple-600'
+                  )}
+                >
+                  {getAlbumScopeLabel(selectedCard.scope)}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-500">发卡行</span>
+                  <span className="font-medium text-gray-900">{selectedCard.issuer}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-500">卡BIN</span>
+                  <span className="font-medium text-gray-900">{selectedCard.bin}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-500">卡组织</span>
+                  <span className="font-medium text-gray-900">{selectedCard.organization}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-500">卡组</span>
+                  <span className="font-medium text-gray-900">{selectedCard.group}</span>
+                </div>
+              </div>
+            </div>
+
+            {permissions.isAdmin && (
+              <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-900">申报记录</h4>
+                  <span className="text-xs text-gray-400">
+                    共 {selectedCardReports.length} 条
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {selectedCardReports.map((report) => (
+                      <div key={report.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-900">{report.issueType}</span>
+                          <span className={clsx('text-xs font-semibold', report.status === 'open' ? 'text-orange-500' : 'text-green-600')}>
+                            {report.status === 'open' ? '待处理' : '已处理'}
+                          </span>
+                        </div>
+                        <p className="text-gray-600 mt-1">{report.description}</p>
+                        <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
+                          <span>{report.reporter?.name || '匿名用户'}</span>
+                          <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        {report.status === 'open' && (
+                          <button
+                            type="button"
+                            onClick={() => resolveReport(report.id)}
+                            className="mt-2 inline-flex items-center gap-2 rounded-full bg-soft-black px-3 py-1 text-xs font-semibold text-white hover:bg-gray-900 transition-colors"
+                          >
+                            标记已处理
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  {selectedCardReports.length === 0 && (
+                    <div className="text-sm text-gray-400">暂无申报记录</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleEditCard(selectedCard)}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                disabled={selectedCard.scope === 'public' && !permissions.isAdmin}
+              >
+                <Edit className="w-4 h-4" />
+                编辑卡片
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedCard.scope === 'public' && !permissions.isAdmin) {
+                    toast.error('只有管理员可以删除公共卡册')
+                    return
+                  }
+                  setCardToDelete(selectedCard)
+                  setShowDeleteModal(true)
+                  setShowDetailModal(false)
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                disabled={selectedCard.scope === 'public' && !permissions.isAdmin}
+              >
+                <Trash2 className="w-4 h-4" />
+                删除卡片
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-soft-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-900 transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                申报问题
+              </button>
+            </div>
+          </div>
+        </AnimatedModal>
+      )}
+
+      {showReportModal && selectedCard && (
+        <AnimatedModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          title="卡片问题申报"
+          size="lg"
+          footer={(
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitReport}
+                className="px-6 py-2 rounded-xl font-semibold text-white bg-soft-black hover:bg-gray-900 transition-colors"
+              >
+                提交申报
+              </button>
+            </div>
+          )}
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl bg-yellow-50 border border-yellow-100 p-3 text-sm text-yellow-800">
+              请填写卡片遇到的问题，管理员会在申报列表中处理。
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">问题类型</label>
+              <input
+                value={reportForm.issueType}
+                onChange={(event) => setReportForm((prev) => ({ ...prev, issueType: event.target.value }))}
+                placeholder="例如 卡BIN错误 / 卡组织信息不匹配"
+                className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+              <textarea
+                value={reportForm.description}
+                onChange={(event) => setReportForm((prev) => ({ ...prev, description: event.target.value }))}
+                placeholder="补充问题描述和建议"
+                className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">联系方式（可选）</label>
+              <input
+                value={reportForm.contact}
+                onChange={(event) => setReportForm((prev) => ({ ...prev, contact: event.target.value }))}
+                placeholder="邮箱或手机号，方便回访"
+                className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+              />
+            </div>
+          </div>
+        </AnimatedModal>
+      )}
+
+      {showDeleteModal && cardToDelete && (
+        <AnimatedModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          title="删除卡片"
+          size="sm"
+          footer={(
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCard}
+                className="px-6 py-2 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors"
+              >
+                确认删除
+              </button>
+            </div>
+          )}
+        >
+          <p className="text-sm text-gray-600">
+            确定要删除「{cardToDelete.title}」吗？删除后无法恢复。
+          </p>
+        </AnimatedModal>
       )}
     </div>
   )

@@ -26,6 +26,7 @@ import { POSMachine } from '@/lib/supabase'
 import { FeesConfiguration, feeUtils } from '@/types/fees'
 import { checkAndUpdatePOSStatus, updatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData } from '@/utils/posStatusUtils'
 import { exportToJSON, exportToHTML, exportToPDF, getStyleDisplayName, getFormatDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
+import { useIssueReportStore } from '@/stores/useIssueReportStore'
 
 interface Review {
   id: string
@@ -63,6 +64,7 @@ const POSDetail = () => {
   const { user } = useAuthStore()
   const { posMachines, deletePOSMachine } = useMapStore()
   const permissions = usePermissions()
+  const { reports, addReport, resolveReport } = useIssueReportStore()
   
   const [pos, setPOS] = useState<POSMachine | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
@@ -87,6 +89,12 @@ const POSDetail = () => {
   const [selectedCardStyle, setSelectedCardStyle] = useState<CardStyle>('minimal')
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('json')
   const [exporting, setExporting] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportForm, setReportForm] = useState({
+    issueType: '',
+    description: '',
+    contact: '',
+  })
 
   useEffect(() => {
     if (id) {
@@ -132,6 +140,29 @@ const POSDetail = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSubmitReport = () => {
+    if (!pos) return
+    if (!reportForm.issueType.trim() || !reportForm.description.trim()) {
+      toast.error('请补充申报类型与问题描述')
+      return
+    }
+    addReport({
+      itemType: 'pos',
+      itemId: pos.id,
+      itemLabel: pos.merchant_name,
+      issueType: reportForm.issueType.trim(),
+      description: reportForm.description.trim(),
+      contact: reportForm.contact.trim() || undefined,
+      reporter: {
+        id: user?.id,
+        name: user?.user_metadata?.display_name || user?.email || '匿名用户',
+      },
+    })
+    setReportForm({ issueType: '', description: '', contact: '' })
+    setShowReportModal(false)
+    toast.success('申报已提交')
   }
 
   const loadReviews = async () => {
@@ -710,6 +741,8 @@ const POSDetail = () => {
     )
   }
 
+  const posReports = reports.filter((report) => report.itemType === 'pos' && report.itemId === pos.id)
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 顶部导航栏 */}
@@ -743,6 +776,13 @@ const POSDetail = () => {
                 title="收藏"
               >
                 <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
+              </button>
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="申报问题"
+              >
+                <FileText className="w-5 h-5 text-gray-600" />
               </button>
               <button
                 onClick={() => setShowExportModal(true)}
@@ -888,6 +928,48 @@ const POSDetail = () => {
             ) : null}
           </CardContent>
         </AnimatedCard>
+
+        {permissions.isAdmin && (
+          <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-semibold text-gray-900">申报记录</CardTitle>
+              <CardDescription className="text-sm text-gray-500">
+                管理员可在此处理 POS 机相关申报
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-3">
+              {posReports.map((report) => (
+                  <div key={report.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900">{report.issueType}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{report.description}</p>
+                      </div>
+                      <span className={`text-xs font-semibold ${report.status === 'open' ? 'text-orange-500' : 'text-green-600'}`}>
+                        {report.status === 'open' ? '待处理' : '已处理'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 mt-3">
+                      <span>{report.reporter?.name || '匿名用户'}</span>
+                      <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    {report.status === 'open' && (
+                      <button
+                        type="button"
+                        onClick={() => resolveReport(report.id)}
+                        className="mt-3 inline-flex items-center gap-2 rounded-full bg-soft-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-900 transition-colors"
+                      >
+                        标记已处理
+                      </button>
+                    )}
+                  </div>
+                ))}
+              {posReports.length === 0 && (
+                <div className="text-sm text-gray-400">暂无申报记录</div>
+              )}
+            </CardContent>
+          </AnimatedCard>
+        )}
 
         {/* 支付信息 */}
         {pos.basic_info && Object.keys(pos.basic_info).length > 0 && (
@@ -1988,6 +2070,64 @@ const POSDetail = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </AnimatedModal>
+
+      <AnimatedModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="POS机问题申报"
+        size="lg"
+        footer={
+          <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setShowReportModal(false)}
+              className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmitReport}
+              className="px-6 py-2 rounded-xl font-semibold text-white bg-soft-black hover:bg-gray-900 transition-colors"
+            >
+              提交申报
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-yellow-50 border border-yellow-100 p-3 text-sm text-yellow-800">
+            请描述 POS 机的问题，管理员会尽快处理。
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">问题类型</label>
+            <input
+              value={reportForm.issueType}
+              onChange={(event) => setReportForm((prev) => ({ ...prev, issueType: event.target.value }))}
+              placeholder="例如 设备不可用 / 成功率异常 / 信息缺失"
+              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+            <textarea
+              value={reportForm.description}
+              onChange={(event) => setReportForm((prev) => ({ ...prev, description: event.target.value }))}
+              placeholder="补充问题细节，便于管理员排查"
+              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">联系方式（可选）</label>
+            <input
+              value={reportForm.contact}
+              onChange={(event) => setReportForm((prev) => ({ ...prev, contact: event.target.value }))}
+              placeholder="邮箱或手机号，方便回访"
+              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+            />
           </div>
         </div>
       </AnimatedModal>
