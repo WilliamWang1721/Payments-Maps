@@ -25,7 +25,6 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { POSMachine } from '@/lib/supabase'
 import { FeesConfiguration, feeUtils } from '@/types/fees'
 import { checkAndUpdatePOSStatus, updatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData } from '@/utils/posStatusUtils'
-import { AnimatedTopNav } from '@/components/AnimatedNavigation'
 import { exportToJSON, exportToHTML, exportToPDF, getStyleDisplayName, getFormatDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
 
 interface Review {
@@ -702,8 +701,8 @@ const POSDetail = () => {
 
   if (!pos) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center bg-white rounded-lg shadow-sm border p-8">
           <h3 className="text-lg font-medium text-gray-900 mb-2">POS机不存在</h3>
           <AnimatedButton onClick={() => navigate(-1)}>返回</AnimatedButton>
         </div>
@@ -714,60 +713,68 @@ const POSDetail = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 顶部导航栏 */}
-      <AnimatedTopNav title={pos.merchant_name} className="sticky top-0 z-10">
-        <AnimatedButton onClick={() => navigate(-1)} variant="ghost" size="sm" className="p-2">
-          <ArrowLeft className="w-5 h-5" />
-        </AnimatedButton>
-        <div className="flex space-x-2">
-          <AnimatedButton
-            onClick={toggleFavorite}
-            variant="ghost"
-            size="sm"
-            className="p-2 hover:bg-gray-100"
-          >
-            <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
-          </AnimatedButton>
-          
-          <AnimatedButton
-            onClick={() => setShowExportModal(true)}
-            variant="ghost"
-            size="sm"
-            className="p-2 hover:bg-gray-100"
-            title="导出记录"
-          >
-            <Download className="w-5 h-5" />
-          </AnimatedButton>
-          
-          {permissions.canEditItem(pos.created_by) && (
-            <AnimatedButton
-              onClick={() => navigate(`/app/edit-pos/${pos.id}`)}
-              variant="ghost"
-              size="sm"
-              className="p-2 hover:bg-gray-100"
-              title="编辑POS机"
-            >
-              <Edit className="w-5 h-5" />
-            </AnimatedButton>
-          )}
-          
-          {permissions.canDeleteItem(pos.created_by) && (
-            <AnimatedButton
-              onClick={() => setShowDeleteModal(true)}
-              variant="ghost"
-              size="sm"
-              className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-              title="删除POS机"
-            >
-              <Trash2 className="w-5 h-5" />
-            </AnimatedButton>
-          )}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">{pos.merchant_name}</h1>
+                {pos.address && (
+                  <p className="text-sm text-gray-500 flex items-center">
+                    <MapPin className="w-4 h-4 mr-1" />
+                    {pos.address}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleFavorite}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="收藏"
+              >
+                <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
+              </button>
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="导出记录"
+              >
+                <Download className="w-5 h-5 text-gray-600" />
+              </button>
+              {permissions.canEditItem(pos.created_by) && (
+                <button
+                  onClick={() => navigate(`/app/edit-pos/${pos.id}`)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="编辑POS机"
+                >
+                  <Edit className="w-5 h-5 text-gray-600" />
+                </button>
+              )}
+              {permissions.canDeleteItem(pos.created_by) && (
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                  title="删除POS机"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      </AnimatedTopNav>
+      </div>
 
       {/* 主要内容区域 */}
-      <div className="p-4 space-y-6 overflow-y-auto" style={{maxHeight: 'calc(100vh - 160px)'}}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* POS机基本信息卡片 - 重新设计 */}
-        <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+        <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
           <CardHeader className="pb-4">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -883,7 +890,7 @@ const POSDetail = () => {
         {pos.basic_info && Object.keys(pos.basic_info).length > 0 && (
           <>
             {/* 卡组织支持 - 重新设计为更显著的展示 */}
-            <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+            <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
               <CardContent className="p-6">
                 <div className="flex items-center mb-6">
                   <CreditCard className="w-6 h-6 mr-3 text-blue-600" />
@@ -920,7 +927,7 @@ const POSDetail = () => {
             {/* Contactless 支持和验证模式 - 并排显示 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Contactless 支持 */}
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
                 <CardContent className="p-6">
                   <div className="flex items-center mb-4">
                     <Smartphone className="w-6 h-6 mr-3 text-green-600" />
@@ -936,7 +943,7 @@ const POSDetail = () => {
               </AnimatedCard>
 
               {/* 验证模式 */}
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
                 <CardContent className="p-6">
                   <div className="flex items-center mb-4">
                     <Shield className="w-6 h-6 mr-3 text-purple-600" />
@@ -1138,7 +1145,7 @@ const POSDetail = () => {
             {/* 商家信息和设备支持 - 并排显示 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* 商家信息 */}
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
                 <CardContent className="p-6">
                   <div className="flex items-center mb-4">
                     <Building className="w-6 h-6 mr-3 text-orange-600" />
@@ -1166,7 +1173,7 @@ const POSDetail = () => {
               </AnimatedCard>
 
               {/* 设备支持 */}
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
                 <CardContent className="p-6">
                   <div className="flex items-center mb-4">
                     <Settings className="w-6 h-6 mr-3 text-gray-600" />
@@ -1205,7 +1212,7 @@ const POSDetail = () => {
             </div>
 
             {/* 收单模式支持 - 独立板块 */}
-            <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+            <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
               <CardContent className="p-6">
                 <div className="flex items-center mb-4">
                   <Settings className="w-6 h-6 mr-3 text-indigo-600" />
@@ -1252,7 +1259,7 @@ const POSDetail = () => {
 
             {/* 备注信息 - 如果有内容则显示 */}
             {pos.remarks && (
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
                 <CardContent className="p-6">
                   <div className="flex items-center mb-4">
                     <FileText className="w-6 h-6 mr-3 text-slate-600" />
@@ -1269,7 +1276,7 @@ const POSDetail = () => {
 
             {/* 付款手续费 */}
             {pos.fees && (
-              <AnimatedCard className="bg-white shadow-sm" variant="elevated" hoverable>
+              <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
                 <CardContent className="p-6">
                   <div className="flex items-center mb-4">
                     <CreditCard className="w-5 h-5 mr-2 text-gray-600" />
@@ -1334,7 +1341,7 @@ const POSDetail = () => {
 
         {/* 自定义字段 */}
         {pos.extended_fields && Object.keys(pos.extended_fields).length > 0 && (
-          <AnimatedCard className="bg-white/70 backdrop-blur-sm border-0 shadow-lg" variant="elevated" hoverable>
+          <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <div className="p-2 bg-indigo-100 rounded-lg">
@@ -1357,7 +1364,7 @@ const POSDetail = () => {
         )}
 
         {/* 尝试信息 */}
-        <AnimatedCard variant="elevated" hoverable>
+        <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
@@ -1470,7 +1477,7 @@ const POSDetail = () => {
 
         {/* 外部链接 */}
         {externalLinks.length > 0 && (
-          <AnimatedCard variant="elevated" hoverable>
+          <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <ExternalLink className="w-5 h-5 mr-2" />
@@ -1499,7 +1506,7 @@ const POSDetail = () => {
         )}
 
         {/* 评价列表 */}
-        <AnimatedCard variant="elevated" hoverable>
+        <AnimatedCard className="bg-white rounded-lg shadow-sm border" variant="elevated" hoverable>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
