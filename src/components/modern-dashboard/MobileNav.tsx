@@ -42,27 +42,29 @@ const MobileNav = () => {
       <div className="max-w-xl mx-auto relative">
         <div className="absolute inset-0 blur-2xl bg-gray-900/10 dark:bg-black/20" aria-hidden />
 
-        <div className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-white/60 dark:border-slate-800 rounded-3xl shadow-2xl px-6 py-3 flex items-center justify-between pointer-events-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const active = isActive(item.to)
+        <div className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-white/60 dark:border-slate-800 rounded-3xl shadow-2xl px-4 py-2 pointer-events-auto">
+          <div className="grid grid-cols-6 gap-1 sm:gap-2">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const active = isActive(item.to)
 
-            return (
-              <button
-                key={item.to}
-                type="button"
-                onClick={() => navigate(item.to)}
-                className={clsx(
-                  'flex flex-col items-center gap-1 text-[11px] font-semibold transition-colors',
-                  active ? 'text-accent-yellow' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-                )}
-                aria-label={item.label}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={item.to}
+                  type="button"
+                  onClick={() => navigate(item.to)}
+                  className={clsx(
+                    'flex flex-col items-center justify-center gap-1 text-[10px] font-semibold leading-tight min-w-0 transition-colors',
+                    active ? 'text-accent-yellow' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                  )}
+                  aria-label={item.label}
+                >
+                  <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate max-w-full">{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <button
