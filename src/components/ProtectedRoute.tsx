@@ -29,7 +29,8 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     path === '/app/list' ||
     path === '/app/brands' ||
     path === '/app/help' ||
-    path.startsWith('/app/pos/')
+    path.startsWith('/app/pos/') ||
+    path.startsWith('/app/pos-detail/')
 
   // 尚未初始化时：对游客允许的页面直接放行，提升首屏体验；其余保持加载态
   if (!initialized || loading) {

@@ -82,6 +82,10 @@ export const router = createBrowserRouter([
         element: <Suspense fallback={<Loading />}><POSDetail /></Suspense>,
       },
       {
+        path: 'pos-detail/:id',
+        element: <Suspense fallback={<Loading />}><POSDetail /></Suspense>,
+      },
+      {
         path: 'add-pos',
         element: <Suspense fallback={<Loading />}><AddPOS /></Suspense>,
       },
