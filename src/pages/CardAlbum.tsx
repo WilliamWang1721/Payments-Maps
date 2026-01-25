@@ -6,65 +6,21 @@ import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedListItem from '@/components/AnimatedListItem'
 import clsx from 'clsx'
 import { useMapStore } from '@/stores/useMapStore'
+import {
+  type AlbumScope,
+  type CardAlbumItem,
+  getAlbumScopeLabel,
+  useCardAlbumStore,
+} from '@/stores/useCardAlbumStore'
 
 const TAB_OPTIONS = [
   { key: 'public', label: '公共卡册', icon: Users },
   { key: 'personal', label: '个人卡册', icon: User },
 ] as const
 
-type AlbumScope = (typeof TAB_OPTIONS)[number]['key']
-
-type CardAlbumItem = {
-  id: string
-  issuer: string
-  title: string
-  bin: string
-  organization: string
-  group: string
-  description: string
-  scope: AlbumScope
-  updatedAt: string
-}
-
-const initialCards: CardAlbumItem[] = [
-  {
-    id: 'public-1',
-    issuer: '招商银行',
-    title: '银联高端卡',
-    bin: '622848',
-    organization: 'UnionPay',
-    group: '高端卡组',
-    description: '适合公共展示的高端权益卡片。',
-    scope: 'public',
-    updatedAt: '2025-02-12',
-  },
-  {
-    id: 'public-2',
-    issuer: '中国建设银行',
-    title: '旅行白金卡',
-    bin: '436742',
-    organization: 'Visa',
-    group: '白金卡组',
-    description: '公共卡册中的旅行主题卡片模板。',
-    scope: 'public',
-    updatedAt: '2025-02-10',
-  },
-  {
-    id: 'personal-1',
-    issuer: '中国工商银行',
-    title: '环球通卡',
-    bin: '621226',
-    organization: 'Mastercard',
-    group: '经典卡组',
-    description: '个人卡册中常用的银行卡片。',
-    scope: 'personal',
-    updatedAt: '2025-02-08',
-  },
-]
-
 const CardAlbum = () => {
   const [activeTab, setActiveTab] = useState<AlbumScope>('public')
-  const [cards, setCards] = useState<CardAlbumItem[]>(initialCards)
+  const { cards, addCard, addToPersonal } = useCardAlbumStore()
   const [showAddPage, setShowAddPage] = useState(false)
   const [formData, setFormData] = useState({
     issuer: '',
@@ -83,7 +39,6 @@ const CardAlbum = () => {
   })
 
   const baseCards = useMemo(() => cards.filter((card) => card.scope === activeTab), [cards, activeTab])
-  const personalCards = useMemo(() => cards.filter((card) => card.scope === 'personal'), [cards])
 
   const filterOptions = useMemo(() => {
     const issuers = new Set<string>()
@@ -146,27 +101,17 @@ const CardAlbum = () => {
       updatedAt: new Date().toISOString().slice(0, 10),
     }
 
-    setCards((prev) => [newCard, ...prev])
+    addCard(newCard)
     setShowAddPage(false)
     toast.success('已添加卡片')
   }
 
   const handleAddToPersonal = (card: CardAlbumItem) => {
-    const alreadyAdded = personalCards.some(
-      (item) => item.bin === card.bin && item.title === card.title && item.issuer === card.issuer
-    )
-    if (alreadyAdded) {
+    const result = addToPersonal(card)
+    if (!result.added) {
       toast.info('该卡片已在我的卡册')
       return
     }
-
-    const newCard: CardAlbumItem = {
-      ...card,
-      id: `personal-${Date.now()}`,
-      scope: 'personal',
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    setCards((prev) => [newCard, ...prev])
     toast.success('已加入我的卡册')
   }
 
@@ -423,7 +368,7 @@ const CardAlbum = () => {
                           : 'bg-purple-50 text-purple-600'
                       )}
                     >
-                      {card.scope === 'public' ? '公共卡册' : '我的卡册'}
+                      {getAlbumScopeLabel(card.scope)}
                     </span>
                   </div>
 

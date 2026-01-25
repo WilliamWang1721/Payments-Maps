@@ -28,6 +28,7 @@ import { formatFeeDisplay } from '@/utils/feeUtils'
 import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
 import { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
+import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 
 interface FormData {
   merchant_name: string
@@ -183,6 +184,7 @@ const AddPOS = () => {
   const [searchParams] = useSearchParams()
   const { user: _ } = useAuthStore()
   const { addPOSMachine } = useMapStore()
+  const albumCards = useCardAlbumStore((state) => state.cards)
   const _permissions = usePermissions()
   const uiText = useAutoTranslatedTextMap(ADD_POS_TEXTS)
 
@@ -195,6 +197,7 @@ const AddPOS = () => {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
   const [prefilledFromQuery, setPrefilledFromQuery] = useState(false)
   const [isPrefillAddressLoading, setIsPrefillAddressLoading] = useState(false)
+  const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
 
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
@@ -1143,6 +1146,61 @@ const AddPOS = () => {
       {(formData.attempts || []).length === 0 && (
         <div className="p-4 rounded-xl border border-dashed border-gray-200 text-sm text-gray-500 bg-white">
           还没有添加尝试记录，点击“添加记录”开始填写。
+        </div>
+      )}
+
+      {formData.attempts && formData.attempts.length > 0 && albumCards.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
+          <div>
+            <div className="text-xs font-semibold text-gray-500">从卡册选择</div>
+            <p className="text-[11px] text-gray-400 mt-1">选择卡片后会自动填充到最新一条尝试记录。</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+            <select
+              className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+              value={selectedAlbumCard}
+              onChange={(e) => setSelectedAlbumCard(e.target.value)}
+            >
+              <option value="">请选择卡册中的卡片</option>
+              {albumCards.map((card) => {
+                const label = `${card.title} · ${card.issuer} · ${card.organization}`
+                return (
+                  <option key={card.id} value={card.id}>
+                    {label} ({getAlbumScopeLabel(card.scope)})
+                  </option>
+                )
+              })}
+            </select>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
+              onClick={() => {
+                if (!selectedAlbumCard) {
+                  toast.error('请选择要使用的卡片')
+                  return
+                }
+                const selectedCard = albumCards.find((card) => card.id === selectedAlbumCard)
+                if (!selectedCard) {
+                  toast.error('未找到卡片信息')
+                  return
+                }
+                const targetIndex = (formData.attempts?.length || 0) - 1
+                if (targetIndex < 0) {
+                  toast.error('请先添加一条尝试记录')
+                  return
+                }
+                const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
+                const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.group]
+                  .filter(Boolean)
+                  .join(' · ')
+                updateAttempt(targetIndex, 'card_name', cardLabel)
+                updateAttempt(targetIndex, 'payment_method', methodLabel)
+                toast.success('已填充卡片信息')
+              }}
+            >
+              填充到最新记录
+            </button>
+          </div>
         </div>
       )}
 
