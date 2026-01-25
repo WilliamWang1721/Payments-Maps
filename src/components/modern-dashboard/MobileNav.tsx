@@ -1,10 +1,11 @@
 import clsx from 'clsx'
-import { Bell, List, Map, Plus, Tag, User } from 'lucide-react'
+import { Bell, BookOpen, List, Map, Plus, Tag, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 
 const navItems = [
+  { icon: BookOpen, label: '卡册', to: '/app/card-album' },
   { icon: Map, label: 'Map', to: '/app/map' },
   { icon: List, label: 'List', to: '/app/list' },
   { icon: Tag, label: 'Brands', to: '/app/brands' },

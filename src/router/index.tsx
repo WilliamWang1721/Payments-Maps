@@ -8,6 +8,7 @@ import RouteError from '@/components/RouteError'
 const Home = React.lazy(() => import('@/pages/Home'))
 const Map = React.lazy(() => import('@/pages/Map'))
 const List = React.lazy(() => import('@/pages/List'))
+const CardAlbum = React.lazy(() => import('@/pages/CardAlbum'))
 const POSDetail = React.lazy(() => import('@/pages/POSDetail'))
 const Profile = React.lazy(() => import('@/pages/Profile'))
 const Login = React.lazy(() => import('@/pages/Login'))
@@ -67,6 +68,10 @@ export const router = createBrowserRouter([
       {
         path: 'list',
         element: <Suspense fallback={<Loading />}><List /></Suspense>,
+      },
+      {
+        path: 'card-album',
+        element: <Suspense fallback={<Loading />}><CardAlbum /></Suspense>,
       },
       {
         path: 'brands',
