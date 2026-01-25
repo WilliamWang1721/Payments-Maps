@@ -5,9 +5,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 
 const navItems = [
-  { icon: BookOpen, label: '卡册', to: '/app/card-album' },
   { icon: Map, label: 'Map', to: '/app/map' },
   { icon: List, label: 'List', to: '/app/list' },
+  { icon: BookOpen, label: '卡册', to: '/app/card-album' },
   { icon: Tag, label: 'Brands', to: '/app/brands' },
   { icon: Bell, label: 'Notify', to: '/app/notifications' },
   { icon: User, label: 'Profile', to: '/app/profile' },
