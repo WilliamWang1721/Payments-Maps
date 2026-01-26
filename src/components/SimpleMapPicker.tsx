@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import { toast } from 'sonner'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
+import { notify } from '@/lib/notify'
 
 interface SimpleMapPickerProps {
   isOpen: boolean
@@ -80,7 +80,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
         console.log('[SimpleMapPicker] 地图初始化成功')
       } catch (error) {
         console.error('[SimpleMapPicker] 地图初始化失败:', error)
-        toast.error('地图加载失败')
+        notify.error('地图加载失败')
       }
     }, 500) // 延迟以确保DOM准备好
     
@@ -124,14 +124,14 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
     if (isLocating) return
 
     setIsLocating(true)
-    const toastId = toast.loading('正在获取当前位置...')
+    const toastId = notify.loading('正在获取当前位置...')
     try {
       const { longitude, latitude } = await locationUtils.getCurrentPosition(3)
       placeMarker(longitude, latitude)
-      toast.success('已定位到当前位置', { id: toastId })
+      notify.success('已定位到当前位置', { id: toastId })
     } catch (err: any) {
       console.error('获取当前位置失败:', err)
-      toast.error('获取当前位置失败，请手动选择位置', { id: toastId })
+      notify.error('获取当前位置失败，请手动选择位置', { id: toastId })
     } finally {
       setIsLocating(false)
     }

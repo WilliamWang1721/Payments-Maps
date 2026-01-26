@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { handleLinuxDOCallback } from '@/lib/linuxdo-auth'
 import { verifyOAuthState } from '@/lib/linuxdo-oauth'
-import { toast } from 'sonner'
 import Loading from '@/components/ui/Loading'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 export default function LinuxDOCallback() {
   const navigate = useNavigate()
@@ -26,7 +26,7 @@ export default function LinuxDOCallback() {
           console.error('LinuxDO OAuth error:', error, errorDescription)
           setStatus('error')
           setErrorMessage(errorDescription || error)
-          toast.error('登录失败: ' + (errorDescription || error))
+          notify.critical('登录失败: ' + (errorDescription || error), { title: 'LinuxDO 登录失败' })
           setTimeout(() => navigate('/login'), 3000)
           return
         }
@@ -34,7 +34,7 @@ export default function LinuxDOCallback() {
         if (!code) {
           setStatus('error')
           setErrorMessage('未获取到授权码')
-          toast.error('登录失败: 未获取到授权码')
+          notify.critical('登录失败: 未获取到授权码', { title: 'LinuxDO 登录失败' })
           setTimeout(() => navigate('/login'), 3000)
           return
         }
@@ -43,7 +43,7 @@ export default function LinuxDOCallback() {
         if (!state || !verifyOAuthState(state)) {
           setStatus('error')
           setErrorMessage('安全验证失败，请重新登录')
-          toast.error('登录失败: 安全验证失败')
+          notify.critical('登录失败: 安全验证失败', { title: 'LinuxDO 登录失败' })
           setTimeout(() => navigate('/login'), 3000)
           return
         }
@@ -56,7 +56,7 @@ export default function LinuxDOCallback() {
         setUser(user)
         setStatus('success')
         
-        toast.success('登录成功!')
+        notify.success('登录成功!')
         
         // Redirect to main app
         setTimeout(() => {
@@ -68,7 +68,10 @@ export default function LinuxDOCallback() {
         setStatus('error')
         const message = error instanceof Error ? error.message : '登录过程中发生错误'
         setErrorMessage(message)
-        toast.error('登录失败: ' + message)
+        notify.critical('登录失败: ' + message, {
+          title: 'LinuxDO 登录失败',
+          details: getErrorDetails(error),
+        })
         
         // Redirect back to login page after error
         setTimeout(() => {

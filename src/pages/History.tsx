@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, MapPin, Sparkles, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase } from '@/lib/supabase'
 import Loading from '@/components/ui/Loading'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 interface HistoryWithPOS {
   id: string
@@ -69,7 +69,10 @@ const History: React.FC = () => {
 
       if (error) {
         console.error('加载浏览历史失败:', error)
-        toast.error('加载失败，请重试')
+        notify.critical('加载失败，请重试', {
+          title: '加载浏览历史失败',
+          details: getErrorDetails(error),
+        })
         return
       }
 
@@ -81,7 +84,10 @@ const History: React.FC = () => {
       setHistory(processedData as HistoryWithPOS[])
     } catch (error) {
       console.error('加载浏览历史失败:', error)
-      toast.error('加载失败，请重试')
+      notify.critical('加载失败，请重试', {
+        title: '加载浏览历史失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -99,16 +105,16 @@ const History: React.FC = () => {
 
       if (error) {
         console.error('清空历史记录失败:', error)
-        toast.error('清空失败，请重试')
+        notify.error('清空失败，请重试')
         return
       }
 
-      toast.success('历史记录已清空')
+      notify.success('历史记录已清空')
       setHistory([])
       setShowClearModal(false)
     } catch (error) {
       console.error('清空历史记录失败:', error)
-      toast.error('清空失败，请重试')
+      notify.error('清空失败，请重试')
     } finally {
       setClearing(false)
     }
@@ -123,15 +129,15 @@ const History: React.FC = () => {
 
       if (error) {
         console.error('删除历史记录失败:', error)
-        toast.error('删除失败，请重试')
+        notify.error('删除失败，请重试')
         return
       }
 
-      toast.success(`已删除 "${posName}" 的访问记录`)
+      notify.success(`已删除 "${posName}" 的访问记录`)
       loadHistory() // 重新加载列表
     } catch (error) {
       console.error('删除历史记录失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     }
   }
 

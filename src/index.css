@@ -92,15 +92,12 @@ input, textarea, select {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Safari 动画优化 */
-@media (prefers-reduced-motion: no-preference) {
-  * {
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-}
+/*
+  Safari 动画优化：
+  不要对全局 `*` 强制施加 `transform: translateZ(0)`，否则会破坏 `position: fixed`
+  的定位（例如 toast/banner/modal 会“掉到页面最底部”，需要滚动才能看到）。
+  需要 GPU 加速时，请使用 `src/styles/safari-animations.css` 中的按需类名。
+*/
 
 /* 渐变动画效果 */
 @keyframes gradient {

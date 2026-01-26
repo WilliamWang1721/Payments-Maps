@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Star, Edit, Heart, ExternalLink, MessageCircle, CreditCard, Smartphone, Settings, FileText, Trash2, Shield, Clock, Building, Download } from 'lucide-react'
-import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
@@ -27,6 +26,7 @@ import { FeesConfiguration, feeUtils } from '@/types/fees'
 import { checkAndUpdatePOSStatus, updatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData } from '@/utils/posStatusUtils'
 import { exportToJSON, exportToHTML, exportToPDF, getStyleDisplayName, getFormatDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 interface Review {
   id: string
@@ -127,7 +127,10 @@ const POSDetail = () => {
         
         if (error || !posFromDb) {
           console.error('查询POS机失败:', error)
-          toast.error('未找到对应的POS机')
+          notify.critical('未找到对应的POS机', {
+            title: '加载 POS 详情失败',
+            details: getErrorDetails(error),
+          })
           navigate(-1)
           return
         }
@@ -136,7 +139,10 @@ const POSDetail = () => {
       }
     } catch (error) {
       console.error('加载POS机详情失败:', error)
-      toast.error('加载失败，请重试')
+      notify.critical('加载失败，请重试', {
+        title: '加载 POS 详情失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -145,7 +151,7 @@ const POSDetail = () => {
   const handleSubmitReport = () => {
     if (!pos) return
     if (!reportForm.issueType.trim() || !reportForm.description.trim()) {
-      toast.error('请补充申报类型与问题描述')
+      notify.error('请补充申报类型与问题描述')
       return
     }
     addReport({
@@ -162,7 +168,7 @@ const POSDetail = () => {
     })
     setReportForm({ issueType: '', description: '', contact: '' })
     setShowReportModal(false)
-    toast.success('申报已提交')
+    notify.success('申报已提交')
   }
 
   const loadReviews = async () => {
@@ -323,7 +329,7 @@ const POSDetail = () => {
     }
 
     if (!id || favoritesUnavailable) {
-      toast.error('收藏功能当前不可用')
+      notify.error('收藏功能当前不可用')
       return
     }
 
@@ -339,16 +345,16 @@ const POSDetail = () => {
         if (error) {
           if (error.code === 'PGRST205' || error.code === '406') {
             setFavoritesUnavailable(true)
-            toast.error('收藏功能当前不可用')
+            notify.error('收藏功能当前不可用')
             return
           }
           console.error('取消收藏失败:', error)
-          toast.error('取消收藏失败，请重试')
+          notify.error('取消收藏失败，请重试')
           return
         }
         
         setIsFavorite(false)
-        toast.success('已取消收藏')
+        notify.success('已取消收藏')
       } else {
         // 添加收藏 - 向数据库插入记录
         const { error } = await supabase
@@ -361,20 +367,20 @@ const POSDetail = () => {
         if (error) {
           if (error.code === 'PGRST205' || error.code === '406') {
             setFavoritesUnavailable(true)
-            toast.error('收藏功能当前不可用')
+            notify.error('收藏功能当前不可用')
             return
           }
           console.error('添加收藏失败:', error)
-          toast.error('添加收藏失败，请重试')
+          notify.error('添加收藏失败，请重试')
           return
         }
         
         setIsFavorite(true)
-        toast.success('已添加到收藏')
+        notify.success('已添加到收藏')
       }
     } catch (error) {
       console.error('收藏操作失败:', error)
-      toast.error('操作失败，请重试')
+      notify.error('操作失败，请重试')
     }
   }
 
@@ -387,7 +393,7 @@ const POSDetail = () => {
     if (!id) return
 
     if (!newReview.comment.trim()) {
-      toast.error('请填写评价内容')
+      notify.error('请填写评价内容')
       return
     }
 
@@ -413,7 +419,7 @@ const POSDetail = () => {
       
       if (error) {
         console.error('提交评价失败:', error)
-        toast.error('提交失败，请重试')
+        notify.error('提交失败，请重试')
         return
       }
       
@@ -432,12 +438,12 @@ const POSDetail = () => {
       
       setReviews(prev => [newReviewData, ...prev])
       
-      toast.success('评论提交成功')
+      notify.success('评论提交成功')
       setShowReviewModal(false)
       setNewReview({ rating: 5, comment: '' })
     } catch (error) {
       console.error('提交评价失败:', error)
-      toast.error('提交失败，请重试')
+      notify.error('提交失败，请重试')
     } finally {
       setSubmittingReview(false)
     }
@@ -447,20 +453,20 @@ const POSDetail = () => {
     // 早期验证，避免不必要的状态设置
     if (!user) {
       console.error('用户未登录')
-      toast.error('请先登录')
+      notify.error('请先登录')
       navigate('/login')
       return
     }
 
     if (!id) {
       console.error('POS机ID不存在')
-      toast.error('POS机信息错误')
+      notify.error('POS机信息错误')
       return
     }
 
     // 验证必填字段
     if (!newAttempt.result) {
-      toast.error('请选择尝试结果')
+      notify.error('请选择尝试结果')
       return
     }
 
@@ -479,7 +485,10 @@ const POSDetail = () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !session) {
         console.error('用户会话无效:', sessionError)
-        toast.error('登录已过期，请重新登录')
+        notify.critical('登录已过期，请重新登录', {
+          title: '需要重新登录',
+          details: getErrorDetails(sessionError),
+        })
         navigate('/login')
         return
       }
@@ -524,13 +533,13 @@ const POSDetail = () => {
         
         // 根据错误类型提供更具体的错误信息
         if (error.code === '42501') {
-          toast.error('权限不足，请检查登录状态')
+          notify.error('权限不足，请检查登录状态')
         } else if (error.code === '23505') {
-          toast.error('记录已存在')
+          notify.error('记录已存在')
         } else if (error.message?.includes('RLS')) {
-          toast.error('数据访问权限错误，请重新登录')
+          notify.error('数据访问权限错误，请重新登录')
         } else {
-          toast.error(`提交失败: ${error.message || '未知错误'}`)
+          notify.error(`提交失败: ${error.message || '未知错误'}`)
         }
         return
       }
@@ -548,7 +557,7 @@ const POSDetail = () => {
       
       setAttempts(prev => [newAttemptData, ...prev])
       
-      toast.success('尝试记录提交成功')
+      notify.success('尝试记录提交成功')
       
       // 确保状态重置在同一个事件循环中完成
       setNewAttempt({ result: 'success', card_name: '', payment_method: '', notes: '' })
@@ -575,7 +584,7 @@ const POSDetail = () => {
       }
     } catch (error) {
       console.error('提交尝试记录失败:', error)
-      toast.error('提交失败，请重试')
+      notify.error('提交失败，请重试')
     } finally {
       setSubmittingAttempt(false)
     }
@@ -597,17 +606,17 @@ const POSDetail = () => {
       
       if (error) {
         console.error('删除尝试记录失败:', error)
-        toast.error('删除失败，请重试')
+        notify.error('删除失败，请重试')
         return
       }
       
       // 从本地列表中移除
       setAttempts(prev => prev.filter(attempt => attempt.id !== attemptId))
       
-      toast.success('尝试记录删除成功')
+      notify.success('尝试记录删除成功')
     } catch (error) {
       console.error('删除尝试记录失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     }
   }
 
@@ -617,11 +626,11 @@ const POSDetail = () => {
     setDeleting(true)
     try {
       await deletePOSMachine(id)
-      toast.success('POS机删除成功')
+      notify.success('POS机删除成功')
       navigate('/')
     } catch (error) {
       console.error('删除POS机失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     } finally {
       setDeleting(false)
       setShowDeleteModal(false)
@@ -635,18 +644,18 @@ const POSDetail = () => {
     try {
       const success = await updatePOSStatus(id, newStatus)
       if (success) {
-        toast.success('POS状态更新成功')
+        notify.success('POS状态更新成功')
         // 重新加载POS详情以获取最新状态
         loadPOSDetail()
         // 刷新地图和列表数据
         await refreshMapData()
         setShowStatusModal(false)
       } else {
-        toast.error('状态更新失败，请重试')
+        notify.error('状态更新失败，请重试')
       }
     } catch (error) {
       console.error('更新POS状态失败:', error)
-      toast.error('状态更新失败，请重试')
+      notify.error('状态更新失败，请重试')
     } finally {
       setUpdatingStatus(false)
     }
@@ -680,19 +689,19 @@ const POSDetail = () => {
       
       if (selectedFormat === 'json') {
         await exportToJSON(exportData, `${pos.merchant_name}_POS记录`)
-        toast.success('JSON文件导出成功')
+        notify.success('JSON文件导出成功')
       } else if (selectedFormat === 'html') {
         await exportToHTML(exportData, `${pos.merchant_name}_卡片`, selectedCardStyle)
-        toast.success('HTML卡片导出成功')
+        notify.success('HTML卡片导出成功')
       } else if (selectedFormat === 'pdf') {
         await exportToPDF(exportData, `${pos.merchant_name}_卡片`, selectedCardStyle)
-        toast.success('PDF卡片导出成功')
+        notify.success('PDF卡片导出成功')
       }
       
       setShowExportModal(false)
     } catch (error) {
       console.error('导出失败:', error)
-      toast.error('导出失败，请重试')
+      notify.error('导出失败，请重试')
     } finally {
       setExporting(false)
     }

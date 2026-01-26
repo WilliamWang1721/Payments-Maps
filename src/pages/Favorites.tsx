@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Star, Heart, Clock } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase, type POSMachine } from '@/lib/supabase'
-import { toast } from 'sonner'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 interface FavoriteWithPOS {
   id: string
@@ -63,7 +63,10 @@ const Favorites: React.FC = () => {
 
       if (error) {
         console.error('加载收藏列表失败:', error)
-        toast.error('加载失败，请重试')
+        notify.critical('加载失败，请重试', {
+          title: '加载收藏列表失败',
+          details: getErrorDetails(error),
+        })
         return
       }
 
@@ -75,7 +78,10 @@ const Favorites: React.FC = () => {
       setFavorites(processedData as FavoriteWithPOS[])
     } catch (error) {
       console.error('加载收藏列表失败:', error)
-      toast.error('加载失败，请重试')
+      notify.critical('加载失败，请重试', {
+        title: '加载收藏列表失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -90,15 +96,15 @@ const Favorites: React.FC = () => {
 
       if (error) {
         console.error('取消收藏失败:', error)
-        toast.error('取消收藏失败，请重试')
+        notify.error('取消收藏失败，请重试')
         return
       }
 
-      toast.success(`已取消收藏 "${posName}"`)
+      notify.success(`已取消收藏 "${posName}"`)
       loadFavorites() // 重新加载列表
     } catch (error) {
       console.error('取消收藏失败:', error)
-      toast.error('取消收藏失败，请重试')
+      notify.error('取消收藏失败，请重试')
     }
   }
 

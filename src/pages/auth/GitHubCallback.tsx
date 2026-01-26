@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { syncGitHubUserToSupabase } from '@/lib/supabase-auth'
-import { toast } from 'sonner'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 export default function GitHubCallback() {
   const navigate = useNavigate()
@@ -17,7 +17,10 @@ export default function GitHubCallback() {
         
         if (error) {
           console.error('GitHub认证回调错误:', error)
-          toast.error('GitHub登录失败')
+          notify.critical('GitHub登录失败', {
+            title: '登录失败',
+            details: getErrorDetails(error),
+          })
           navigate('/login')
           return
         }
@@ -39,16 +42,21 @@ export default function GitHubCallback() {
             }
           })
 
-          toast.success('GitHub登录成功！')
+          notify.success('GitHub登录成功！')
           navigate('/app/map')
         } else {
           console.error('GitHub认证失败：未获取到用户信息')
-          toast.error('GitHub登录失败')
+          notify.critical('GitHub登录失败', {
+            title: '登录失败',
+          })
           navigate('/login')
         }
       } catch (error) {
         console.error('GitHub认证回调处理失败:', error)
-        toast.error('GitHub登录失败')
+        notify.critical('GitHub登录失败', {
+          title: '登录失败',
+          details: getErrorDetails(error),
+        })
         navigate('/login')
       }
     }

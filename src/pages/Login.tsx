@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import { startAuthentication } from '@simplewebauthn/browser'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { signInWithGoogleSupabase, signInWithGitHubSupabase, signInWithMicrosoftSupabase } from '@/lib/supabase-auth'
 import Button from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { getErrorDetails, notify } from '@/lib/notify'
 // 移除Chrome图标导入，使用Google官方SVG图标
 
 const Login = () => {
@@ -29,7 +29,10 @@ const Login = () => {
       // OAuth会重定向，不需要手动处理成功状态
     } catch (error) {
       console.error('Google登录失败:', error)
-      toast.error('Google登录失败，请重试')
+      notify.critical('Google登录失败，请重试', {
+        title: '登录失败',
+        details: getErrorDetails(error),
+      })
       setIsLoading(false)
     }
   }
@@ -41,7 +44,10 @@ const Login = () => {
       // OAuth会重定向，不需要手动处理成功状态
     } catch (error) {
       console.error('GitHub登录失败:', error)
-      toast.error('GitHub登录失败，请重试')
+      notify.critical('GitHub登录失败，请重试', {
+        title: '登录失败',
+        details: getErrorDetails(error),
+      })
       setIsLoading(false)
     }
   }
@@ -53,7 +59,10 @@ const Login = () => {
       // OAuth会重定向，不需要手动处理成功状态
     } catch (error) {
       console.error('Microsoft登录失败:', error)
-      toast.error('Microsoft登录失败，请重试')
+      notify.critical('Microsoft登录失败，请重试', {
+        title: '登录失败',
+        details: getErrorDetails(error),
+      })
       setIsLoading(false)
     }
   }
@@ -65,7 +74,10 @@ const Login = () => {
       // OAuth会重定向，不需要手动处理成功状态
     } catch (error) {
       console.error('LinuxDO登录失败:', error)
-      toast.error('LinuxDO登录失败，请重试')
+      notify.critical('LinuxDO登录失败，请重试', {
+        title: '登录失败',
+        details: getErrorDetails(error),
+      })
       setIsLoading(false)
     }
   }
@@ -77,11 +89,11 @@ const Login = () => {
 
   const handlePasskeyLogin = async () => {
     if (!passkeyEmail.trim()) {
-      toast.error('请输入在设置中注册 Passkey 时使用的邮箱')
+      notify.error('请输入在设置中注册 Passkey 时使用的邮箱')
       return
     }
     if (typeof window === 'undefined' || !window.PublicKeyCredential) {
-      toast.error('当前浏览器不支持 Passkey，请在支持的浏览器中尝试')
+      notify.error('当前浏览器不支持 Passkey，请在支持的浏览器中尝试')
       return
     }
 
@@ -124,11 +136,14 @@ const Login = () => {
       }
 
       await refreshUser()
-      toast.success('Passkey 登录成功')
+      notify.success('Passkey 登录成功')
       navigate('/app/map')
     } catch (error) {
       console.error('Passkey 登录失败:', error)
-      toast.error(error instanceof Error ? error.message : 'Passkey 登录失败，请重试')
+      notify.critical(error instanceof Error ? error.message : 'Passkey 登录失败，请重试', {
+        title: 'Passkey 登录失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setPasskeyLoading(false)
     }

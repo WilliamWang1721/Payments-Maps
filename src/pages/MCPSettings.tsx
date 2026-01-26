@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Terminal, Copy, Eye, EyeOff, Trash2, Shield, Book, Download, ExternalLink, AlertCircle, CheckCircle, Clock, Zap } from 'lucide-react'
-import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import Button from '@/components/ui/Button'
@@ -9,6 +8,7 @@ import Loading from '@/components/ui/Loading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import Input from '@/components/ui/Input'
+import { getErrorDetails, notify } from '@/lib/notify'
 import { 
   generateMCPSession, 
   getUserMCPSessions, 
@@ -59,14 +59,22 @@ const MCPSettings = () => {
         console.error('加载 MCP 数据失败:', result.error)
         // 如果是数据库配置问题，显示更友好的错误信息
         if (result.error?.includes('MCP功能尚未完全配置')) {
-          toast.error('MCP功能尚未完全配置，请联系管理员')
+          notify.critical('MCP功能尚未完全配置，请联系管理员', {
+            title: 'MCP 未配置',
+          })
         } else {
-          toast.error('加载数据失败')
+          notify.critical('加载数据失败', {
+            title: '加载 MCP 数据失败',
+            details: import.meta.env.DEV ? result.error : undefined,
+          })
         }
       }
     } catch (error) {
       console.error('加载 MCP 数据失败:', error)
-      toast.error('加载数据失败')
+      notify.critical('加载数据失败', {
+        title: '加载 MCP 数据失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -82,9 +90,15 @@ const MCPSettings = () => {
       if (!result.success) {
         // 如果是数据库配置问题，显示更友好的错误信息
         if (result.error?.includes('MCP功能尚未完全配置')) {
-          toast.error('MCP功能尚未完全配置，请联系管理员完成数据库设置')
+          notify.critical('MCP功能尚未完全配置，请联系管理员完成数据库设置', {
+            title: '生成配置失败',
+            details: import.meta.env.DEV ? result.error : undefined,
+          })
         } else {
-          toast.error(`生成配置失败：${result.error}`)
+          notify.critical(`生成配置失败：${result.error}`, {
+            title: '生成配置失败',
+            details: import.meta.env.DEV ? result.error : undefined,
+          })
         }
         return
       }
@@ -102,13 +116,16 @@ const MCPSettings = () => {
       
     } catch (error) {
       console.error('生成配置失败:', error)
-      toast.error('生成配置失败，请重试')
+      notify.critical('生成配置失败，请重试', {
+        title: '生成配置失败',
+        details: getErrorDetails(error),
+      })
     }
   }
 
   const copyConfig = () => {
     navigator.clipboard.writeText(generatedConfig)
-    toast.success('配置已复制到剪贴板')
+    notify.success('配置已复制到剪贴板')
   }
 
   const revokeSession = async (sessionId: string) => {
@@ -121,11 +138,11 @@ const MCPSettings = () => {
         throw new Error(result.error)
       }
 
-      toast.success(result.message)
+      notify.success(result.message)
       await loadMCPData()
     } catch (error) {
       console.error('撤销会话失败:', error)
-      toast.error('撤销失败，请重试')
+      notify.error('撤销失败，请重试')
     }
   }
 
@@ -139,12 +156,12 @@ const MCPSettings = () => {
         throw new Error(result.error)
       }
 
-      toast.success(result.message)
+      notify.success(result.message)
       setShowPermissionModal(false)
       await loadMCPData()
     } catch (error) {
       console.error('更新权限失败:', error)
-      toast.error('更新失败，请重试')
+      notify.error('更新失败，请重试')
     }
   }
 

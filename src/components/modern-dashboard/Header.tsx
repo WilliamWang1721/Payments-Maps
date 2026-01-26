@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { Eye, EyeOff, Languages, MapPin, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { triggerTranslation } from '@/lib/translationTrigger'
 import GlobalSearchBar from './GlobalSearchBar'
+import { notify } from '@/lib/notify'
 
 type ModernHeaderProps = {
   searchValue: string
@@ -50,7 +50,7 @@ const ModernHeader = ({
 
   const handleTranslateClick = () => {
     triggerTranslation()
-    toast.info(t('dashboardHeader.translationRefresh', '正在刷新翻译内容...'))
+    notify.info(t('dashboardHeader.translationRefresh', '正在刷新翻译内容...'))
   }
 
   return (

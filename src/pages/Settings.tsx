@@ -16,7 +16,7 @@ import {
   Palette
 } from 'lucide-react'
 import clsx from 'clsx'
-import { toast } from 'sonner'
+import { getErrorDetails, notify } from '@/lib/notify'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -94,7 +94,7 @@ const Settings = () => {
 
       if (error && error.code !== 'PGRST116') {
         console.error('加载设置失败:', error)
-        toast.error('加载设置失败，请重试')
+        notify.error('加载设置失败，请重试')
       }
 
       if (data) {
@@ -102,7 +102,7 @@ const Settings = () => {
       }
     } catch (error) {
       console.error('加载设置失败:', error)
-      toast.error('加载设置失败，请重试')
+      notify.error('加载设置失败，请重试')
     } finally {
       setLoading(false)
     }
@@ -123,14 +123,14 @@ const Settings = () => {
 
       if (error) {
         console.error('保存设置失败:', error)
-        toast.error('保存失败，请重试')
+        notify.error('保存失败，请重试')
         return
       }
 
-      toast.success('设置已保存')
+      notify.success('设置已保存')
     } catch (error) {
       console.error('保存设置失败:', error)
-      toast.error('保存失败，请重试')
+      notify.error('保存失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -142,15 +142,21 @@ const Settings = () => {
     try {
       const { error } = await supabase.auth.admin.deleteUser(user.id)
       if (error) {
-        toast.error('删除账户失败，请联系客服')
+        notify.critical('删除账户失败，请联系客服', {
+          title: '删除账户失败',
+          details: getErrorDetails(error),
+        })
         return
       }
-      toast.success('账户已删除')
+      notify.success('账户已删除')
       await logout()
       navigate('/login')
     } catch (error) {
       console.error('删除账户失败:', error)
-      toast.error('删除账户失败，请联系客服')
+      notify.critical('删除账户失败，请联系客服', {
+        title: '删除账户失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setDeleting(false)
       setShowDeleteModal(false)
@@ -163,7 +169,7 @@ const Settings = () => {
       navigate('/login')
     } catch (error) {
       console.error('退出登录失败:', error)
-      toast.error('退出登录失败，请重试')
+      notify.error('退出登录失败，请重试')
     }
   }
 
@@ -319,7 +325,7 @@ const Settings = () => {
               <button
                 onClick={() => {
                   resetTour()
-                  toast.success('新手引导已重置，返回地图可重新体验')
+                  notify.success('新手引导已重置，返回地图可重新体验')
                   setTimeout(() => navigate('/app/map'), 800)
                 }}
                 className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-soft-black transition hover:border-soft-black"

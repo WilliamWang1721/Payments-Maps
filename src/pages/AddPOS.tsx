@@ -15,7 +15,6 @@ import {
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -30,6 +29,7 @@ import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
 import { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
 import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 interface FormData {
   merchant_name: string
@@ -268,9 +268,9 @@ const AddPOS = () => {
       })
       setStep(Math.min(draft.data.step || 1, 5))
       setCurrentDraftId(draft.id)
-      toast.success('已加载草稿')
+      notify.success('已加载草稿')
     } else {
-      toast.error('草稿不存在或已过期')
+      notify.error('草稿不存在或已过期')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -298,7 +298,7 @@ const AddPOS = () => {
       longitude: lng,
       address: prev.address || fallbackAddress,
     }))
-    toast.success(uiText.mapPrefillNotice)
+    notify.success(uiText.mapPrefillNotice)
     setIsPrefillAddressLoading(true)
 
     // 尝试反查地址，提升表单自动填充体验
@@ -320,7 +320,7 @@ const AddPOS = () => {
       .catch((error) => {
         console.warn('[AddPOS] 解析地址失败:', error)
         if (!cancelled) {
-          toast.error(uiText.mapPrefillAddressFailed)
+          notify.error(uiText.mapPrefillAddressFailed)
         }
       })
       .finally(() => {
@@ -367,7 +367,7 @@ const AddPOS = () => {
     Object.entries(validationErrors).forEach(([field, message]) => {
       if (message && touchedFields[field as keyof typeof touchedFields]) {
         if (lastValidationToast.current[field] !== message) {
-          toast.error(message)
+          notify.error(message)
           lastValidationToast.current[field] = message
         }
       } else if (!message && lastValidationToast.current[field]) {
@@ -406,7 +406,10 @@ const AddPOS = () => {
       })
     } catch (error) {
       console.error('Error updating form data:', error)
-      toast.error('更新表单数据时出错')
+      notify.critical('更新表单数据时出错', {
+        title: '表单异常',
+        details: getErrorDetails(error),
+      })
     }
   }
 
@@ -442,7 +445,7 @@ const AddPOS = () => {
     if (Object.keys(validationErrors).length > 0) {
       const firstError = Object.values(validationErrors)[0]
       if (firstError) {
-        toast.error(firstError)
+        notify.error(firstError)
       }
       return false
     }
@@ -468,7 +471,7 @@ const AddPOS = () => {
       longitude,
       address: address || prev.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
     }))
-    toast.success('位置选择成功')
+    notify.success('位置选择成功')
   }
 
   const handleSubmit = async () => {
@@ -485,7 +488,7 @@ const AddPOS = () => {
         throw new Error('网络连接已断开，请检查网络后重试')
       }
 
-      toast.loading('正在保存POS机信息...', { id: 'saving-pos' })
+      notify.loading('正在保存POS机信息...', { id: 'saving-pos' })
 
       const payload = {
         ...formData,
@@ -502,15 +505,15 @@ const AddPOS = () => {
       const result = await Promise.race([addPOSMachine(payload), timeoutPromise])
 
       console.log('[AddPOS] 提交成功，结果:', result)
-      toast.dismiss('saving-pos')
-      toast.success('POS机添加成功！')
+      notify.dismiss('saving-pos')
+      notify.success('POS机添加成功！')
       if (currentDraftId) {
         deleteDraft(currentDraftId)
       }
       setTimeout(() => navigate('/app/map'), 500)
     } catch (error: any) {
       console.error('[AddPOS] 添加POS机失败:', error)
-      toast.dismiss('saving-pos')
+      notify.dismiss('saving-pos')
       let errorMessage = '添加失败，请重试'
       if (error?.message?.includes('超时')) {
         errorMessage = '保存超时，请检查网络连接后重试'
@@ -523,7 +526,10 @@ const AddPOS = () => {
       } else if (error?.message) {
         errorMessage = error.message
       }
-      toast.error(errorMessage)
+      notify.critical(errorMessage, {
+        title: 'POS 机添加失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -607,17 +613,17 @@ const AddPOS = () => {
     const name = attempt.card_name?.trim()
     const method = attempt.payment_method?.trim()
     if (!name && !method) {
-      toast.error('请先填写卡片名称或支付方式再保存')
+      notify.error('请先填写卡片名称或支付方式再保存')
       return
     }
     setFormData((prev) => {
       const existing = prev.common_cards || []
       const exists = existing.some((item) => item.name === (name || '') && item.method === (method || ''))
       if (exists) {
-        toast.success('已在常用卡片列表中')
+        notify.success('已在常用卡片列表中')
         return prev
       }
-      toast.success('常用卡片已保存')
+      notify.success('常用卡片已保存')
       return {
         ...prev,
         common_cards: [...existing, { name: name || method || '未命名卡片', method }],
@@ -634,7 +640,7 @@ const AddPOS = () => {
 
   const handleSaveDraft = () => {
     if (!formData.latitude || !formData.longitude) {
-      toast.error('请先在地图上选择位置再保存草稿')
+      notify.error('请先在地图上选择位置再保存草稿')
       return
     }
     const title = formData.merchant_name?.trim() || formData.address || `${formData.latitude.toFixed(4)},${formData.longitude.toFixed(4)}`
@@ -645,7 +651,7 @@ const AddPOS = () => {
       step,
     })
     setCurrentDraftId(record.id)
-    toast.success('草稿已保存')
+    notify.success('草稿已保存')
   }
 
   const selectedSchemes =
@@ -657,7 +663,7 @@ const AddPOS = () => {
 
   const toggleCvmScheme = (schemeId: SchemeID) => {
     if (getSchemeState(schemeId) !== 'supported') {
-      toast.error('请先将该卡组织标记为支持')
+      notify.error('请先将该卡组织标记为支持')
       return
     }
     const field = CVM_FIELD_MAP[activeCvmTab]
@@ -1354,17 +1360,17 @@ const AddPOS = () => {
 
   const handleApplyAlbumCard = () => {
     if (!selectedAlbumCard) {
-      toast.error('请选择要使用的卡片')
+      notify.error('请选择要使用的卡片')
       return
     }
     const selectedCard = albumCards.find((card) => card.id === selectedAlbumCard)
     if (!selectedCard) {
-      toast.error('未找到卡片信息')
+      notify.error('未找到卡片信息')
       return
     }
     const targetIndex = (formData.attempts?.length || 0) - 1
     if (targetIndex < 0) {
-      toast.error('请先添加一条尝试记录')
+      notify.error('请先添加一条尝试记录')
       return
     }
     const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
@@ -1373,7 +1379,7 @@ const AddPOS = () => {
       .join(' · ')
     updateAttempt(targetIndex, 'card_name', cardLabel)
     updateAttempt(targetIndex, 'payment_method', methodLabel)
-    toast.success('已填充卡片信息')
+    notify.success('已填充卡片信息')
     setIsAlbumPickerOpen(false)
   }
 

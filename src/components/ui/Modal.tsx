@@ -11,6 +11,7 @@ interface ModalProps {
   children: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
   showCloseButton?: boolean
+  backdropClassName?: string
   className?: string
 }
 
@@ -21,6 +22,7 @@ const Modal = ({
   children,
   size = 'md',
   showCloseButton = true,
+  backdropClassName,
   className,
 }: ModalProps) => {
   useEffect(() => {
@@ -61,7 +63,7 @@ const Modal = ({
   }
 
   const modalContent = (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center p-4">
+    <div className={cn('modal-backdrop fixed inset-0 flex items-center justify-center p-4', backdropClassName)}>
       {/* 背景遮罩 */}
       <div
         className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"

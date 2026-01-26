@@ -1,10 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Bell, Check, CheckCircle, Clock, ExternalLink, Loader2, MessageSquare, Tag, X } from 'lucide-react'
-import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import usePermissions from '@/hooks/usePermissions'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 type NotificationType = 'message' | 'alert' | 'promo' | 'success' | 'system'
 type NotificationAudience = 'all' | 'role' | 'user'
@@ -188,10 +188,13 @@ const Notifications = () => {
           setNotificationsUnavailable(true)
           setNotifications([])
           setSelectedNotification(null)
-          toast.warning(t('notificationsPage.tableMissing', '通知功能未在当前环境启用'))
+          notify.warning(t('notificationsPage.tableMissing', '通知功能未在当前环境启用'))
           return
         }
-        toast.error(t('notificationsPage.loadError', 'Failed to load notifications'))
+        notify.critical(t('notificationsPage.loadError', 'Failed to load notifications'), {
+          title: '加载通知失败',
+          details: getErrorDetails(error),
+        })
         return
       }
 
@@ -210,7 +213,10 @@ const Notifications = () => {
       })
     } catch (error) {
       console.error('加载通知失败:', error)
-      toast.error(t('notificationsPage.loadError', 'Failed to load notifications'))
+      notify.critical(t('notificationsPage.loadError', 'Failed to load notifications'), {
+        title: '加载通知失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -245,7 +251,7 @@ const Notifications = () => {
 
     if (error) {
       console.error('标记已读失败:', error)
-      toast.error(t('notificationsPage.markReadError', 'Failed to mark as read'))
+      notify.error(t('notificationsPage.markReadError', 'Failed to mark as read'))
       return
     }
 
@@ -289,7 +295,7 @@ const Notifications = () => {
     const { error } = await supabase.from('notification_reads').upsert(payload)
     if (error) {
       console.error('全部标记已读失败:', error)
-      toast.error(t('notificationsPage.markAllError', 'Failed to mark all as read'))
+      notify.error(t('notificationsPage.markAllError', 'Failed to mark all as read'))
       setMarkingAll(false)
       return
     }
@@ -317,7 +323,7 @@ const Notifications = () => {
         notification_reads: alreadyExists ? reads : [...reads, { user_id: user.id, read_at: now }]
       }
     })
-    toast.success(t('notificationsPage.markAllSuccess', 'All notifications marked as read'))
+    notify.success(t('notificationsPage.markAllSuccess', 'All notifications marked as read'))
     setMarkingAll(false)
   }
 
@@ -333,12 +339,12 @@ const Notifications = () => {
     if (!user || !isAdmin) return
 
     if (!formData.title.trim() || !formData.content.trim()) {
-      toast.error(t('notificationsPage.form.required', 'Title and content are required'))
+      notify.error(t('notificationsPage.form.required', 'Title and content are required'))
       return
     }
 
     if (formData.audience === 'user' && !formData.targetUserEmail.trim()) {
-      toast.error(t('notificationsPage.form.userRequired', 'Target user email is required'))
+      notify.error(t('notificationsPage.form.userRequired', 'Target user email is required'))
       return
     }
 
@@ -376,7 +382,7 @@ const Notifications = () => {
         throw error
       }
 
-      toast.success(t('notificationsPage.form.sent', 'Notification sent'))
+      notify.success(t('notificationsPage.form.sent', 'Notification sent'))
       setFormData({
         title: '',
         content: '',
@@ -389,7 +395,7 @@ const Notifications = () => {
       await loadNotifications()
     } catch (error) {
       console.error('发送通知失败:', error)
-      toast.error(t('notificationsPage.form.failed', 'Failed to send notification'))
+      notify.error(t('notificationsPage.form.failed', 'Failed to send notification'))
     } finally {
       setSending(false)
     }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Star, Clock, Edit, Trash2, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase, type POSMachine } from '@/lib/supabase'
-import { toast } from 'sonner'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 const MyPOS: React.FC = () => {
   const navigate = useNavigate()
@@ -34,14 +34,20 @@ const MyPOS: React.FC = () => {
 
       if (error) {
         console.error('加载我的POS机失败:', error)
-        toast.error('加载失败，请重试')
+        notify.critical('加载失败，请重试', {
+          title: '加载我的 POS 机失败',
+          details: getErrorDetails(error),
+        })
         return
       }
 
       setPOSMachines(data || [])
     } catch (error) {
       console.error('加载我的POS机失败:', error)
-      toast.error('加载失败，请重试')
+      notify.critical('加载失败，请重试', {
+        title: '加载我的 POS 机失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -59,17 +65,17 @@ const MyPOS: React.FC = () => {
 
       if (error) {
         console.error('删除POS机失败:', error)
-        toast.error('删除失败，请重试')
+        notify.error('删除失败，请重试')
         return
       }
 
-      toast.success('POS机已删除')
+      notify.success('POS机已删除')
       setShowDeleteModal(false)
       setSelectedPOS(null)
       loadMyPOSMachines() // 重新加载列表
     } catch (error) {
       console.error('删除POS机失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     } finally {
       setDeleting(false)
     }

@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, CreditCard, Smartphone, Settings, FileText, Link, Plus, Building } from 'lucide-react'
-import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -19,6 +18,7 @@ import RadioGroup from '@/components/ui/RadioGroup'
 import Checkbox from '@/components/ui/Checkbox'
 import Select from '@/components/ui/Select'
 import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType, CardNetworkFee, feeUtils } from '@/types/fees'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 const EditPOS = () => {
   const { id } = useParams<{ id: string }>()
@@ -81,7 +81,10 @@ const EditPOS = () => {
           
           if (error || !data) {
             console.error('查询POS机数据失败:', error)
-            toast.error('未找到该POS机信息')
+            notify.critical('未找到该POS机信息', {
+              title: '无法编辑 POS 机',
+              details: getErrorDetails(error),
+            })
             navigate('/app/map')
             return
           }
@@ -95,7 +98,9 @@ const EditPOS = () => {
         
         // 权限检查
         if (!permissions.isLoading && !permissions.canEditItem(posData.created_by)) {
-          toast.error('您没有权限编辑此POS机')
+          notify.critical('您没有权限编辑此POS机', {
+            title: '权限不足',
+          })
           navigate('/app/map')
           return
         }
@@ -109,7 +114,10 @@ const EditPOS = () => {
         loadAttempts() // 加载尝试记录
       } catch (error) {
         console.error('加载POS机数据失败:', error)
-        toast.error('加载数据失败，请重试')
+        notify.critical('加载数据失败，请重试', {
+          title: '加载 POS 机数据失败',
+          details: getErrorDetails(error),
+        })
         navigate('/app/map')
       } finally {
         setLoading(false)
@@ -175,19 +183,19 @@ const EditPOS = () => {
     
     // 快速验证：先检查最基本的字段
     if (!formData.merchant_name?.trim()) {
-      toast.error('请填写商家名称')
+      notify.error('请填写商家名称')
       return false
     }
     
     if (!formData.address?.trim()) {
-      toast.error('请填写详细地址')
+      notify.error('请填写详细地址')
       return false
     }
     
     // 位置验证（编辑时位置可能为空，但如果有值则需要有效）
     if ((formData.latitude !== undefined && formData.latitude !== null && formData.latitude === 0) ||
         (formData.longitude !== undefined && formData.longitude !== null && formData.longitude === 0)) {
-      toast.error('请选择有效的地理位置')
+      notify.error('请选择有效的地理位置')
       return false
     }
     
@@ -234,7 +242,7 @@ const EditPOS = () => {
       }
 
       // 显示详细的加载状态
-      toast.loading('正在更新POS机信息...', { id: 'updating-pos' })
+      notify.loading('正在更新POS机信息...', { id: 'updating-pos' })
 
       const updatedData = { 
         ...formData, 
@@ -247,8 +255,8 @@ const EditPOS = () => {
       ])
       
       console.log('[EditPOS] 更新成功，结果:', result)
-      toast.dismiss('updating-pos')
-      toast.success('POS机信息更新成功！')
+      notify.dismiss('updating-pos')
+      notify.success('POS机信息更新成功！')
       
       // 延迟跳转，让用户看到成功提示
       setTimeout(() => {
@@ -257,7 +265,7 @@ const EditPOS = () => {
       
     } catch (error: any) {
       console.error('[EditPOS] 更新POS机失败:', error)
-      toast.dismiss('updating-pos')
+      notify.dismiss('updating-pos')
       
       // 更详细的错误处理
       let errorMessage = '更新失败，请重试'
@@ -274,7 +282,10 @@ const EditPOS = () => {
         errorMessage = error.message
       }
       
-      toast.error(errorMessage)
+      notify.critical(errorMessage, {
+        title: '更新 POS 机失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setSaving(false)
     }
@@ -317,16 +328,16 @@ const EditPOS = () => {
       
       if (error) {
         console.error('删除尝试记录失败:', error)
-        toast.error('删除失败，请重试')
+        notify.error('删除失败，请重试')
         return
       }
       
       // 更新本地状态
       setAttempts(prev => prev.filter(attempt => attempt.id !== attemptId))
-      toast.success('尝试记录已删除')
+      notify.success('尝试记录已删除')
     } catch (error) {
       console.error('删除尝试记录失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     }
   }
 
@@ -336,11 +347,11 @@ const EditPOS = () => {
     setDeleting(true)
     try {
       await deletePOSMachine(id)
-      toast.success('POS机删除成功')
+      notify.success('POS机删除成功')
       navigate('/app/map')
     } catch (error) {
       console.error('删除POS机失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     } finally {
       setDeleting(false)
       setShowDeleteModal(false)
@@ -388,7 +399,7 @@ const EditPOS = () => {
       
       if (error) {
         console.error('提交尝试记录失败:', error)
-        toast.error('提交失败，请重试')
+        notify.error('提交失败，请重试')
         return
       }
       
@@ -399,10 +410,10 @@ const EditPOS = () => {
       setPendingAttemptResult(null)
       setCardInfo({ card_name: '', payment_method: '', card_number: '', cvv: '', expiry_date: '', cardholder_name: '', result: '', notes: '' })
       
-      toast.success(`${pendingAttemptResult === 'success' ? '成功' : '失败'}尝试已记录`)
+      notify.success(`${pendingAttemptResult === 'success' ? '成功' : '失败'}尝试已记录`)
     } catch (error) {
       console.error('提交尝试记录失败:', error)
-      toast.error('提交失败，请重试')
+      notify.error('提交失败，请重试')
     }
   }
 

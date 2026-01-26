@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Edit, FileText, Filter, Plus, Trash2, User, Users } from 'lucide-react'
-import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedListItem from '@/components/AnimatedListItem'
@@ -8,6 +7,7 @@ import clsx from 'clsx'
 import { useMapStore } from '@/stores/useMapStore'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import { usePermissions } from '@/hooks/usePermissions'
+import { notify } from '@/lib/notify'
 import {
   type AlbumScope,
   type CardAlbumItem,
@@ -84,7 +84,7 @@ const CardAlbum = () => {
     Object.entries(validationErrors).forEach(([field, message]) => {
       if (message && touchedFields[field as keyof typeof touchedFields]) {
         if (lastValidationToast.current[field] !== message) {
-          toast.error(message)
+          notify.error(message)
           lastValidationToast.current[field] = message
         }
       } else if (!message && lastValidationToast.current[field]) {
@@ -164,7 +164,7 @@ const CardAlbum = () => {
     if (Object.keys(validationErrors).length > 0) {
       const firstError = Object.values(validationErrors)[0]
       if (firstError) {
-        toast.error(firstError)
+        notify.error(firstError)
       }
       return
     }
@@ -184,7 +184,7 @@ const CardAlbum = () => {
       })
       setShowAddPage(false)
       setEditingCard(null)
-      toast.success('卡片信息已更新')
+      notify.success('卡片信息已更新')
       return
     }
 
@@ -202,12 +202,12 @@ const CardAlbum = () => {
 
     addCard(newCard)
     setShowAddPage(false)
-    toast.success('已添加卡片')
+    notify.success('已添加卡片')
   }
 
   const handleEditCard = (card: CardAlbumItem) => {
     if (!permissions.isAdmin) {
-      toast.error('只有管理员可以编辑卡片')
+      notify.error('只有管理员可以编辑卡片')
       return
     }
     setShowDetailModal(false)
@@ -229,13 +229,13 @@ const CardAlbum = () => {
   const handleDeleteCard = () => {
     if (!cardToDelete) return
     if (!permissions.isAdmin) {
-      toast.error('只有管理员可以删除卡片')
+      notify.error('只有管理员可以删除卡片')
       return
     }
     removeCard(cardToDelete.id)
     setShowDeleteModal(false)
     setCardToDelete(null)
-    toast.success('卡片已删除')
+    notify.success('卡片已删除')
   }
 
   const handleOpenDetail = (card: CardAlbumItem) => {
@@ -246,7 +246,7 @@ const CardAlbum = () => {
   const handleSubmitReport = () => {
     if (!selectedCard) return
     if (!reportForm.issueType.trim() || !reportForm.description.trim()) {
-      toast.error('请补充申报类型与问题描述')
+      notify.error('请补充申报类型与问题描述')
       return
     }
     addReport({
@@ -263,16 +263,16 @@ const CardAlbum = () => {
     })
     setReportForm({ issueType: '', description: '', contact: '' })
     setShowReportModal(false)
-    toast.success('申报已提交')
+    notify.success('申报已提交')
   }
 
   const handleAddToPersonal = (card: CardAlbumItem) => {
     const result = addToPersonal(card)
     if (!result.added) {
-      toast.info('该卡片已在我的卡册')
+      notify.info('该卡片已在我的卡册')
       return
     }
-    toast.success('已加入我的卡册')
+    notify.success('已加入我的卡册')
   }
 
   return (
@@ -547,7 +547,7 @@ const CardAlbum = () => {
                       onClick={(event) => {
                         event.stopPropagation()
                         if (!permissions.isAdmin) {
-                          toast.error('只有管理员可以删除卡片')
+                          notify.error('只有管理员可以删除卡片')
                           return
                         }
                         setCardToDelete(card)
@@ -706,7 +706,7 @@ const CardAlbum = () => {
                 type="button"
                 onClick={() => {
                   if (!permissions.isAdmin) {
-                    toast.error('只有管理员可以删除卡片')
+                    notify.error('只有管理员可以删除卡片')
                     return
                   }
                   setCardToDelete(selectedCard)

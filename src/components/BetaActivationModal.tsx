@@ -5,7 +5,7 @@ import Button from './ui/Button';
 import Input from './ui/Input';
 import { activateBetaPermission, validateActivationCode } from '../lib/activation';
 import { useAuthStore } from '../stores/useAuthStore';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 
 interface BetaActivationModalProps {
   isOpen: boolean;
@@ -46,7 +46,7 @@ export function BetaActivationModal({ isOpen, onClose, onSuccess }: BetaActivati
 
       if (response.data?.success) {
         setSuccess(true);
-        toast.success('Beta权限激活成功！');
+        notify.success('Beta权限激活成功！');
         
         // 刷新用户信息
         await refreshUser();

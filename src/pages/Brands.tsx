@@ -9,7 +9,7 @@ import Checkbox from '../components/ui/Checkbox';
 import AnimatedModal from '../components/ui/AnimatedModal';
 import PageTransition from '../components/PageTransition';
 import AddBrandModal from '../components/AddBrandModal';
-import { toast } from 'sonner';
+import { getErrorDetails, notify } from '../lib/notify';
 
 const Brands: React.FC = () => {
   const { user } = useAuthStore();
@@ -45,14 +45,20 @@ const Brands: React.FC = () => {
 
       if (error) {
         console.error('加载品牌失败:', error);
-        toast.error('加载品牌失败');
+        notify.critical('加载品牌失败', {
+          title: '加载品牌失败',
+          details: getErrorDetails(error),
+        });
         return;
       }
 
       setBrands(data || []);
     } catch (error) {
       console.error('加载品牌失败:', error);
-      toast.error('加载品牌失败');
+      notify.critical('加载品牌失败', {
+        title: '加载品牌失败',
+        details: getErrorDetails(error),
+      });
     } finally {
       setIsLoading(false);
     }
@@ -175,7 +181,7 @@ const Brands: React.FC = () => {
   // 删除品牌（仅管理员）
   const handleDeleteBrand = async (brandId: string) => {
     if (!(user as any)?.isAdmin) {
-      toast.error('只有管理员可以删除品牌');
+      notify.error('只有管理员可以删除品牌');
       return;
     }
 
@@ -190,16 +196,16 @@ const Brands: React.FC = () => {
         .eq('id', brandId);
 
       if (error) {
-        toast.error('删除品牌失败：' + error.message);
+        notify.error('删除品牌失败：' + error.message);
         return;
       }
 
-      toast.success('品牌删除成功');
+      notify.success('品牌删除成功');
       loadBrands();
       setSelectedBrand(null);
     } catch (error) {
       console.error('删除品牌失败:', error);
-      toast.error('删除品牌失败');
+      notify.error('删除品牌失败');
     }
   };
 

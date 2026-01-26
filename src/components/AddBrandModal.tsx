@@ -3,7 +3,7 @@ import { X, Plus, Upload, Globe, Store } from 'lucide-react';
 import { BrandCategory, BrandBusinessType, CreateBrandFormData } from '../types/brands';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/useAuthStore';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 
 interface AddBrandModalProps {
   isOpen: boolean;
@@ -27,12 +27,12 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      toast.error('请先登录');
+      notify.error('请先登录');
       return;
     }
 
     if (!formData.name.trim()) {
-      toast.error('请输入品牌名称');
+      notify.error('请输入品牌名称');
       return;
     }
 
@@ -51,14 +51,14 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
 
       if (error) {
         if (error.code === '23505') {
-          toast.error('您已经创建过同名品牌');
+          notify.error('您已经创建过同名品牌');
         } else {
-          toast.error('创建品牌失败：' + error.message);
+          notify.error('创建品牌失败：' + error.message);
         }
         return;
       }
 
-      toast.success('品牌创建成功！');
+      notify.success('品牌创建成功！');
       onSuccess();
       onClose();
       // 重置表单
@@ -73,7 +73,7 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
       });
     } catch (error) {
       console.error('创建品牌失败:', error);
-      toast.error('创建品牌失败，请重试');
+      notify.error('创建品牌失败，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -89,9 +89,9 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
     if (formData.name.trim()) {
       const iconUrl = generateIconUrl(formData.name, formData.businessType);
       setFormData(prev => ({ ...prev, iconUrl }));
-      toast.success('已自动生成图标URL');
+      notify.success('已自动生成图标URL');
     } else {
-      toast.error('请先输入品牌名称');
+      notify.error('请先输入品牌名称');
     }
   };
 

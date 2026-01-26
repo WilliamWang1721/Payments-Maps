@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
-import { toast } from 'sonner'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 interface Props {
   children: ReactNode
@@ -23,7 +23,14 @@ class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary details:', error, errorInfo)
-    toast.error('页面出现错误，请刷新页面重试')
+    const details = import.meta.env.DEV
+      ? [getErrorDetails(error), errorInfo.componentStack].filter(Boolean).join('\n\n')
+      : undefined
+
+    notify.critical('页面出现错误，请刷新页面重试', {
+      title: '页面错误',
+      details,
+    })
   }
 
   public render() {

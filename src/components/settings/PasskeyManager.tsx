@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Key, Loader2, PenSquare, Trash2, Plus, CheckCircle2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { usePasskeyManager } from '@/hooks/usePasskeys'
+import { notify } from '@/lib/notify'
 
 const formatDate = (value?: string | null) => {
   if (!value) return '尚未使用'
@@ -32,20 +32,20 @@ export const PasskeyManager = () => {
     const friendlyName = (newName || '').trim()
     try {
       await registerPasskey(friendlyName)
-      toast.success('Passkey 已注册')
+      notify.success('Passkey 已注册')
       setShowAddForm(false)
       setNewName('')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Passkey 注册失败')
+      notify.error(err instanceof Error ? err.message : 'Passkey 注册失败')
     }
   }
 
   const handleDelete = async (id: string) => {
     try {
       await deletePasskey(id)
-      toast.success('Passkey 已删除')
+      notify.success('Passkey 已删除')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败，请重试')
+      notify.error(err instanceof Error ? err.message : '删除失败，请重试')
     }
   }
 
@@ -58,16 +58,16 @@ export const PasskeyManager = () => {
     if (!editingId) return
     const friendlyName = editingValue.trim()
     if (!friendlyName) {
-      toast.error('名称不能为空')
+      notify.error('名称不能为空')
       return
     }
     try {
       await renamePasskey(editingId, friendlyName)
-      toast.success('名称已更新')
+      notify.success('名称已更新')
       setEditingId(null)
       setEditingValue('')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '更新失败，请重试')
+      notify.error(err instanceof Error ? err.message : '更新失败，请重试')
     }
   }
 
