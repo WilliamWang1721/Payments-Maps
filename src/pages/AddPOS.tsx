@@ -208,6 +208,9 @@ const AddPOS = () => {
   })
   const lastValidationToast = useRef<Record<string, string>>({})
 
+  const getFieldError = (field: keyof typeof touchedFields) =>
+    touchedFields[field] ? validationErrors[field] : ''
+
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
     address: '',
@@ -365,16 +368,11 @@ const AddPOS = () => {
 
   useEffect(() => {
     Object.entries(validationErrors).forEach(([field, message]) => {
-      if (message && touchedFields[field as keyof typeof touchedFields]) {
-        if (lastValidationToast.current[field] !== message) {
-          notify.error(message)
-          lastValidationToast.current[field] = message
-        }
-      } else if (!message && lastValidationToast.current[field]) {
+      if (!message && lastValidationToast.current[field]) {
         delete lastValidationToast.current[field]
       }
     })
-  }, [touchedFields, validationErrors])
+  }, [validationErrors])
 
   const markTouched = (field: keyof typeof touchedFields) => {
     setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
@@ -447,6 +445,11 @@ const AddPOS = () => {
       if (firstError) {
         notify.error(firstError)
       }
+      Object.entries(validationErrors).forEach(([field, message]) => {
+        if (message) {
+          lastValidationToast.current[field] = message
+        }
+      })
       return false
     }
 
@@ -716,6 +719,9 @@ const AddPOS = () => {
             }}
             onBlur={() => markTouched('merchant_name')}
           />
+          {getFieldError('merchant_name') && (
+            <p className="mt-2 text-xs text-red-600">{getFieldError('merchant_name')}</p>
+          )}
         </div>
 
         <div>
@@ -734,6 +740,9 @@ const AddPOS = () => {
             />
             <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           </div>
+          {getFieldError('address') && (
+            <p className="mt-2 text-xs text-red-600">{getFieldError('address')}</p>
+          )}
           {formData.latitude !== 0 && formData.longitude !== 0 && (
             <div className="mt-2 flex items-center gap-2 text-xs text-accent-salmon font-bold bg-green-50 p-2 rounded-lg w-fit">
               <CheckCircle className="w-3 h-3" /> {uiText.coordinatesLabel}: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
@@ -751,6 +760,9 @@ const AddPOS = () => {
           <MapPin className="w-4 h-4" />
           {formData.latitude && formData.longitude ? uiText.reselectLocationButton : uiText.pickLocationButton}
         </button>
+        {getFieldError('location') && (
+          <p className="mt-2 text-xs text-red-600">{getFieldError('location')}</p>
+        )}
 
         {prefilledFromQuery && (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">

@@ -47,6 +47,22 @@ const EditPOS = () => {
     notes: ''
   })
   const [attempts, setAttempts] = useState<any[]>([])
+  const [touchedFields, setTouchedFields] = useState({ merchant_name: false })
+
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {}
+    if (!formData?.merchant_name?.trim()) {
+      errors.merchant_name = '请填写商家名称'
+    }
+    return errors
+  }, [formData?.merchant_name])
+
+  const getFieldError = (field: keyof typeof touchedFields) =>
+    touchedFields[field] ? validationErrors[field] : ''
+
+  const markTouched = (field: keyof typeof touchedFields) => {
+    setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
+  }
 
   useEffect(() => {
     if (scrollContainerRef.current) {
@@ -180,46 +196,51 @@ const EditPOS = () => {
 
   const validateForm = () => {
     if (!formData) return false
-    
+
+    setTouchedFields((prev) => ({
+      ...prev,
+      merchant_name: true,
+    }))
+
     // 快速验证：先检查最基本的字段
     if (!formData.merchant_name?.trim()) {
       notify.error('请填写商家名称')
       return false
     }
-    
+
     if (!formData.address?.trim()) {
       notify.error('请填写详细地址')
       return false
     }
-    
+
     // 位置验证（编辑时位置可能为空，但如果有值则需要有效）
     if ((formData.latitude !== undefined && formData.latitude !== null && formData.latitude === 0) ||
         (formData.longitude !== undefined && formData.longitude !== null && formData.longitude === 0)) {
       notify.error('请选择有效的地理位置')
       return false
     }
-    
+
     // 可选但推荐的字段验证
      const warnings = []
-     
+
      if (!formData.basic_info?.model?.trim()) {
        warnings.push('设备型号')
      }
-     
+
      if (!formData.basic_info?.acquiring_institution?.trim()) {
        warnings.push('收单机构')
      }
-     
+
      if (!formData.merchant_info?.transaction_name?.trim()) {
        warnings.push('交易名称')
      }
-    
+
     // 如果有缺失的推荐字段，给出友好提示但不阻止提交
     if (warnings.length > 0) {
       console.log('[EditPOS] 推荐填写字段:', warnings.join('、'))
       // 不阻止提交，只是记录日志
     }
-    
+
     return true
   }
 
@@ -495,7 +516,12 @@ const EditPOS = () => {
                 <AnimatedInput
                   label="商户名称 *"
                   value={formData.merchant_name}
-                  onChange={e => handleInputChange('merchant_name', e.target.value)}
+                  onChange={e => {
+                    markTouched('merchant_name')
+                    handleInputChange('merchant_name', e.target.value)
+                  }}
+                  onBlur={() => markTouched('merchant_name')}
+                  error={getFieldError('merchant_name')}
                   placeholder="请输入商户名称"
                 />
                 <AnimatedInput
