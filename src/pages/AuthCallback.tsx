@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 // import { supabase } from '@/lib/supabase' // 移除数据库依赖
 import Loading from '@/components/ui/Loading'
+import { notify } from '@/lib/notify'
 
 const AuthCallback = () => {
   const navigate = useNavigate()
@@ -11,7 +11,7 @@ const AuthCallback = () => {
     const handleAuthCallback = async () => {
       try {
         // 由于已禁用登录，直接跳转到地图页面
-        toast.success('自动登录成功！')
+        notify.success('自动登录成功！')
         navigate('/app/map')
       } catch (error) {
         console.error('处理认证回调失败:', error)

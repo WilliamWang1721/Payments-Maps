@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Crown, Shield, Users, User, Edit, Save, X, Search, Zap, Plus, Eye, EyeOff, Copy, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 import { generateActivationCode, deactivateActivationCode, getActivationCodes } from '@/lib/activation'
@@ -11,6 +10,7 @@ import Loading from '@/components/ui/Loading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import AnimatedModal from '@/components/ui/AnimatedModal'
+import { notify } from '@/lib/notify'
 
 interface UserData {
   id: string
@@ -45,7 +45,7 @@ const RoleManagement = () => {
   useEffect(() => {
     // 检查权限
     if (!permissions.isLoading && !permissions.canManageRoles) {
-      toast.error('您没有权限访问此页面')
+      notify.critical('您没有权限访问此页面', { title: '权限不足' })
       navigate('/app/profile')
       return
     }
@@ -67,14 +67,14 @@ const RoleManagement = () => {
 
       if (error) {
         console.error('加载用户列表失败:', error)
-        toast.error('加载用户列表失败')
+        notify.error('加载用户列表失败')
         return
       }
 
       setUsers(data || [])
     } catch (error) {
       console.error('加载用户列表失败:', error)
-      toast.error('加载数据失败')
+      notify.error('加载数据失败')
     } finally {
       setLoading(false)
     }
@@ -87,14 +87,14 @@ const RoleManagement = () => {
       
       if (response.error) {
         console.error('加载激活码列表失败:', response.error)
-        toast.error('加载激活码列表失败')
+        notify.error('加载激活码列表失败')
         return
       }
 
       setActivationCodes(response.data || [])
     } catch (error) {
       console.error('加载激活码列表失败:', error)
-      toast.error('加载数据失败')
+      notify.error('加载数据失败')
     } finally {
       setCodesLoading(false)
     }
@@ -102,7 +102,7 @@ const RoleManagement = () => {
 
   const handleCreateActivationCode = async () => {
     if (!newCodeForm.name.trim()) {
-      toast.error('请输入激活码名称')
+      notify.error('请输入激活码名称')
       return
     }
 
@@ -115,19 +115,19 @@ const RoleManagement = () => {
 
       if (response.error) {
         console.error('创建激活码失败:', response.error)
-        toast.error('创建激活码失败')
+        notify.error('创建激活码失败')
         return
       }
 
       if (response.data) {
-        toast.success(`激活码创建成功: ${response.data.code}`)
+        notify.success(`激活码创建成功: ${response.data.code}`)
         setShowCreateCodeModal(false)
         setNewCodeForm({ name: '', description: '' })
         loadActivationCodes()
       }
     } catch (error) {
       console.error('创建激活码失败:', error)
-      toast.error('创建失败，请重试')
+      notify.error('创建失败，请重试')
     } finally {
       setCreatingCode(false)
     }
@@ -139,25 +139,25 @@ const RoleManagement = () => {
 
       if (response.error) {
         console.error('停用激活码失败:', response.error)
-        toast.error('停用激活码失败')
+        notify.error('停用激活码失败')
         return
       }
 
-      toast.success('激活码已停用')
+      notify.success('激活码已停用')
       loadActivationCodes()
     } catch (error) {
       console.error('停用激活码失败:', error)
-      toast.error('操作失败，请重试')
+      notify.error('操作失败，请重试')
     }
   }
 
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success('已复制到剪贴板')
+      notify.success('已复制到剪贴板')
     } catch (error) {
       console.error('复制失败:', error)
-      toast.error('复制失败')
+      notify.error('复制失败')
     }
   }
 
@@ -173,7 +173,7 @@ const RoleManagement = () => {
 
       if (error) {
         console.error('更新用户角色失败:', error)
-        toast.error('更新角色失败')
+        notify.error('更新角色失败')
         return
       }
 
@@ -184,11 +184,11 @@ const RoleManagement = () => {
           : user
       ))
 
-      toast.success('用户角色更新成功')
+      notify.success('用户角色更新成功')
       setEditingUser(null)
     } catch (error) {
       console.error('更新用户角色失败:', error)
-      toast.error('更新失败，请重试')
+      notify.error('更新失败，请重试')
     } finally {
       setUpdating(false)
     }

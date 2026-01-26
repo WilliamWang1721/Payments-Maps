@@ -5,6 +5,7 @@ import { router } from '@/router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase, type User } from '@/lib/supabase'
 import usePersistedLanguage from '@/hooks/usePersistedLanguage'
+import CriticalErrorModal from '@/components/notifications/CriticalErrorModal'
 
 function App() {
   const { initialize, setUser } = useAuthStore()
@@ -63,6 +64,7 @@ function App() {
           descriptionClassName: 'app-toast__description',
         }}
       />
+      <CriticalErrorModal />
     </>
   )
 }

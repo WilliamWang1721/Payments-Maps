@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, MapPin, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { toast } from 'sonner'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
+import { notify } from '@/lib/notify'
 
 interface MapPickerProps {
   isOpen: boolean
@@ -97,7 +97,7 @@ const MapPicker = ({
       console.log('[MapPicker] Map initialized successfully')
     } catch (error) {
       console.error('[MapPicker] Map initialization failed:', error)
-      toast.error('地图加载失败，请刷新页面重试')
+      notify.error('地图加载失败，请刷新页面重试')
     } finally {
       setLoading(false)
     }
@@ -180,13 +180,13 @@ const MapPicker = ({
           mapInstanceRef.current.setZoom(16)
         }
         
-        toast.success('定位成功')
+        notify.success('定位成功')
       } else {
-        toast.error('无法获取当前位置')
+        notify.error('无法获取当前位置')
       }
     } catch (error) {
       console.error('[MapPicker] Location error:', error)
-      toast.error('定位失败，请检查定位权限')
+      notify.error('定位失败，请检查定位权限')
     } finally {
       setLocationLoading(false)
     }
@@ -195,7 +195,7 @@ const MapPicker = ({
   // 确认选择
   const handleConfirm = () => {
     if (selectedLocation.latitude === 0 || selectedLocation.longitude === 0) {
-      toast.error('请先选择位置')
+      notify.error('请先选择位置')
       return
     }
     

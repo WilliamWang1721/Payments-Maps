@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
-import { toast } from 'sonner'
+import { notify } from '@/lib/notify'
 
 interface FAQItem {
   id: string
@@ -289,11 +289,11 @@ const HelpCenter: React.FC = () => {
 
   const handleFeedback = (faqId: string, type: 'helpful' | 'not-helpful') => {
     setFeedback(prev => ({ ...prev, [faqId]: type }))
-    toast.success(t('helpCenter.feedback.thanks', '感谢您的反馈！'))
+    notify.success(t('helpCenter.feedback.thanks', '感谢您的反馈！'))
   }
 
   const handleContactSupport = () => {
-    toast.info(t('helpCenter.contact.message', '客服功能即将上线，敬请期待！'))
+    notify.info(t('helpCenter.contact.message', '客服功能即将上线，敬请期待！'))
   }
 
   const quickActions = [

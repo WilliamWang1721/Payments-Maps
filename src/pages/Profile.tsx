@@ -16,7 +16,6 @@ import {
   User,
   Zap
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import Button from '@/components/ui/Button'
@@ -26,6 +25,7 @@ import Input from '@/components/ui/Input'
 import { BetaActivationModal } from '@/components/BetaActivationModal'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 import { listDrafts } from '@/lib/drafts'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 interface UserStats {
   posCount: number
@@ -179,7 +179,10 @@ const Profile = () => {
       })
     } catch (error) {
       console.error('加载用户数据失败:', error)
-      toast.error('加载数据失败')
+      notify.critical('加载数据失败', {
+        title: '加载用户数据失败',
+        details: getErrorDetails(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -209,16 +212,16 @@ const Profile = () => {
 
       if (error) {
         console.error('更新用户信息失败:', error)
-        toast.error('更新失败，请重试')
+        notify.error('更新失败，请重试')
         return
       }
 
-      toast.success('个人信息更新成功')
+      notify.success('个人信息更新成功')
       setShowEditModal(false)
       loadUserData()
     } catch (error) {
       console.error('更新个人信息失败:', error)
-      toast.error('更新失败，请重试')
+      notify.error('更新失败，请重试')
     } finally {
       setUpdating(false)
     }
@@ -230,7 +233,7 @@ const Profile = () => {
       navigate('/login')
     } catch (error) {
       console.error('退出登录失败:', error)
-      toast.error('退出失败，请重试')
+      notify.error('退出失败，请重试')
     }
   }
 
@@ -251,16 +254,16 @@ const Profile = () => {
 
       if (error) {
         console.error('取消收藏失败:', error)
-        toast.error('取消收藏失败，请重试')
+        notify.error('取消收藏失败，请重试')
         return
       }
 
       setFavorites((prev) => prev.filter((fav) => fav.id !== favoriteId))
       setStats((prev) => ({ ...prev, favoriteCount: Math.max(0, prev.favoriteCount - 1) }))
-      toast.success('已取消收藏')
+      notify.success('已取消收藏')
     } catch (error) {
       console.error('取消收藏失败:', error)
-      toast.error('操作失败，请重试')
+      notify.error('操作失败，请重试')
     }
   }
 

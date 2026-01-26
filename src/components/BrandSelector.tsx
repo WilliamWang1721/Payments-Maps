@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/useAuthStore';
 import AnimatedInput from './ui/AnimatedInput';
 import AnimatedButton from './ui/AnimatedButton';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 
 interface BrandSelectorProps {
   value?: string; // 选中的品牌ID
@@ -53,7 +53,7 @@ const BrandSelector: React.FC<BrandSelectorProps> = ({
       
       if (error) {
         console.error('Error loading brands:', error);
-        toast.error('加载品牌失败');
+        notify.error('加载品牌失败');
         return;
       }
       
@@ -87,7 +87,7 @@ const BrandSelector: React.FC<BrandSelectorProps> = ({
       setBrands(formattedBrands);
     } catch (error) {
       console.error('Error loading brands:', error);
-      toast.error('加载品牌失败');
+      notify.error('加载品牌失败');
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +155,7 @@ const BrandSelector: React.FC<BrandSelectorProps> = ({
     if (!customBrandName.trim()) return;
     
     if (!user) {
-      toast.error('请先登录');
+      notify.error('请先登录');
       return;
     }
     
@@ -176,7 +176,7 @@ const BrandSelector: React.FC<BrandSelectorProps> = ({
       
       if (error) {
         console.error('Error creating custom brand:', error);
-        toast.error('创建品牌失败');
+        notify.error('创建品牌失败');
         return;
       }
       
@@ -189,10 +189,10 @@ const BrandSelector: React.FC<BrandSelectorProps> = ({
       setShowCustomInput(false);
       setIsOpen(false);
       
-      toast.success('品牌创建成功');
+      notify.success('品牌创建成功');
     } catch (error) {
       console.error('Error creating custom brand:', error);
-      toast.error('创建品牌失败');
+      notify.error('创建品牌失败');
     } finally {
       setIsLoading(false);
     }

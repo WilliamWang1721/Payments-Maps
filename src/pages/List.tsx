@@ -11,7 +11,7 @@ import { SkeletonCard } from '@/components/AnimatedLoading'
 import { supabase, type POSMachine } from '@/lib/supabase'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import { HighlightText } from '../components/HighlightText'
-import { toast } from 'sonner'
+import { notify } from '@/lib/notify'
 
 interface POSMachineWithStats extends POSMachine {
   distance?: number
@@ -243,7 +243,7 @@ const List = () => {
       .map((pos) => pos.id)
 
     if (idsToDelete.length === 0) {
-      toast.error('没有可删除的POS机')
+      notify.error('没有可删除的POS机')
       return
     }
 
@@ -261,13 +261,13 @@ const List = () => {
         throw error
       }
 
-      toast.success(`已删除 ${idsToDelete.length} 台POS机`)
+      notify.success(`已删除 ${idsToDelete.length} 台POS机`)
       setSelectedPOSIds(new Set())
       setSelectionMode(false)
       await loadPOSMachines()
     } catch (error) {
       console.error('批量删除POS机失败:', error)
-      toast.error('删除失败，请重试')
+      notify.error('删除失败，请重试')
     } finally {
       setBulkDeleting(false)
     }

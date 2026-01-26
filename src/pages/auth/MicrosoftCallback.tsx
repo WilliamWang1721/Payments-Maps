@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase } from '@/lib/supabase'
 import { syncMicrosoftUserToSupabase } from '@/lib/supabase-auth'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 const MicrosoftCallback = () => {
   const navigate = useNavigate()
@@ -37,14 +37,17 @@ const MicrosoftCallback = () => {
         setUser(user)
         
         console.log('✅ 用户信息同步完成:', user)
-        toast.success('Microsoft登录成功！')
+        notify.success('Microsoft登录成功！')
         
         // 重定向到首页
         navigate('/app/map', { replace: true })
         
       } catch (error) {
         console.error('❌ Microsoft OAuth回调处理失败:', error)
-        toast.error('登录失败，请重试')
+        notify.critical('登录失败，请重试', {
+          title: 'Microsoft 登录失败',
+          details: getErrorDetails(error),
+        })
         navigate('/login', { replace: true })
       } finally {
         setIsProcessing(false)
