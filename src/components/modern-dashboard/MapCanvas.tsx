@@ -92,6 +92,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
   const posMachines = useMapStore((state) => state.posMachines)
   const loadPOSMachines = useMapStore((state) => state.loadPOSMachines)
   const selectPOSMachine = useMapStore((state) => state.selectPOSMachine)
+  const selectedPOSMachine = useMapStore((state) => state.selectedPOSMachine)
   const getCurrentLocation = useMapStore((state) => state.getCurrentLocation)
 
   useEffect(() => {
@@ -212,6 +213,18 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       }
     }
   }, [mapInstance, posMachines, navigate, selectPOSMachine, showLabels])
+
+  useEffect(() => {
+    if (!mapInstance || !selectedPOSMachine) return
+    if (typeof selectedPOSMachine.longitude !== 'number' || typeof selectedPOSMachine.latitude !== 'number') return
+
+    try {
+      mapInstance.setCenter([selectedPOSMachine.longitude, selectedPOSMachine.latitude])
+      mapInstance.setZoom(15)
+    } catch (error) {
+      console.error('Failed to focus map on selected POS:', error)
+    }
+  }, [mapInstance, selectedPOSMachine])
 
   const handleZoom = (delta: number) => {
     if (!mapInstance) return

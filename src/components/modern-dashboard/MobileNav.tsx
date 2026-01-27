@@ -27,6 +27,10 @@ const MobileNav = () => {
 
   if (!mounted) return null
 
+  if (location.pathname.startsWith('/app/pos') || location.pathname.startsWith('/app/pos-detail')) {
+    return null
+  }
+
   const navContent = (
     <div
       className="md:hidden px-4 pointer-events-none"
