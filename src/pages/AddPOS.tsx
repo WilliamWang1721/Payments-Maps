@@ -23,6 +23,7 @@ import SystemSelect from '@/components/ui/SystemSelect'
 import SimpleMapPicker from '@/components/SimpleMapPicker'
 import { CARD_NETWORKS } from '@/lib/cardNetworks'
 import { locationUtils } from '@/lib/amap'
+import { POSMachine, supabase } from '@/lib/supabase'
 import { FeeType, FeesConfiguration, DEFAULT_FEES_CONFIG, CardNetworkFee } from '@/types/fees'
 import { formatFeeDisplay } from '@/utils/feeUtils'
 import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
@@ -70,11 +71,19 @@ interface FormData {
   }
   common_cards?: Array<{ name: string; method?: string }>
   attempts?: {
-    user: string
-    result: 'success' | 'failure'
-    timestamp: string
+    result: 'success' | 'failure' | 'unknown'
+    attempted_at?: string
+    timestamp?: string
+    card_network?: string
+    payment_method?: 'tap' | 'insert' | 'swipe' | 'apple_pay' | 'google_pay' | 'hce'
+    cvm?: 'no_pin' | 'pin' | 'signature' | 'unknown'
+    acquiring_mode?: 'DCC' | 'EDC' | 'unknown'
+    device_status?: 'active' | 'inactive' | 'maintenance' | 'disabled'
+    acquiring_institution?: string
+    checkout_location?: '自助收银' | '人工收银'
     card_name?: string
-    payment_method?: string
+    notes?: string
+    is_conclusive_failure?: boolean
   }[]
   extended_fields: Record<string, any>
   remarks?: string
@@ -183,7 +192,7 @@ const ensureFees = (fees?: FeesConfiguration): FeesConfiguration => {
 const AddPOS = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user: _ } = useAuthStore()
+  const { user } = useAuthStore()
   const { addPOSMachine } = useMapStore()
   const albumCards = useCardAlbumStore((state) => state.cards)
   const _permissions = usePermissions()
@@ -195,6 +204,7 @@ const AddPOS = () => {
   const [isBillDetailsOpen, setIsBillDetailsOpen] = useState(false)
   const [activeCvmTab, setActiveCvmTab] = useState<CvmTab>('noPin')
   const [cardNetworkStates, setCardNetworkStates] = useState<Partial<Record<SchemeID, ThreeStateValue>>>({})
+  const [advancedOptionsOpen, setAdvancedOptionsOpen] = useState(false)
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
   const [prefilledFromQuery, setPrefilledFromQuery] = useState(false)
   const [isPrefillAddressLoading, setIsPrefillAddressLoading] = useState(false)
@@ -207,6 +217,9 @@ const AddPOS = () => {
     location: false,
   })
   const lastValidationToast = useRef<Record<string, string>>({})
+
+  const getFieldError = (field: keyof typeof touchedFields) =>
+    touchedFields[field] ? validationErrors[field] : ''
 
   const [formData, setFormData] = useState<FormData>({
     merchant_name: '',
@@ -251,6 +264,26 @@ const AddPOS = () => {
     fees: ensureFees(DEFAULT_FEES_CONFIG),
     common_cards: [],
   })
+
+  const clearAdvancedSelections = () => {
+    handleInputChange('basic_info.supported_card_networks', [])
+    handleInputChange('basic_info.supports_contactless', 'unknown')
+    handleInputChange('basic_info.supports_apple_pay', 'unknown')
+    handleInputChange('basic_info.supports_google_pay', 'unknown')
+    handleInputChange('basic_info.supports_hce_simulation', 'unknown')
+    handleInputChange('verification_modes.small_amount_no_pin', [])
+    handleInputChange('verification_modes.small_amount_no_pin_unsupported', false)
+    handleInputChange('verification_modes.small_amount_no_pin_uncertain', false)
+    handleInputChange('verification_modes.small_amount_no_pin_unknown', false)
+    handleInputChange('verification_modes.requires_password', [])
+    handleInputChange('verification_modes.requires_password_unsupported', false)
+    handleInputChange('verification_modes.requires_password_uncertain', false)
+    handleInputChange('verification_modes.requires_password_unknown', false)
+    handleInputChange('verification_modes.requires_signature', [])
+    handleInputChange('verification_modes.requires_signature_unsupported', false)
+    handleInputChange('verification_modes.requires_signature_uncertain', false)
+    handleInputChange('verification_modes.requires_signature_unknown', false)
+  }
 
   useEffect(() => {
     console.log('[AddPOS] step changed:', step)
@@ -365,16 +398,11 @@ const AddPOS = () => {
 
   useEffect(() => {
     Object.entries(validationErrors).forEach(([field, message]) => {
-      if (message && touchedFields[field as keyof typeof touchedFields]) {
-        if (lastValidationToast.current[field] !== message) {
-          notify.error(message)
-          lastValidationToast.current[field] = message
-        }
-      } else if (!message && lastValidationToast.current[field]) {
+      if (!message && lastValidationToast.current[field]) {
         delete lastValidationToast.current[field]
       }
     })
-  }, [touchedFields, validationErrors])
+  }, [validationErrors])
 
   const markTouched = (field: keyof typeof touchedFields) => {
     setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
@@ -447,6 +475,11 @@ const AddPOS = () => {
       if (firstError) {
         notify.error(firstError)
       }
+      Object.entries(validationErrors).forEach(([field, message]) => {
+        if (message) {
+          lastValidationToast.current[field] = message
+        }
+      })
       return false
     }
 
@@ -502,7 +535,38 @@ const AddPOS = () => {
         },
       }
 
-      const result = await Promise.race([addPOSMachine(payload), timeoutPromise])
+      const { attempts: _attempts, ...posPayload } = payload
+      const result = await Promise.race([addPOSMachine(posPayload), timeoutPromise]) as POSMachine
+
+      const attemptsPayload = (formData.attempts || []).map((attempt, index) => ({
+        pos_id: result.id,
+        user_id: user?.id || null,
+        attempt_number: index + 1,
+        result: attempt.result,
+        card_network: attempt.card_network || null,
+        payment_method: attempt.payment_method || null,
+        cvm: attempt.cvm || 'unknown',
+        acquiring_mode: attempt.acquiring_mode || 'unknown',
+        device_status: attempt.device_status || payload.status || 'active',
+        acquiring_institution: attempt.acquiring_institution?.trim() || null,
+        checkout_location: attempt.checkout_location || payload.basic_info.checkout_location || null,
+        card_name: attempt.card_name?.trim() || null,
+        notes: attempt.notes?.trim() || null,
+        attempted_at: attempt.attempted_at || attempt.timestamp || null,
+        is_conclusive_failure: attempt.is_conclusive_failure || false,
+      }))
+
+      if (attemptsPayload.length > 0) {
+        const { error: attemptsError } = await supabase
+          .from('pos_attempts')
+          .insert(attemptsPayload)
+
+        if (attemptsError) {
+          console.error('[AddPOS] 保存尝试记录失败:', attemptsError)
+          notify.error('POS 已创建，但尝试记录保存失败')
+        }
+      }
+
 
       console.log('[AddPOS] 提交成功，结果:', result)
       notify.dismiss('saving-pos')
@@ -583,14 +647,40 @@ const AddPOS = () => {
       attempts: [
         ...(prev.attempts || []),
         {
-          user: '',
           result: 'success',
-          timestamp: new Date().toISOString(),
+          attempted_at: new Date().toISOString(),
+          card_network: '',
+          payment_method: 'tap',
+          cvm: 'unknown',
+          acquiring_mode: 'unknown',
+          device_status: prev.status || 'active',
+          acquiring_institution: prev.basic_info.acquiring_institution || '',
+          checkout_location: prev.basic_info.checkout_location,
           card_name: '',
-          payment_method: '',
+          notes: '',
+          is_conclusive_failure: false,
         },
       ],
     }))
+  }
+
+  const getAttemptMethodLabel = (method: NonNullable<FormData['attempts']>[number]['payment_method']) => {
+    switch (method) {
+      case 'tap':
+        return '实体卡 Tap'
+      case 'insert':
+        return '实体卡 Insert'
+      case 'swipe':
+        return '实体卡 Swipe'
+      case 'apple_pay':
+        return 'Apple Pay'
+      case 'google_pay':
+        return 'Google Pay'
+      case 'hce':
+        return 'HCE'
+      default:
+        return ''
+    }
   }
 
   const updateAttempt = (index: number, field: keyof NonNullable<FormData['attempts']>[number], value: any) => {
@@ -611,14 +701,15 @@ const AddPOS = () => {
     const attempt = formData.attempts?.[index]
     if (!attempt) return
     const name = attempt.card_name?.trim()
-    const method = attempt.payment_method?.trim()
+    const method = attempt.payment_method
     if (!name && !method) {
       notify.error('请先填写卡片名称或支付方式再保存')
       return
     }
+    const methodLabel = method ? getAttemptMethodLabel(method) : ''
     setFormData((prev) => {
       const existing = prev.common_cards || []
-      const exists = existing.some((item) => item.name === (name || '') && item.method === (method || ''))
+      const exists = existing.some((item) => item.name === (name || '') && item.method === (methodLabel || ''))
       if (exists) {
         notify.success('已在常用卡片列表中')
         return prev
@@ -626,7 +717,7 @@ const AddPOS = () => {
       notify.success('常用卡片已保存')
       return {
         ...prev,
-        common_cards: [...existing, { name: name || method || '未命名卡片', method }],
+        common_cards: [...existing, { name: name || methodLabel || '未命名卡片', method: methodLabel }],
       }
     })
   }
@@ -635,7 +726,7 @@ const AddPOS = () => {
     const card = formData.common_cards?.[cardIndex]
     if (!card) return
     updateAttempt(index, 'card_name', card.name)
-    updateAttempt(index, 'payment_method', card.method || '')
+    updateAttempt(index, 'notes', card.method || '')
   }
 
   const handleSaveDraft = () => {
@@ -716,6 +807,9 @@ const AddPOS = () => {
             }}
             onBlur={() => markTouched('merchant_name')}
           />
+          {getFieldError('merchant_name') && (
+            <p className="mt-2 text-xs text-red-600">{getFieldError('merchant_name')}</p>
+          )}
         </div>
 
         <div>
@@ -734,6 +828,9 @@ const AddPOS = () => {
             />
             <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           </div>
+          {getFieldError('address') && (
+            <p className="mt-2 text-xs text-red-600">{getFieldError('address')}</p>
+          )}
           {formData.latitude !== 0 && formData.longitude !== 0 && (
             <div className="mt-2 flex items-center gap-2 text-xs text-accent-salmon font-bold bg-green-50 p-2 rounded-lg w-fit">
               <CheckCircle className="w-3 h-3" /> {uiText.coordinatesLabel}: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
@@ -751,6 +848,9 @@ const AddPOS = () => {
           <MapPin className="w-4 h-4" />
           {formData.latitude && formData.longitude ? uiText.reselectLocationButton : uiText.pickLocationButton}
         </button>
+        {getFieldError('location') && (
+          <p className="mt-2 text-xs text-red-600">{getFieldError('location')}</p>
+        )}
 
         {prefilledFromQuery && (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
@@ -811,7 +911,513 @@ const AddPOS = () => {
   )
 
   const renderStep2 = () => (
-    <div className="space-y-8 animate-fade-in-up">
+    <div className="space-y-6 animate-fade-in-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-soft-black">尝试记录</h3>
+          <p className="text-xs text-gray-500 mt-1">填写成功/失败的支付尝试，系统会据此推导支持情况。</p>
+        </div>
+        <button
+          type="button"
+          onClick={addAttemptRow}
+          className="px-3 py-2 rounded-xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
+        >
+          + 添加记录
+        </button>
+      </div>
+
+      {(formData.attempts || []).length === 0 && (
+        <div className="p-4 rounded-xl border border-dashed border-gray-200 text-sm text-gray-500 bg-white">
+          还没有添加尝试记录，点击“添加记录”开始填写。
+        </div>
+      )}
+
+      {formData.attempts && formData.attempts.length > 0 && albumCards.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
+          <div>
+            <div className="text-xs font-semibold text-gray-500">从卡册选择</div>
+            <p className="text-[11px] text-gray-400 mt-1">选择卡片后会自动填充到最新一条尝试记录。</p>
+          </div>
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsAlbumPickerOpen(true)}
+              className="flex-1 px-4 py-3 rounded-lg text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
+            >
+              <span>{selectedAlbumCardLabel || '从卡册中选择卡片'}</span>
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
+              onClick={handleApplyAlbumCard}
+            >
+              填充到最新记录
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {formData.attempts?.map((attempt, index) => (
+          <div key={index} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs font-semibold text-gray-500">尝试 {index + 1}</div>
+              <button
+                type="button"
+                onClick={() => removeAttempt(index)}
+                className="text-red-500 text-xs font-bold hover:text-red-600"
+              >
+                删除
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">结果</label>
+                <select
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.result}
+                  onChange={(e) => updateAttempt(index, 'result', e.target.value as 'success' | 'failure' | 'unknown')}
+                >
+                  <option value="success">成功</option>
+                  <option value="failure">失败</option>
+                  <option value="unknown">未知</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">发生时间</label>
+                <input
+                  type="datetime-local"
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
+                  onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">卡组织</label>
+                <select
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.card_network || ''}
+                  onChange={(e) => updateAttempt(index, 'card_network', e.target.value)}
+                >
+                  <option value="">请选择</option>
+                  {CARD_NETWORKS.map((scheme) => (
+                    <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">支付方式</label>
+                <select
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.payment_method || ''}
+                  onChange={(e) => updateAttempt(index, 'payment_method', e.target.value as NonNullable<FormData['attempts']>[number]['payment_method'])}
+                >
+                  <option value="">请选择</option>
+                  <option value="tap">实体卡 Tap</option>
+                  <option value="insert">实体卡 Insert</option>
+                  <option value="swipe">实体卡 Swipe</option>
+                  <option value="apple_pay">Apple Pay</option>
+                  <option value="google_pay">Google Pay</option>
+                  <option value="hce">HCE</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">验证方式 (CVM)</label>
+                <select
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.cvm || 'unknown'}
+                  onChange={(e) => updateAttempt(index, 'cvm', e.target.value as NonNullable<FormData['attempts']>[number]['cvm'])}
+                >
+                  <option value="unknown">未知</option>
+                  <option value="no_pin">免密</option>
+                  <option value="pin">PIN</option>
+                  <option value="signature">签名</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">收单模式</label>
+                <select
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.acquiring_mode || 'unknown'}
+                  onChange={(e) => updateAttempt(index, 'acquiring_mode', e.target.value as NonNullable<FormData['attempts']>[number]['acquiring_mode'])}
+                >
+                  <option value="unknown">未知</option>
+                  <option value="DCC">DCC</option>
+                  <option value="EDC">EDC</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">设备状态</label>
+                <SystemSelect
+                  dataType="device_status"
+                  value={attempt.device_status || 'active'}
+                  onChange={(value) => updateAttempt(index, 'device_status', value as NonNullable<FormData['attempts']>[number]['device_status'])}
+                  placeholder="请选择设备状态"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">收单机构</label>
+                <SystemSelect
+                  dataType="acquiring_institution"
+                  value={attempt.acquiring_institution || ''}
+                  onChange={(value) => updateAttempt(index, 'acquiring_institution', value)}
+                  placeholder="请选择收单机构"
+                  allowCustom
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">结账地点</label>
+                <SystemSelect
+                  dataType="checkout_locations"
+                  value={attempt.checkout_location || ''}
+                  onChange={(value) => updateAttempt(index, 'checkout_location', value as NonNullable<FormData['attempts']>[number]['checkout_location'])}
+                  placeholder="请选择结账地点"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">卡片名称</label>
+                <input
+                  type="text"
+                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                  value={attempt.card_name || ''}
+                  onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
+                  placeholder="如 Visa Signature"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">备注</label>
+              <input
+                type="text"
+                className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
+                value={attempt.notes || ''}
+                onChange={(e) => updateAttempt(index, 'notes', e.target.value)}
+                placeholder="例如：需要签名，或被拒原因"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveAttemptAsCommonCard(index)}
+                  className="text-xs font-semibold text-soft-black bg-cream px-3 py-1.5 rounded-lg hover:bg-accent-yellow/20 transition-colors"
+                >
+                  保存为常用卡
+                </button>
+                {formData.common_cards && formData.common_cards.length > 0 && (
+                  <select
+                    className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selected = parseInt(e.target.value, 10)
+                      if (!Number.isNaN(selected)) applyCommonCard(index, selected)
+                    }}
+                  >
+                    <option value="">快速填充常用卡</option>
+                    {formData.common_cards.map((card, cardIndex) => (
+                      <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
+                        {card.name}{card.method ? ` · ${card.method}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <input
+                id={`attempt-conclusive-${index}`}
+                type="checkbox"
+                checked={Boolean(attempt.is_conclusive_failure)}
+                onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
+              />
+              <label htmlFor={`attempt-conclusive-${index}`}>
+                明确失败（会被计入“不支持”推导）
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  const renderStep3 = () => (
+    <div className="space-y-4 animate-fade-in-up">
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-soft-black">高级选项（可选）</h3>
+            <p className="text-xs text-gray-500 mt-1">手动指定支持项，用于补充尝试记录未覆盖的信息。</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAdvancedOptionsOpen((prev) => !prev)}
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
+          >
+            {advancedOptionsOpen ? '收起' : '展开'}
+          </button>
+        </div>
+        {advancedOptionsOpen && (
+          <div className="mt-4 space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-3">支持的卡组织</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {CARD_NETWORKS.map((scheme) => {
+                  const id = scheme.value as SchemeID
+                  const state = getSchemeState(id)
+                  const isSupported = state === 'supported'
+                  const isUnsupported = state === 'unsupported'
+                  const color = SCHEME_COLOR_MAP[id] || 'bg-gray-500'
+                  return (
+                    <button
+                      key={scheme.value}
+                      onClick={() => cycleSchemeState(id)}
+                      type="button"
+                      className={`relative overflow-hidden h-14 rounded-2xl border transition-all duration-300 flex items-center justify-between px-4 group ${
+                        isSupported
+                          ? `${color} border-transparent shadow-lg scale-[1.02]`
+                          : isUnsupported
+                          ? 'bg-red-50 border-red-100 text-red-500 hover:border-red-200'
+                          : 'bg-white border-gray-100 text-gray-400 hover:border-gray-300 hover:shadow-sm'
+                      }`}
+                    >
+                      {isSupported && <div className="absolute -right-4 -bottom-6 w-20 h-20 bg-white opacity-10 rounded-full blur-xl"></div>}
+                      <span className={`font-bold text-sm tracking-wide ${isSupported ? 'text-white' : isUnsupported ? 'text-red-500' : 'text-gray-500'}`}>
+                        {scheme.label}
+                      </span>
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                          isSupported
+                            ? 'bg-white/20 text-white'
+                            : isUnsupported
+                            ? 'bg-red-100 text-red-500'
+                            : 'bg-gray-100 text-transparent'
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.tapSupportLabel}</label>
+              <div className="grid grid-cols-4 gap-2">
+                {(['card', 'apple', 'google', 'hce'] as TapMethod[]).map((method) => {
+                  const state = (() => {
+                    switch (method) {
+                      case 'card':
+                        return threeStateToTap(formData.basic_info.supports_contactless)
+                      case 'apple':
+                        return threeStateToTap(formData.basic_info.supports_apple_pay)
+                      case 'google':
+                        return threeStateToTap(formData.basic_info.supports_google_pay)
+                      case 'hce':
+                      default:
+                        return threeStateToTap(formData.basic_info.supports_hce_simulation)
+                    }
+                  })()
+                  let color = 'bg-gray-100 text-gray-400'
+                  let icon = <HelpCircle className="w-4 h-4" />
+                  if (state === 'yes') {
+                    color = 'bg-green-100 text-green-600 ring-1 ring-green-200'
+                    icon = <Check className="w-4 h-4" />
+                  } else if (state === 'no') {
+                    color = 'bg-red-50 text-red-400'
+                    icon = <X className="w-4 h-4" />
+                  }
+                  return (
+                    <div
+                      key={method}
+                      onClick={() => cycleTapState(method)}
+                      className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl cursor-pointer transition-all hover:scale-105 active:scale-95 ${color}`}
+                    >
+                      {method === 'card' && <CreditCard className="w-5 h-5" />}
+                      {method === 'apple' && <div className="text-lg font-bold"></div>}
+                      {method === 'google' && <span className="font-bold text-sm">G</span>}
+                      {method === 'hce' && <Smartphone className="w-5 h-5" />}
+                      <div className="mt-1">{icon}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.cvmTitle}</label>
+              <div className="bg-cream rounded-2xl p-1 flex gap-1">
+                {(['noPin', 'pin', 'signature'] as CvmTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveCvmTab(tab)}
+                    className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
+                      activeCvmTab === tab ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {tab === 'noPin' ? 'No PIN' : tab}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 p-4 bg-white border border-gray-100 rounded-2xl shadow-sm space-y-4">
+                <p className="text-[10px] text-gray-400">
+                  选择支持 <span className="font-bold text-soft-black uppercase">{activeCvmTab === 'noPin' ? 'No PIN' : activeCvmTab}</span> 的卡组织：
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {selectedSchemes.length === 0 && <span className="text-xs text-gray-300 italic">请先选择支持的卡组织</span>}
+                  {selectedSchemes.map((schemeId) => {
+                    const scheme = CARD_NETWORKS.find((s) => s.value === schemeId)
+                    const isActive = ((formData.verification_modes[CVM_FIELD_MAP[activeCvmTab]] as string[]) || []).includes(
+                      schemeId
+                    )
+                    const color = SCHEME_COLOR_MAP[schemeId as SchemeID] || 'bg-gray-500'
+                    return (
+                      <button
+                        key={schemeId}
+                        type="button"
+                        onClick={() => toggleCvmScheme(schemeId as SchemeID)}
+                        className={`w-12 h-9 rounded flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
+                          isActive ? `${color} text-white shadow-md scale-105` : 'bg-gray-100 text-gray-400 grayscale opacity-50'
+                        }`}
+                      >
+                        {scheme?.label.slice(0, 3)}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2 text-[10px]">
+                  {CVM_FLAGS.map((flag: CvmFlag) => {
+                    const flagKey = CVM_FLAG_MAP[activeCvmTab][flag]
+                    const enabled = Boolean(formData.verification_modes[flagKey])
+                    return (
+                      <button
+                        key={flag}
+                        onClick={() => handleInputChange(`verification_modes.${flagKey}`, !enabled)}
+                        className={`px-3 py-1.5 rounded-full font-semibold uppercase tracking-wide transition-colors ${
+                          enabled
+                            ? flag === 'unsupported'
+                              ? 'bg-red-100 text-red-600'
+                              : flag === 'uncertain'
+                              ? 'bg-orange-100 text-orange-600'
+                              : 'bg-gray-200 text-gray-700'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {flag === 'unsupported' ? '不支持' : flag === 'uncertain' ? '不确定' : '未知'}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-dashed border-gray-200 bg-cream/70 px-4 py-3">
+              <span className="text-xs text-gray-500">清空高级选项手动选择</span>
+              <button
+                type="button"
+                onClick={clearAdvancedSelections}
+                className="text-xs font-semibold text-gray-600 hover:text-red-500"
+              >
+                重置
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {selectedSchemes.length === 0 && <p className="text-sm text-gray-400">请先选择支持的卡组织</p>}
+        {selectedSchemes.map((schemeId) => {
+          const scheme = CARD_NETWORKS.find((s) => s.value === schemeId)
+          const color = SCHEME_COLOR_MAP[schemeId as SchemeID] || 'bg-gray-500'
+          const fee = formData.fees?.[schemeId] || {
+            network: schemeId,
+            type: FeeType.PERCENTAGE,
+            value: 0,
+            enabled: false,
+          }
+          return (
+            <div key={schemeId} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-6 rounded flex items-center justify-center text-[10px] font-bold text-white ${color}`}>
+                    {scheme?.label.slice(0, 1)}
+                  </div>
+                  <span className="font-bold text-soft-black">{scheme?.label}</span>
+                </div>
+                <div
+                  onClick={() =>
+                    updateFeeConfig(schemeId, (current) => ({
+                      ...current,
+                      enabled: !current.enabled,
+                    }))
+                  }
+                  className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${
+                    fee.enabled ? 'bg-accent-yellow' : 'bg-gray-200'
+                  }`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${fee.enabled ? 'left-5' : 'left-1'}`}></div>
+                </div>
+              </div>
+              {fee.enabled && (
+                <div className="space-y-3">
+                  <div className="bg-cream rounded-lg p-1 flex w-fit">
+                    <button
+                      onClick={() =>
+                        updateFeeConfig(schemeId, (current) => ({
+                          ...current,
+                          type: FeeType.PERCENTAGE,
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        fee.type === FeeType.PERCENTAGE ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400'
+                      }`}
+                    >
+                      %
+                    </button>
+                    <button
+                      onClick={() =>
+                        updateFeeConfig(schemeId, (current) => ({
+                          ...current,
+                          type: FeeType.FIXED,
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        fee.type === FeeType.FIXED ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400'
+                      }`}
+                    >
+                      $
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    className="w-full bg-cream rounded-lg px-3 py-2 text-sm font-bold text-soft-black focus:ring-1 focus:ring-accent-yellow/50 outline-none"
+                    placeholder="0.00"
+                    value={fee.value}
+                    onChange={(e) =>
+                      updateFeeConfig(schemeId, (current) => ({
+                        ...current,
+                        value: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                  />
+                  <p className="text-[10px] text-gray-400 text-right">{formatFeeDisplay(fee)}</p>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  const renderStep4 = () => (
+    <div className="space-y-6 animate-fade-in-up">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{uiText.posModelLabel}</label>
@@ -889,249 +1495,10 @@ const AddPOS = () => {
           )
         })}
       </div>
-
-      <div>
-        <label className="block text-xs font-bold text-gray-500 uppercase mb-3">支持的卡组织</label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {CARD_NETWORKS.map((scheme) => {
-            const id = scheme.value as SchemeID
-            const state = getSchemeState(id)
-            const isSupported = state === 'supported'
-            const isUnsupported = state === 'unsupported'
-            const color = SCHEME_COLOR_MAP[id] || 'bg-gray-500'
-            return (
-              <button
-                key={scheme.value}
-                onClick={() => cycleSchemeState(id)}
-                type="button"
-                className={`relative overflow-hidden h-14 rounded-2xl border transition-all duration-300 flex items-center justify-between px-4 group ${
-                  isSupported
-                    ? `${color} border-transparent shadow-lg scale-[1.02]`
-                    : isUnsupported
-                    ? 'bg-red-50 border-red-100 text-red-500 hover:border-red-200'
-                    : 'bg-white border-gray-100 text-gray-400 hover:border-gray-300 hover:shadow-sm'
-                }`}
-              >
-                {isSupported && <div className="absolute -right-4 -bottom-6 w-20 h-20 bg-white opacity-10 rounded-full blur-xl"></div>}
-                <span className={`font-bold text-sm tracking-wide ${isSupported ? 'text-white' : isUnsupported ? 'text-red-500' : 'text-gray-500'}`}>
-                  {scheme.label}
-                </span>
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                    isSupported
-                      ? 'bg-white/20 text-white'
-                      : isUnsupported
-                      ? 'bg-red-100 text-red-500'
-                      : 'bg-gray-100 text-transparent'
-                  }`}
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.tapSupportLabel}</label>
-        <div className="grid grid-cols-4 gap-2">
-          {(['card', 'apple', 'google', 'hce'] as TapMethod[]).map((method) => {
-            const state = (() => {
-              switch (method) {
-                case 'card':
-                  return threeStateToTap(formData.basic_info.supports_contactless)
-                case 'apple':
-                  return threeStateToTap(formData.basic_info.supports_apple_pay)
-                case 'google':
-                  return threeStateToTap(formData.basic_info.supports_google_pay)
-                case 'hce':
-                default:
-                  return threeStateToTap(formData.basic_info.supports_hce_simulation)
-              }
-            })()
-            let color = 'bg-gray-100 text-gray-400'
-            let icon = <HelpCircle className="w-4 h-4" />
-            if (state === 'yes') {
-              color = 'bg-green-100 text-green-600 ring-1 ring-green-200'
-              icon = <Check className="w-4 h-4" />
-            } else if (state === 'no') {
-              color = 'bg-red-50 text-red-400'
-              icon = <X className="w-4 h-4" />
-            }
-            return (
-              <div
-                key={method}
-                onClick={() => cycleTapState(method)}
-                className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl cursor-pointer transition-all hover:scale-105 active:scale-95 ${color}`}
-              >
-                {method === 'card' && <CreditCard className="w-5 h-5" />}
-                {method === 'apple' && <div className="text-lg font-bold"></div>}
-                {method === 'google' && <span className="font-bold text-sm">G</span>}
-                {method === 'hce' && <Smartphone className="w-5 h-5" />}
-                <div className="mt-1">{icon}</div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.cvmTitle}</label>
-        <div className="bg-cream rounded-2xl p-1 flex gap-1">
-          {(['noPin', 'pin', 'signature'] as CvmTab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveCvmTab(tab)}
-              className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
-                activeCvmTab === tab ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              {tab === 'noPin' ? 'No PIN' : tab}
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 p-4 bg-white border border-gray-100 rounded-2xl shadow-sm space-y-4">
-          <p className="text-[10px] text-gray-400">
-            选择支持 <span className="font-bold text-soft-black uppercase">{activeCvmTab === 'noPin' ? 'No PIN' : activeCvmTab}</span> 的卡组织：
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {selectedSchemes.length === 0 && <span className="text-xs text-gray-300 italic">请先选择支持的卡组织</span>}
-            {selectedSchemes.map((schemeId) => {
-              const scheme = CARD_NETWORKS.find((s) => s.value === schemeId)
-              const isActive = ((formData.verification_modes[CVM_FIELD_MAP[activeCvmTab]] as string[]) || []).includes(
-                schemeId
-              )
-              const color = SCHEME_COLOR_MAP[schemeId as SchemeID] || 'bg-gray-500'
-              return (
-                <button
-                  key={schemeId}
-                  type="button"
-                  onClick={() => toggleCvmScheme(schemeId as SchemeID)}
-                  className={`w-12 h-9 rounded flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
-                    isActive ? `${color} text-white shadow-md scale-105` : 'bg-gray-100 text-gray-400 grayscale opacity-50'
-                  }`}
-                >
-                  {scheme?.label.slice(0, 3)}
-                </button>
-              )
-            })}
-          </div>
-          <div className="flex gap-2 text-[10px]">
-            {CVM_FLAGS.map((flag: CvmFlag) => {
-              const flagKey = CVM_FLAG_MAP[activeCvmTab][flag]
-              const enabled = Boolean(formData.verification_modes[flagKey])
-              return (
-                <button
-                  key={flag}
-                  onClick={() => handleInputChange(`verification_modes.${flagKey}`, !enabled)}
-                  className={`px-3 py-1.5 rounded-full font-semibold uppercase tracking-wide transition-colors ${
-                    enabled
-                      ? flag === 'unsupported'
-                        ? 'bg-red-100 text-red-600'
-                        : flag === 'uncertain'
-                        ? 'bg-orange-100 text-orange-600'
-                        : 'bg-gray-200 text-gray-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {flag === 'unsupported' ? '不支持' : flag === 'uncertain' ? '不确定' : '未知'}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      </div>
     </div>
   )
 
-  const renderStep3 = () => (
-    <div className="space-y-4 animate-fade-in-up">
-      {selectedSchemes.length === 0 && <p className="text-sm text-gray-400">请先选择支持的卡组织</p>}
-      {selectedSchemes.map((schemeId) => {
-        const scheme = CARD_NETWORKS.find((s) => s.value === schemeId)
-        const color = SCHEME_COLOR_MAP[schemeId as SchemeID] || 'bg-gray-500'
-        const fee = formData.fees?.[schemeId] || {
-          network: schemeId,
-          type: FeeType.PERCENTAGE,
-          value: 0,
-          enabled: false,
-        }
-        return (
-          <div key={schemeId} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-6 rounded flex items-center justify-center text-[10px] font-bold text-white ${color}`}>
-                  {scheme?.label.slice(0, 1)}
-                </div>
-                <span className="font-bold text-soft-black">{scheme?.label}</span>
-              </div>
-              <div
-                onClick={() =>
-                  updateFeeConfig(schemeId, (current) => ({
-                    ...current,
-                    enabled: !current.enabled,
-                  }))
-                }
-                className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${
-                  fee.enabled ? 'bg-accent-yellow' : 'bg-gray-200'
-                }`}
-              >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${fee.enabled ? 'left-5' : 'left-1'}`}></div>
-              </div>
-            </div>
-            {fee.enabled && (
-              <div className="space-y-3">
-                <div className="bg-cream rounded-lg p-1 flex w-fit">
-                  <button
-                    onClick={() =>
-                      updateFeeConfig(schemeId, (current) => ({
-                        ...current,
-                        type: FeeType.PERCENTAGE,
-                      }))
-                    }
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                      fee.type === FeeType.PERCENTAGE ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400'
-                    }`}
-                  >
-                    %
-                  </button>
-                  <button
-                    onClick={() =>
-                      updateFeeConfig(schemeId, (current) => ({
-                        ...current,
-                        type: FeeType.FIXED,
-                      }))
-                    }
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                      fee.type === FeeType.FIXED ? 'bg-white shadow-sm text-soft-black' : 'text-gray-400'
-                    }`}
-                  >
-                    $
-                  </button>
-                </div>
-                <input
-                  type="number"
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm font-bold text-soft-black focus:ring-1 focus:ring-accent-yellow/50 outline-none"
-                  placeholder="0.00"
-                  value={fee.value}
-                  onChange={(e) =>
-                    updateFeeConfig(schemeId, (current) => ({
-                      ...current,
-                      value: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                />
-                <p className="text-[10px] text-gray-400 text-right">{formatFeeDisplay(fee)}</p>
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-
-  const renderStep4 = () => (
+  const renderStep5 = () => (
     <div className="space-y-6 animate-fade-in-up">
       <div>
         <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{uiText.remarksTitle}</label>
@@ -1184,169 +1551,9 @@ const AddPOS = () => {
     </div>
   )
 
-  const renderStep5 = () => (
-    <div className="space-y-4 animate-fade-in-up">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-soft-black">尝试记录</h3>
-          <p className="text-xs text-gray-500 mt-1">记录测试刷卡/支付的结果，便于后续参考（可选）</p>
-        </div>
-        <button
-          type="button"
-          onClick={addAttemptRow}
-          className="px-3 py-2 rounded-xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
-        >
-          + 添加记录
-        </button>
-      </div>
-
-      {(formData.attempts || []).length === 0 && (
-        <div className="p-4 rounded-xl border border-dashed border-gray-200 text-sm text-gray-500 bg-white">
-          还没有添加尝试记录，点击“添加记录”开始填写。
-        </div>
-      )}
-
-      {formData.attempts && formData.attempts.length > 0 && albumCards.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
-          <div>
-            <div className="text-xs font-semibold text-gray-500">从卡册选择</div>
-            <p className="text-[11px] text-gray-400 mt-1">选择卡片后会自动填充到最新一条尝试记录。</p>
-          </div>
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsAlbumPickerOpen(true)}
-              className="flex-1 px-4 py-3 rounded-lg text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
-            >
-              <span>{selectedAlbumCardLabel || '从卡册中选择卡片'}</span>
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            </button>
-            <button
-              type="button"
-              className="px-4 py-2 rounded-lg text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
-              onClick={handleApplyAlbumCard}
-            >
-              填充到最新记录
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {formData.attempts?.map((attempt, index) => (
-          <div key={index} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs font-semibold text-gray-500">尝试 {index + 1}</div>
-              <button
-                type="button"
-                onClick={() => removeAttempt(index)}
-                className="text-red-500 text-xs font-bold hover:text-red-600"
-              >
-                删除
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">用户/操作人</label>
-                <input
-                  type="text"
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.user}
-                  onChange={(e) => updateAttempt(index, 'user', e.target.value)}
-                  placeholder="例如：店员A / 自测"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">结果</label>
-                <select
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.result}
-                  onChange={(e) => updateAttempt(index, 'result', e.target.value as 'success' | 'failure')}
-                >
-                  <option value="success">成功</option>
-                  <option value="failure">失败</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">时间</label>
-                <input
-                  type="datetime-local"
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.timestamp ? attempt.timestamp.slice(0, 16) : ''}
-                  onChange={(e) => updateAttempt(index, 'timestamp', e.target.value ? new Date(e.target.value).toISOString() : '')}
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">支付方式/卡名称</label>
-                <input
-                  type="text"
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.card_name || ''}
-                  onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
-                  placeholder="如：Visa Signature / Apple Pay"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">支付通道/备注</label>
-              <input
-                type="text"
-                className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                value={attempt.payment_method || ''}
-                onChange={(e) => updateAttempt(index, 'payment_method', e.target.value)}
-                placeholder="如：线下POS / 小程序 / Tap支付"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => saveAttemptAsCommonCard(index)}
-                  className="text-xs font-semibold text-soft-black bg-cream px-3 py-1.5 rounded-lg hover:bg-accent-yellow/20 transition-colors"
-                >
-                  保存为常用卡
-                </button>
-                {formData.common_cards && formData.common_cards.length > 0 && (
-                  <select
-                    className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1"
-                    defaultValue=""
-                    onChange={(e) => {
-                      const selected = parseInt(e.target.value, 10)
-                      if (!Number.isNaN(selected)) applyCommonCard(index, selected)
-                    }}
-                  >
-                    <option value="">快速填充常用卡</option>
-                    {formData.common_cards.map((card, cardIndex) => (
-                      <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
-                        {card.name}{card.method ? ` · ${card.method}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {formData.common_cards && formData.common_cards.length > 0 && (
-        <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm">
-          <div className="text-xs font-semibold text-gray-500 mb-2">常用卡片</div>
-          <div className="flex flex-wrap gap-2">
-            {formData.common_cards.map((card, idx) => (
-              <span key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cream text-xs font-semibold text-soft-black">
-                {card.name}
-                {card.method && <span className="text-gray-500">({card.method})</span>}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-
   const goNext = () => setStep((prev) => Math.min(prev + 1, 5))
   const goPrev = () => setStep((prev) => Math.max(prev - 1, 1))
+
   const selectedAlbumCardLabel = useMemo(() => {
     if (!selectedAlbumCard) return ''
     const card = albumCards.find((item) => item.id === selectedAlbumCard)
@@ -1378,7 +1585,7 @@ const AddPOS = () => {
       .filter(Boolean)
       .join(' · ')
     updateAttempt(targetIndex, 'card_name', cardLabel)
-    updateAttempt(targetIndex, 'payment_method', methodLabel)
+    updateAttempt(targetIndex, 'notes', methodLabel)
     notify.success('已填充卡片信息')
     setIsAlbumPickerOpen(false)
   }

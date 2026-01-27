@@ -187,25 +187,43 @@ interface AnimatedTabBarProps {
   activeTab: string
   onTabChange: (tabId: string) => void
   className?: string
+  variant?: 'default' | 'dashboard'
+  ariaLabel?: string
 }
 
 export const AnimatedTabBar: React.FC<AnimatedTabBarProps> = ({
   tabs,
   activeTab,
   onTabChange,
-  className = ''
+  className = '',
+  variant = 'default',
+  ariaLabel = '内容分区'
 }) => {
+  const isDashboard = variant === 'dashboard'
+  const activeClass = isDashboard ? 'text-soft-black dark:text-gray-100' : 'text-blue-600'
+  const inactiveClass = isDashboard
+    ? 'text-gray-400 hover:text-soft-black dark:text-gray-500 dark:hover:text-gray-200'
+    : 'text-gray-500 hover:text-gray-700'
+  const indicatorClass = isDashboard ? 'bg-accent-yellow' : 'bg-blue-600'
+
   return (
     <div className={`w-full ${className}`}>
-      <div className="flex border-b border-gray-200">
+      <div
+        role="tablist"
+        aria-label={ariaLabel}
+        className={`flex border-b ${isDashboard ? 'border-white/60 dark:border-slate-800 overflow-x-auto' : 'border-gray-200'}`}
+      >
         {tabs.map((tab, index) => (
           <motion.button
             key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
             onClick={() => onTabChange(tab.id)}
-            className={`relative px-6 py-3 text-sm font-medium transition-colors tab-animation safari-animation-optimize ${
+            className={`relative px-6 py-3 text-sm font-semibold transition-colors whitespace-nowrap ${
               activeTab === tab.id
-                ? 'text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
+                ? activeClass
+                : inactiveClass
             }`}
             whileHover={{ y: -1 }}
             whileTap={{ y: 0 }}
@@ -217,7 +235,7 @@ export const AnimatedTabBar: React.FC<AnimatedTabBarProps> = ({
             <AnimatePresence>
               {activeTab === tab.id && (
                 <motion.div
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                  className={`absolute bottom-0 left-0 right-0 h-0.5 ${indicatorClass}`}
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
                   exit={{ scaleX: 0 }}
@@ -228,13 +246,14 @@ export const AnimatedTabBar: React.FC<AnimatedTabBarProps> = ({
           </motion.button>
         ))}
       </div>
-      
+
       <AnimatePresence mode="wait">
         {tabs.map((tab) => {
           if (tab.id === activeTab && tab.content) {
             return (
               <motion.div
                 key={tab.id}
+                role="tabpanel"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
