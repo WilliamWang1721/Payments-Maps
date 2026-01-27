@@ -43,6 +43,33 @@ export interface User {
   }
 }
 
+export type AttemptResult = 'success' | 'failure' | 'unknown'
+export type AttemptPaymentMethod = 'tap' | 'insert' | 'swipe' | 'apple_pay' | 'google_pay' | 'hce'
+export type AttemptCvm = 'no_pin' | 'pin' | 'signature' | 'unknown'
+export type AttemptAcquiringMode = 'DCC' | 'EDC' | 'unknown'
+export type AttemptDeviceStatus = 'active' | 'inactive' | 'maintenance' | 'disabled'
+export type AttemptCheckoutLocation = '自助收银' | '人工收银'
+
+export interface POSAttempt {
+  id: string
+  pos_id: string
+  user_id?: string | null
+  attempt_number?: number | null
+  result: AttemptResult
+  card_network?: string | null
+  payment_method?: AttemptPaymentMethod | null
+  cvm?: AttemptCvm | null
+  acquiring_mode?: AttemptAcquiringMode | null
+  device_status?: AttemptDeviceStatus | null
+  acquiring_institution?: string | null
+  checkout_location?: AttemptCheckoutLocation | null
+  card_name?: string | null
+  notes?: string | null
+  attempted_at?: string | null
+  is_conclusive_failure?: boolean | null
+  created_at: string
+}
+
 export interface POSMachine {
   id: string
   address: string
@@ -88,14 +115,7 @@ export interface POSMachine {
     requires_signature_uncertain?: boolean
   }
   // 尝试记录
-  attempts?: {
-    id?: string
-    user: string
-    result: 'success' | 'failure'
-    timestamp: string
-    card_name?: string
-    payment_method?: string
-  }[]
+  attempts?: POSAttempt[]
   remarks?: string
   custom_links?: {
     platform: string
