@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Building, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -12,10 +12,12 @@ import AnimatedCard from '@/components/ui/AnimatedCard'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import ContactlessDisplay from '@/components/ui/ContactlessDisplay'
 import CardNetworkIcon from '@/components/ui/CardNetworkIcon'
+import SystemSelect from '@/components/ui/SystemSelect'
+import { type ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { SkeletonCard } from '@/components/AnimatedLoading'
 import { AnimatedTabBar } from '@/components/AnimatedNavigation'
-import { getCardNetworkLabel } from '@/lib/cardNetworks'
+import { CARD_NETWORKS, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { getPaymentMethodLabel, getResultLabel } from '@/lib/utils'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
@@ -47,10 +49,28 @@ interface Attempt {
   created_at: string
   result: 'success' | 'failure' | 'unknown'
   card_name?: string
+  card_network?: string
   payment_method?: string
+  cvm?: string
+  acquiring_mode?: string
+  device_status?: string
+  acquiring_institution?: string
+  checkout_location?: string
   notes?: string
-  created_by?: string
+  attempted_at?: string
+  is_conclusive_failure?: boolean
+  user_id?: string
 }
+
+type SupportEvidence = 'supported' | 'unsupported'
+interface SupportEvidenceItem {
+  type: SupportEvidence
+  attempt: Attempt
+}
+
+const PAYMENT_METHOD_OPTIONS = ['tap', 'insert', 'swipe', 'apple_pay', 'google_pay', 'hce'] as const
+const CVM_OPTIONS = ['no_pin', 'pin', 'signature'] as const
+const ACQUIRING_MODE_OPTIONS = ['DCC', 'EDC'] as const
 
 const POSDetail = () => {
   const { id } = useParams<{ id: string }>()
@@ -73,7 +93,19 @@ const POSDetail = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showAttemptModal, setShowAttemptModal] = useState(false)
-  const [newAttempt, setNewAttempt] = useState({ result: 'success' as 'success' | 'failure' | 'unknown', card_name: '', payment_method: '', notes: '' })
+  const [newAttempt, setNewAttempt] = useState({
+    result: 'success' as 'success' | 'failure' | 'unknown',
+    card_name: '',
+    card_network: '',
+    payment_method: '',
+    cvm: 'unknown',
+    acquiring_mode: 'unknown',
+    device_status: 'active',
+    acquiring_institution: '',
+    checkout_location: '',
+    notes: '',
+    is_conclusive_failure: false
+  })
   const [submittingAttempt, setSubmittingAttempt] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [newStatus, setNewStatus] = useState<POSStatus>('active')
@@ -90,6 +122,150 @@ const POSDetail = () => {
     contact: '',
   })
   const [activeTab, setActiveTab] = useState('overview')
+
+  const attemptMatrix = useMemo(() => {
+    const initialMatrix = {
+      cardNetworks: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+      paymentMethods: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+      cvm: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+      acquiringModes: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+      checkoutLocations: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+      deviceStatus: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+      acquiringInstitutions: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
+    }
+
+    const safeAttemptList = attempts || []
+    if (safeAttemptList.length === 0) {
+      return initialMatrix
+    }
+
+    const pushEvidence = (
+      map: Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>,
+      key: string,
+      evidence: SupportEvidenceItem
+    ) => {
+      if (!key) return
+      if (!map.has(key)) {
+        map.set(key, { supported: [], unsupported: [] })
+      }
+      const target = map.get(key)
+      if (!target) return
+      if (evidence.type === 'supported') {
+        target.supported.push(evidence)
+      } else {
+        target.unsupported.push(evidence)
+      }
+    }
+
+    safeAttemptList.forEach((attempt) => {
+      const isSuccess = attempt.result === 'success'
+      const isConclusiveFailure = attempt.result === 'failure' && attempt.is_conclusive_failure
+
+      if (isSuccess || isConclusiveFailure) {
+        const evidenceType: SupportEvidence = isSuccess ? 'supported' : 'unsupported'
+        const evidence: SupportEvidenceItem = { type: evidenceType, attempt }
+
+        if (attempt.card_network) pushEvidence(initialMatrix.cardNetworks, attempt.card_network, evidence)
+        if (attempt.payment_method) pushEvidence(initialMatrix.paymentMethods, attempt.payment_method, evidence)
+        if (attempt.cvm && attempt.cvm !== 'unknown') pushEvidence(initialMatrix.cvm, attempt.cvm, evidence)
+        if (attempt.acquiring_mode && attempt.acquiring_mode !== 'unknown') pushEvidence(initialMatrix.acquiringModes, attempt.acquiring_mode, evidence)
+        if (attempt.checkout_location) pushEvidence(initialMatrix.checkoutLocations, attempt.checkout_location, evidence)
+        if (attempt.device_status) pushEvidence(initialMatrix.deviceStatus, attempt.device_status, evidence)
+        if (attempt.acquiring_institution) pushEvidence(initialMatrix.acquiringInstitutions, attempt.acquiring_institution, evidence)
+      }
+    })
+
+    return initialMatrix
+  }, [attempts])
+
+  const normalizeThreeState = (value?: boolean | ThreeStateValue): ThreeStateValue => {
+    if (typeof value === 'boolean') {
+      return value ? 'supported' : 'unsupported'
+    }
+    return value || 'unknown'
+  }
+
+  const mergeSupportState = (manualState: ThreeStateValue | undefined, evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }) => {
+    if (manualState === 'supported' || manualState === 'unsupported') {
+      return manualState
+    }
+    if (evidence.supported.length > 0) return 'supported'
+    if (evidence.unsupported.length > 0) return 'unsupported'
+    return 'unknown'
+  }
+
+  const formatEvidenceLabel = (items: SupportEvidenceItem[]) => {
+    if (items.length === 0) return ''
+    const displayAttempts = items.slice(0, 2)
+    const labels = displayAttempts.map((item) => {
+      const timeLabel = item.attempt.attempted_at
+        ? new Date(item.attempt.attempted_at).toLocaleDateString('zh-CN')
+        : new Date(item.attempt.created_at).toLocaleDateString('zh-CN')
+      const methodLabel = item.attempt.payment_method ? getPaymentMethodLabel(item.attempt.payment_method) : ''
+      const networkLabel = item.attempt.card_network ? getCardNetworkLabel(item.attempt.card_network) : ''
+      const parts = [timeLabel, methodLabel, networkLabel].filter(Boolean)
+      return parts.join(' · ')
+    })
+    const more = items.length > 2 ? ` 等${items.length}条` : ''
+    return `${labels.join(' / ')}${more}`
+  }
+
+  const renderAttemptBadge = (state: ThreeStateValue, label: string, evidenceText?: string) => {
+    const styleMap: Record<ThreeStateValue, string> = {
+      supported: 'bg-green-50 text-green-700 border-green-200',
+      unsupported: 'bg-red-50 text-red-700 border-red-200',
+      unknown: 'bg-gray-50 text-gray-500 border-gray-200',
+    }
+    const dotMap: Record<ThreeStateValue, string> = {
+      supported: 'bg-green-500',
+      unsupported: 'bg-red-500',
+      unknown: 'bg-gray-400',
+    }
+    return (
+      <div className={`rounded-xl border px-3 py-2 space-y-1 ${styleMap[state]}`}>
+        <div className="flex items-center justify-between text-xs font-semibold">
+          <span>{label}</span>
+          <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${styleMap[state]}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${dotMap[state]}`} />
+            {state === 'supported' ? '支持' : state === 'unsupported' ? '不支持' : '未知'}
+          </span>
+        </div>
+        {evidenceText && (
+          <div className="text-[10px] text-gray-500 leading-relaxed">{evidenceText}</div>
+        )}
+      </div>
+    )
+  }
+
+  const renderMatrixSection = (
+    title: string,
+    items: Array<{ key: string; label: string }>,
+    evidenceMap: Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>,
+    manualStateResolver?: (key: string) => ThreeStateValue | undefined
+  ) => {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-soft-black dark:text-gray-100">{title}</h4>
+          <span className="text-[10px] text-gray-400">基于成功尝试/明确失败推导</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {items.map((item) => {
+            const evidence = evidenceMap.get(item.key) || { supported: [], unsupported: [] }
+            const state = mergeSupportState(manualStateResolver?.(item.key), evidence)
+            const evidenceText = formatEvidenceLabel(
+              state === 'supported' ? evidence.supported : state === 'unsupported' ? evidence.unsupported : []
+            )
+            return (
+              <div key={item.key}>
+                {renderAttemptBadge(state, item.label, evidenceText)}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   const isMobileActionsDisabled = !pos?.id
   const handleAttemptClick = () => {
@@ -117,6 +293,12 @@ const POSDetail = () => {
   useEffect(() => {
     if (pos) {
       loadExternalLinks(pos)
+      setNewAttempt((prev) => ({
+        ...prev,
+        device_status: pos.status || 'active',
+        acquiring_institution: pos.basic_info?.acquiring_institution || '',
+        checkout_location: pos.basic_info?.checkout_location || ''
+      }))
     } else {
       setExternalLinks([])
     }
@@ -489,11 +671,18 @@ const POSDetail = () => {
     try {
       console.log('开始提交尝试记录:', {
         pos_id: id,
-        created_by: user.id,
+        user_id: user.id,
         result: newAttempt.result,
         card_name: newAttempt.card_name.trim() || null,
-        payment_method: newAttempt.payment_method.trim() || null,
-        notes: newAttempt.notes.trim() || null
+        card_network: newAttempt.card_network || null,
+        payment_method: newAttempt.payment_method || null,
+        cvm: newAttempt.cvm || 'unknown',
+        acquiring_mode: newAttempt.acquiring_mode || 'unknown',
+        device_status: newAttempt.device_status || pos?.status || 'active',
+        acquiring_institution: newAttempt.acquiring_institution?.trim() || null,
+        checkout_location: newAttempt.checkout_location || pos?.basic_info?.checkout_location || null,
+        notes: newAttempt.notes.trim() || null,
+        is_conclusive_failure: newAttempt.is_conclusive_failure || false
       })
 
       // 检查用户认证状态
@@ -531,8 +720,15 @@ const POSDetail = () => {
           attempt_number: nextAttemptNumber,
           result: newAttempt.result,
           card_name: newAttempt.card_name.trim() || null,
-          payment_method: newAttempt.payment_method.trim() || null,
-          notes: newAttempt.notes.trim() || null
+          card_network: newAttempt.card_network || null,
+          payment_method: newAttempt.payment_method || null,
+          cvm: newAttempt.cvm || 'unknown',
+          acquiring_mode: newAttempt.acquiring_mode || 'unknown',
+          device_status: newAttempt.device_status || pos?.status || 'active',
+          acquiring_institution: newAttempt.acquiring_institution?.trim() || null,
+          checkout_location: newAttempt.checkout_location || pos?.basic_info?.checkout_location || null,
+          notes: newAttempt.notes.trim() || null,
+          is_conclusive_failure: newAttempt.is_conclusive_failure || false
         })
         .select()
         .single()
@@ -565,9 +761,17 @@ const POSDetail = () => {
         created_at: data.created_at,
         result: data.result,
         card_name: data.card_name,
+        card_network: data.card_network,
         payment_method: data.payment_method,
+        cvm: data.cvm,
+        acquiring_mode: data.acquiring_mode,
+        device_status: data.device_status,
+        acquiring_institution: data.acquiring_institution,
+        checkout_location: data.checkout_location,
         notes: data.notes,
-        created_by: data.created_by
+        attempted_at: data.attempted_at,
+        is_conclusive_failure: data.is_conclusive_failure,
+        user_id: data.user_id
       }
       
       setAttempts(prev => [newAttemptData, ...prev])
@@ -575,7 +779,19 @@ const POSDetail = () => {
       notify.success('尝试记录提交成功')
       
       // 确保状态重置在同一个事件循环中完成
-      setNewAttempt({ result: 'success', card_name: '', payment_method: '', notes: '' })
+      setNewAttempt({
+        result: 'success',
+        card_name: '',
+        card_network: '',
+        payment_method: '',
+        cvm: 'unknown',
+        acquiring_mode: 'unknown',
+        device_status: pos?.status || 'active',
+        acquiring_institution: pos?.basic_info?.acquiring_institution || '',
+        checkout_location: pos?.basic_info?.checkout_location || '',
+        notes: '',
+        is_conclusive_failure: false
+      })
       
       // 使用setTimeout确保模态框能正确关闭
       setTimeout(() => {
@@ -1290,7 +1506,7 @@ const POSDetail = () => {
               </CardHeader>
               <CardContent>
                 {attempts.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                         <div>
@@ -1314,10 +1530,91 @@ const POSDetail = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-5">
+                      <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
+                        {renderMatrixSection(
+                          '卡组织支持矩阵',
+                          CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
+                          attemptMatrix.cardNetworks,
+                          (key) => {
+                            const hasManualSupported = pos?.basic_info?.supported_card_networks?.includes(key)
+                            return hasManualSupported ? 'supported' : 'unknown'
+                          }
+                        )}
+
+                        {renderMatrixSection(
+                          '支付方式支持矩阵',
+                          PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
+                          attemptMatrix.paymentMethods,
+                          (key) => {
+                            if (!pos?.basic_info) return 'unknown'
+                            if (key === 'tap') {
+                              return normalizeThreeState(pos.basic_info.supports_contactless)
+                            }
+                            if (key === 'apple_pay') {
+                              return normalizeThreeState(pos.basic_info.supports_apple_pay)
+                            }
+                            if (key === 'google_pay') {
+                              return normalizeThreeState(pos.basic_info.supports_google_pay)
+                            }
+                            if (key === 'hce') {
+                              return normalizeThreeState(pos.basic_info.supports_hce_simulation)
+                            }
+                            return 'unknown'
+                          }
+                        )}
+
+                        {renderMatrixSection(
+                          '验证方式 (CVM)',
+                          CVM_OPTIONS.map((cvm) => ({ key: cvm, label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名' })),
+                          attemptMatrix.cvm
+                        )}
+
+                        {renderMatrixSection(
+                          '收单模式',
+                          ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
+                          attemptMatrix.acquiringModes
+                        )}
+                      </div>
+
+                      <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
+                        {renderMatrixSection(
+                          '结账地点',
+                          [
+                            { key: '自助收银', label: '自助收银' },
+                            { key: '人工收银', label: '人工收银' },
+                          ],
+                          attemptMatrix.checkoutLocations
+                        )}
+
+                        {renderMatrixSection(
+                          '设备状态',
+                          [
+                            { key: 'active', label: '正常运行' },
+                            { key: 'inactive', label: '暂时不可用' },
+                            { key: 'maintenance', label: '维修中' },
+                            { key: 'disabled', label: '已停用' },
+                          ],
+                          attemptMatrix.deviceStatus
+                        )}
+
+                        {renderMatrixSection(
+                          '收单机构',
+                          Array.from(attemptMatrix.acquiringInstitutions.keys()).map((key) => ({ key, label: key })),
+                          attemptMatrix.acquiringInstitutions,
+                          (key) => (key === pos?.basic_info?.acquiring_institution ? 'supported' : 'unknown')
+                        )}
+                      </div>
+
+                      <div className="text-xs text-gray-500 bg-gray-50/80 border border-gray-100 rounded-xl p-3">
+                        说明：成功尝试会推导“支持”，明确失败会推导“不支持”。手动设置的支持项优先显示，若与尝试记录冲突请以备注核实。
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
                       {attempts.map((attempt) => (
                         <div key={attempt.id} className="rounded-2xl border border-gray-100 bg-white/90 p-4">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-3">
                             <span className="text-xs text-gray-500">
                               {new Date(attempt.created_at).toLocaleDateString('zh-CN')}
                             </span>
@@ -1331,7 +1628,10 @@ const POSDetail = () => {
                               }`}>
                                 {getResultLabel(attempt.result)}
                               </span>
-                              {user && attempt.created_by === user.id && (
+                              {attempt.is_conclusive_failure && (
+                                <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600">明确失败</span>
+                              )}
+                              {user && attempt.user_id === user.id && (
                                 <AnimatedButton
                                   onClick={() => deleteAttempt(attempt.id)}
                                   variant="ghost"
@@ -1350,9 +1650,39 @@ const POSDetail = () => {
                               <span className="text-soft-black dark:text-gray-100">{attempt.card_name || '未记录'}</span>
                             </div>
                             <div>
+                              <span className="text-gray-500">卡组织：</span>
+                              <span className="text-soft-black dark:text-gray-100">{attempt.card_network ? getCardNetworkLabel(attempt.card_network) : '未记录'}</span>
+                            </div>
+                            <div>
                               <span className="text-gray-500">支付方式：</span>
                               <span className="text-soft-black dark:text-gray-100">{getPaymentMethodLabel(attempt.payment_method) || '未记录'}</span>
                             </div>
+                            <div>
+                              <span className="text-gray-500">CVM：</span>
+                              <span className="text-soft-black dark:text-gray-100">{attempt.cvm || '未记录'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">收单模式：</span>
+                              <span className="text-soft-black dark:text-gray-100">{attempt.acquiring_mode || '未记录'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">设备状态：</span>
+                              <span className="text-soft-black dark:text-gray-100">{attempt.device_status || '未记录'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">收单机构：</span>
+                              <span className="text-soft-black dark:text-gray-100">{attempt.acquiring_institution || '未记录'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">结账地点：</span>
+                              <span className="text-soft-black dark:text-gray-100">{attempt.checkout_location || '未记录'}</span>
+                            </div>
+                            {attempt.attempted_at && (
+                              <div>
+                                <span className="text-gray-500">发生时间：</span>
+                                <span className="text-soft-black dark:text-gray-100">{new Date(attempt.attempted_at).toLocaleString('zh-CN')}</span>
+                              </div>
+                            )}
                           </div>
                           {attempt.notes && (
                             <div className="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-500">
@@ -1569,6 +1899,7 @@ const POSDetail = () => {
             </div>
           </div>
         </div>
+      </div>
 
       {/* 评论模态框 */}
       <AnimatedModal
@@ -1672,7 +2003,7 @@ const POSDetail = () => {
                 <option value="unknown">未知</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 卡片名称
@@ -1691,7 +2022,27 @@ const POSDetail = () => {
                 }}
               />
             </div>
-            
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">卡组织</label>
+              <select
+                value={newAttempt.card_network}
+                onChange={(e) => setNewAttempt({ ...newAttempt, card_network: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
+                style={{
+                  WebkitAppearance: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation',
+                  fontSize: '16px'
+                }}
+              >
+                <option value="">请选择卡组织</option>
+                {CARD_NETWORKS.map((scheme) => (
+                  <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 支付方式
@@ -1708,16 +2059,95 @@ const POSDetail = () => {
                 }}
               >
                 <option value="">请选择支付方式</option>
-                <option value="Apple Pay">Apple Pay</option>
-                <option value="Google Pay">Google Pay</option>
-                <option value="Samsung Pay">Samsung Pay</option>
-                <option value="非接触式">非接触式</option>
-                <option value="插卡">插卡</option>
-                <option value="刷卡">刷卡</option>
-                <option value="其他">其他</option>
+                <option value="tap">实体卡 Tap</option>
+                <option value="insert">实体卡 Insert</option>
+                <option value="swipe">实体卡 Swipe</option>
+                <option value="apple_pay">Apple Pay</option>
+                <option value="google_pay">Google Pay</option>
+                <option value="hce">HCE</option>
               </select>
             </div>
-            
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">验证方式 (CVM)</label>
+              <select
+                value={newAttempt.cvm}
+                onChange={(e) => setNewAttempt({ ...newAttempt, cvm: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
+                style={{
+                  WebkitAppearance: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation',
+                  fontSize: '16px'
+                }}
+              >
+                <option value="unknown">未知</option>
+                <option value="no_pin">免密</option>
+                <option value="pin">PIN</option>
+                <option value="signature">签名</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">收单模式</label>
+              <select
+                value={newAttempt.acquiring_mode}
+                onChange={(e) => setNewAttempt({ ...newAttempt, acquiring_mode: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
+                style={{
+                  WebkitAppearance: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation',
+                  fontSize: '16px'
+                }}
+              >
+                <option value="unknown">未知</option>
+                <option value="DCC">DCC</option>
+                <option value="EDC">EDC</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">设备状态</label>
+              <SystemSelect
+                dataType="device_status"
+                value={newAttempt.device_status}
+                onChange={(value) => setNewAttempt({ ...newAttempt, device_status: value })}
+                placeholder="请选择设备状态"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">收单机构</label>
+              <SystemSelect
+                dataType="acquiring_institution"
+                value={newAttempt.acquiring_institution}
+                onChange={(value) => setNewAttempt({ ...newAttempt, acquiring_institution: value })}
+                placeholder="请选择收单机构"
+                allowCustom
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">结账地点</label>
+              <SystemSelect
+                dataType="checkout_locations"
+                value={newAttempt.checkout_location}
+                onChange={(value) => setNewAttempt({ ...newAttempt, checkout_location: value })}
+                placeholder="请选择结账地点"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <input
+                id="attempt-conclusive"
+                type="checkbox"
+                checked={Boolean(newAttempt.is_conclusive_failure)}
+                onChange={(e) => setNewAttempt({ ...newAttempt, is_conclusive_failure: e.target.checked })}
+              />
+              <label htmlFor="attempt-conclusive">明确失败（会被计入“不支持”推导）</label>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 备注
