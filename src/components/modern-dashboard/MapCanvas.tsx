@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapPin } from 'lucide-react'
-import { loadAMap, DEFAULT_MAP_CONFIG } from '@/lib/amap'
+import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 import { useMapStore } from '@/stores/useMapStore'
 import { useNavigate } from 'react-router-dom'
 
@@ -113,7 +113,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
         // 禁用默认双击缩放，避免和快速添加位置的交互冲突
         localMap.setStatus({ doubleClickZoom: false })
 
-        const handleDoubleClick = (e: any) => {
+        const handleDoubleClick = async (e: any) => {
           const lngLat = e?.lnglat
           const lng = typeof lngLat?.getLng === 'function' ? lngLat.getLng() : lngLat?.lng
           const lat = typeof lngLat?.getLat === 'function' ? lngLat.getLat() : lngLat?.lat
@@ -124,7 +124,20 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
             Number.isFinite(lng) &&
             Number.isFinite(lat)
           ) {
-            navigate(`/app/add-pos?lat=${lat}&lng=${lng}`)
+            const params = new URLSearchParams()
+            params.set('lat', String(lat))
+            params.set('lng', String(lng))
+
+            try {
+              const address = await locationUtils.getAddress(lng, lat)
+              if (address && address.trim()) {
+                params.set('address', address.trim())
+              }
+            } catch (error) {
+              console.warn('[MapCanvas] 双击定位反查地址失败:', error)
+            }
+
+            navigate(`/app/add-pos?${params.toString()}`)
           }
         }
 
