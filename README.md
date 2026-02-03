@@ -123,7 +123,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # 高德地图配置
 VITE_AMAP_KEY=your_amap_api_key
-VITE_AMAP_SECURITY_KEY=your_amap_security_key
+VITE_AMAP_SECURITY_JS_CODE=your_amap_security_js_code
 
 # 第三方登录配置 (可选)
 VITE_GITHUB_CLIENT_ID=your_github_client_id

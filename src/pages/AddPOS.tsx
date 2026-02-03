@@ -389,7 +389,11 @@ const AddPOS = () => {
       .catch((error) => {
         console.warn('[AddPOS] 解析地址失败:', error)
         if (!cancelled) {
-          notify.error(uiText.mapPrefillAddressFailed)
+          const message =
+            error instanceof Error && error.message.startsWith('API配置错误')
+              ? error.message
+              : uiText.mapPrefillAddressFailed
+          notify.error(message)
         }
       })
       .finally(() => {
