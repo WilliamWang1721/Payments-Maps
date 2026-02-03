@@ -27,6 +27,8 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   const [isMapReady, setIsMapReady] = useState(false)
   const [selectedPos, setSelectedPos] = useState({ lat: initialLat, lng: initialLng, address: '' })
   const [isLocating, setIsLocating] = useState(false)
+  const [addressStatus, setAddressStatus] = useState<'idle' | 'loading' | 'resolved' | 'error'>('idle')
+  const addressRequestIdRef = useRef(0)
 
   useEffect(() => {
     if (!isOpen) {
@@ -90,6 +92,22 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
     }
   }, [isOpen, initialLat, initialLng])
 
+  const resolveAddress = async (lng: number, lat: number) => {
+    const requestId = ++addressRequestIdRef.current
+    setAddressStatus('loading')
+    try {
+      const address = await locationUtils.getAddress(lng, lat)
+      if (addressRequestIdRef.current !== requestId) return
+      setSelectedPos((prev) => ({ ...prev, address }))
+      setAddressStatus(address ? 'resolved' : 'error')
+    } catch (error) {
+      if (addressRequestIdRef.current !== requestId) return
+      console.warn('[SimpleMapPicker] 地址解析失败:', error)
+      setSelectedPos((prev) => ({ ...prev, address: '' }))
+      setAddressStatus('error')
+    }
+  }
+
   const placeMarker = (lng: number, lat: number) => {
     if (!mapRef.current) return
     
@@ -108,7 +126,8 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
     })
     
     markerRef.current = marker
-    setSelectedPos({ lat, lng, address: `${lat.toFixed(6)}, ${lng.toFixed(6)}` })
+    setSelectedPos({ lat, lng, address: '' })
+    resolveAddress(lng, lat)
     
     // 移动地图中心
     mapRef.current.setCenter([lng, lat])
@@ -217,10 +236,17 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
           </div>
         </div>
         
-        {/* 坐标显示 */}
+        {/* 地址显示 */}
         {selectedPos.lat !== 0 && (
           <div className="px-6 py-3 bg-gray-50 text-sm text-gray-600">
-            当前坐标: {selectedPos.address}
+            <div className="flex items-start gap-2">
+              <span className="text-gray-500">当前地址:</span>
+              <span className="text-gray-800 flex-1">
+                {addressStatus === 'loading'
+                  ? '正在解析地址...'
+                  : selectedPos.address || '地址解析失败，请在表单中手动填写'}
+              </span>
+            </div>
           </div>
         )}
         

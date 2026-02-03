@@ -426,13 +426,13 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
           ${feesSection}
 
           <!-- 位置信息 -->
-          ${pos.latitude && pos.longitude ? `
+          ${(pos.address || (pos.latitude && pos.longitude)) ? `
           <div class="section">
             <h3 class="section-title">📍 位置信息</h3>
             <div class="info-grid">
               <div class="info-item">
-                <div class="info-label">经纬度坐标</div>
-                <div class="info-value">${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}</div>
+                <div class="info-label">${pos.address ? '详细地址' : '经纬度坐标'}</div>
+                <div class="info-value">${pos.address || `${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`}</div>
               </div>
             </div>
           </div>

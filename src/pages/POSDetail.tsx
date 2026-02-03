@@ -1207,12 +1207,12 @@ const POSDetail = () => {
                 </div>
               </div>
             </div>
-            {(pos.latitude && pos.longitude) || pos.created_at ? (
+            {(pos.address || (pos.latitude && pos.longitude)) || pos.created_at ? (
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  {pos.latitude && pos.longitude && (
+                  {(pos.address || (pos.latitude && pos.longitude)) && (
                     <div>
-                      坐标: {pos.latitude.toFixed(6)}, {pos.longitude.toFixed(6)}
+                      位置: {pos.address || `${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`}
                     </div>
                   )}
                   {pos.created_at && (
