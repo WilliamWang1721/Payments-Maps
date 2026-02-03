@@ -224,38 +224,6 @@ const AddPOS = () => {
   })
   const lastValidationToast = useRef<Record<string, string>>({})
   const submittingRef = useRef(false)
-<<<<<<< ours
-
-  const attemptResultOptions = [
-    {
-      value: 'success',
-      label: '成功',
-      description: '交易完成或确认支持',
-      icon: CheckCircle,
-      iconClass: 'text-emerald-500',
-    },
-    {
-      value: 'failure',
-      label: '失败',
-      description: '明确失败或无法使用',
-      icon: XCircle,
-      iconClass: 'text-red-500',
-    },
-    {
-      value: 'unknown',
-      label: '未知',
-      description: '结果不确定',
-      icon: HelpCircle,
-      iconClass: 'text-gray-400',
-    },
-  ] as const
-
-  const attemptFieldBase =
-    'w-full rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 text-[16px] text-soft-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-accent-yellow/20 focus:border-accent-yellow/40 min-h-[44px] touch-manipulation webkit-appearance-none webkit-tap-highlight-none dark:bg-slate-900/80 dark:text-gray-100 dark:border-slate-700 dark:placeholder:text-gray-500'
-  const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
-  const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
-=======
->>>>>>> theirs
 
   const attemptResultOptions = [
     {
