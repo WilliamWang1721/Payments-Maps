@@ -808,8 +808,8 @@ const List = () => {
                             </div>
                           )}
                           {pos.remarks && (
-                            <div className="text-xs text-gray-500 bg-cream px-3 py-1.5 rounded-2xl inline-flex items-center border border-transparent">
-                              <span className="truncate">{pos.remarks}</span>
+                            <div className="text-xs text-gray-500 bg-cream px-3 py-1.5 rounded-2xl inline-flex items-start border border-transparent max-w-full">
+                              <span className="line-clamp-2 break-words whitespace-normal">{pos.remarks}</span>
                             </div>
                           )}
                           {tags.length > 0 && (
