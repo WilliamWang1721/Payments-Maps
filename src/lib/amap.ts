@@ -3,9 +3,26 @@
 // 检测开发环境
 const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost'
 
+const normalizeEnvValue = (
+  value: unknown,
+  options: { stripAllWhitespace?: boolean } = {}
+): string | undefined => {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  const unquoted =
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+      ? trimmed.slice(1, -1)
+      : trimmed
+  const normalized = options.stripAllWhitespace ? unquoted.replace(/\s+/g, '') : unquoted
+  return normalized ? normalized : undefined
+}
+
+const amapKey = normalizeEnvValue(import.meta.env.VITE_AMAP_KEY, { stripAllWhitespace: true })
+
 // 兼容旧的环境变量命名（README 曾使用 VITE_AMAP_SECURITY_KEY）
 const securityJsCode =
-  import.meta.env.VITE_AMAP_SECURITY_JS_CODE || import.meta.env.VITE_AMAP_SECURITY_KEY
+  normalizeEnvValue(import.meta.env.VITE_AMAP_SECURITY_JS_CODE, { stripAllWhitespace: true }) ||
+  normalizeEnvValue(import.meta.env.VITE_AMAP_SECURITY_KEY, { stripAllWhitespace: true })
 
 let amapLoadPromise: Promise<any> | null = null
 let geocoderPromise: Promise<any> | null = null
@@ -13,7 +30,7 @@ let geocoderInstance: any | null = null
 
 // 高德地图配置
 export const AMAP_CONFIG = {
-  key: import.meta.env.VITE_AMAP_KEY,
+  key: amapKey,
   version: '2.0',
   plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.Geolocation', 'AMap.Geocoder'],
   securityJsCode,
@@ -195,6 +212,12 @@ const handleApiError = (error: any, context: 'map' | 'address' = 'map'): Error =
       'API配置错误: 安全密钥无效或未配置。请检查 VITE_AMAP_SECURITY_JS_CODE（或旧版 VITE_AMAP_SECURITY_KEY）是否正确，并确认高德控制台已开启安全密钥。'
     )
   }
+
+  if (context === 'address' && errorMessage.trim().toLowerCase() === 'error') {
+    return new Error(
+      '地址解析失败: error（高德服务返回 error，通常是安全密钥/域名白名单/服务权限配置问题；请先检查 VITE_AMAP_SECURITY_JS_CODE 是否包含多余空格或换行）'
+    )
+  }
   
   if (context === 'address') {
     return new Error(`地址解析失败: ${errorMessage}`)
@@ -334,6 +357,11 @@ export const loadAMap = (): Promise<any> => {
     }
 
     if (AMAP_CONFIG.securityJsCode) {
+      if (AMAP_CONFIG.securityJsCode.length !== 32) {
+        console.warn(
+          `[amap] securityJsCode 长度异常（${AMAP_CONFIG.securityJsCode.length}），请检查环境变量是否包含多余字符`
+        )
+      }
       window._AMapSecurityConfig = {
         securityJsCode: AMAP_CONFIG.securityJsCode,
       }
