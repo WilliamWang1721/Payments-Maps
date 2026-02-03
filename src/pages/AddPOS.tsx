@@ -2,17 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  Building,
   Check,
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Clock,
   CreditCard,
+  FileText,
   HelpCircle,
   MapPin,
   Loader2,
+  Settings,
+  Shield,
   Smartphone,
   Trash2,
   X,
+  XCircle,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -218,6 +224,35 @@ const AddPOS = () => {
   })
   const lastValidationToast = useRef<Record<string, string>>({})
   const submittingRef = useRef(false)
+
+  const attemptResultOptions = [
+    {
+      value: 'success',
+      label: '成功',
+      description: '交易完成或确认支持',
+      icon: CheckCircle,
+      iconClass: 'text-emerald-500',
+    },
+    {
+      value: 'failure',
+      label: '失败',
+      description: '明确失败或无法使用',
+      icon: XCircle,
+      iconClass: 'text-red-500',
+    },
+    {
+      value: 'unknown',
+      label: '未知',
+      description: '结果不确定',
+      icon: HelpCircle,
+      iconClass: 'text-gray-400',
+    },
+  ] as const
+
+  const attemptFieldBase =
+    'w-full rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 text-[16px] text-soft-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-accent-yellow/20 focus:border-accent-yellow/40 min-h-[44px] touch-manipulation webkit-appearance-none webkit-tap-highlight-none dark:bg-slate-900/80 dark:text-gray-100 dark:border-slate-700 dark:placeholder:text-gray-500'
+  const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
+  const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
 
   const getFieldError = (field: keyof typeof touchedFields) =>
     touchedFields[field] ? validationErrors[field] : ''
@@ -915,240 +950,367 @@ const AddPOS = () => {
     </div>
   )
 
-  const renderStep2 = () => (
-    <div className="space-y-6 animate-fade-in-up">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-soft-black">尝试记录</h3>
-          <p className="text-xs text-gray-500 mt-1">填写成功/失败的支付尝试，系统会据此推导支持情况。</p>
-        </div>
-        <button
-          type="button"
-          onClick={addAttemptRow}
-          className="px-3 py-2 rounded-xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
-        >
-          + 添加记录
-        </button>
-      </div>
+  const renderStep2 = () => {
+    const attemptsList = formData.attempts || []
+    const attemptsCount = attemptsList.length
+    const attemptSuccessCount = attemptsList.filter((attempt) => attempt.result === 'success').length
+    const attemptFailureCount = attemptsList.filter((attempt) => attempt.result === 'failure').length
+    const attemptSuccessRate = attemptsCount > 0 ? Math.round((attemptSuccessCount / attemptsCount) * 100) : 0
+    const latestAttempt = attemptsList[attemptsCount - 1]
+    const latestAttemptLabel = latestAttempt?.attempted_at
+      ? new Date(latestAttempt.attempted_at).toLocaleString('zh-CN')
+      : latestAttempt
+      ? '已记录'
+      : ''
+    const latestResultLabel =
+      latestAttempt?.result === 'success'
+        ? '成功'
+        : latestAttempt?.result === 'failure'
+        ? '失败'
+        : latestAttempt?.result === 'unknown'
+        ? '未知'
+        : ''
+    const showAlbumCard = attemptsCount > 0 && albumCards.length > 0
 
-      {(formData.attempts || []).length === 0 && (
-        <div className="p-4 rounded-xl border border-dashed border-gray-200 text-sm text-gray-500 bg-white">
-          还没有添加尝试记录，点击“添加记录”开始填写。
-        </div>
-      )}
-
-      {formData.attempts && formData.attempts.length > 0 && albumCards.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
-          <div>
-            <div className="text-xs font-semibold text-gray-500">从卡册选择</div>
-            <p className="text-[11px] text-gray-400 mt-1">选择卡片后会自动填充到最新一条尝试记录。</p>
+    const attemptSidebar = (
+      <aside className="space-y-6">
+        <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
+              <Building className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-soft-black dark:text-gray-100">
+                {formData.merchant_name || '未命名 POS'}
+              </div>
+              <div className="text-xs text-gray-500">{formData.address || '暂无地址信息'}</div>
+            </div>
           </div>
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/80 px-3 py-3">
+              <div className="text-lg font-semibold text-soft-black dark:text-gray-100">{attemptsCount}</div>
+              <div className="text-[11px] text-gray-500">总尝试</div>
+            </div>
+            <div className="rounded-2xl border border-green-100 bg-green-50/70 px-3 py-3">
+              <div className="text-lg font-semibold text-green-600">{attemptSuccessCount}</div>
+              <div className="text-[11px] text-gray-500">成功</div>
+            </div>
+            <div className="rounded-2xl border border-red-100 bg-red-50/70 px-3 py-3">
+              <div className="text-lg font-semibold text-red-600">{attemptFailureCount}</div>
+              <div className="text-[11px] text-gray-500">失败</div>
+            </div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3">
+              <div className="text-lg font-semibold text-blue-600">{attemptSuccessRate}%</div>
+              <div className="text-[11px] text-gray-500">成功率</div>
+            </div>
+          </div>
+          {latestAttempt && (
+            <div className="rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 text-xs text-gray-500">
+              最近一次：{latestAttemptLabel} · {latestResultLabel}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-white/60 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/80 p-5 shadow-soft">
+          <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+            <Shield className="w-4 h-4 text-accent-yellow" />
+            填写提示
+          </div>
+          <div className="mt-3 space-y-2 text-sm text-gray-500">
+            <p>成功与明确失败会更新支持矩阵，影响默认推荐。</p>
+            <p>若刷卡失败但原因不明，请选择“未知”并在备注说明。</p>
+            <p>卡片名称可写具体发卡行或卡产品名，便于后续追踪。</p>
+          </div>
+        </div>
+
+        {showAlbumCard && (
+          <div className="rounded-3xl border border-white/60 bg-white/90 p-5 shadow-soft space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+              <CreditCard className="w-4 h-4 text-accent-yellow" />
+              从卡册选择
+            </div>
+            <p className="text-[11px] text-gray-400">选择卡片后会自动填充到最新一条尝试记录。</p>
             <button
               type="button"
               onClick={() => setIsAlbumPickerOpen(true)}
-              className="flex-1 px-4 py-3 rounded-lg text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
+              className="w-full px-4 py-3 rounded-2xl text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
             >
               <span>{selectedAlbumCardLabel || '从卡册中选择卡片'}</span>
               <ChevronRight className="w-4 h-4 text-gray-400" />
             </button>
             <button
               type="button"
-              className="px-4 py-2 rounded-lg text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
+              className="w-full px-4 py-3 rounded-2xl text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
               onClick={handleApplyAlbumCard}
             >
               填充到最新记录
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </aside>
+    )
 
-      <div className="space-y-3">
-        {formData.attempts?.map((attempt, index) => (
-          <div key={index} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs font-semibold text-gray-500">尝试 {index + 1}</div>
-              <button
-                type="button"
-                onClick={() => removeAttempt(index)}
-                className="text-red-500 text-xs font-bold hover:text-red-600"
-              >
-                删除
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">结果</label>
-                <select
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.result}
-                  onChange={(e) => updateAttempt(index, 'result', e.target.value as 'success' | 'failure' | 'unknown')}
-                >
-                  <option value="success">成功</option>
-                  <option value="failure">失败</option>
-                  <option value="unknown">未知</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">发生时间</label>
-                <input
-                  type="datetime-local"
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
-                  onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">卡组织</label>
-                <select
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.card_network || ''}
-                  onChange={(e) => updateAttempt(index, 'card_network', e.target.value)}
-                >
-                  <option value="">请选择</option>
-                  {CARD_NETWORKS.map((scheme) => (
-                    <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">支付方式</label>
-                <select
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.payment_method || ''}
-                  onChange={(e) => updateAttempt(index, 'payment_method', e.target.value as NonNullable<FormData['attempts']>[number]['payment_method'])}
-                >
-                  <option value="">请选择</option>
-                  <option value="tap">实体卡 Tap</option>
-                  <option value="insert">实体卡 Insert</option>
-                  <option value="swipe">实体卡 Swipe</option>
-                  <option value="apple_pay">Apple Pay</option>
-                  <option value="google_pay">Google Pay</option>
-                  <option value="hce">HCE</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">验证方式 (CVM)</label>
-                <select
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.cvm || 'unknown'}
-                  onChange={(e) => updateAttempt(index, 'cvm', e.target.value as NonNullable<FormData['attempts']>[number]['cvm'])}
-                >
-                  <option value="unknown">未知</option>
-                  <option value="no_pin">免密</option>
-                  <option value="pin">PIN</option>
-                  <option value="signature">签名</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">收单模式</label>
-                <select
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.acquiring_mode || 'unknown'}
-                  onChange={(e) => updateAttempt(index, 'acquiring_mode', e.target.value as NonNullable<FormData['attempts']>[number]['acquiring_mode'])}
-                >
-                  <option value="unknown">未知</option>
-                  <option value="DCC">DCC</option>
-                  <option value="EDC">EDC</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">设备状态</label>
-                <SystemSelect
-                  dataType="device_status"
-                  value={attempt.device_status || 'active'}
-                  onChange={(value) => updateAttempt(index, 'device_status', value as NonNullable<FormData['attempts']>[number]['device_status'])}
-                  placeholder="请选择设备状态"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">收单机构</label>
-                <SystemSelect
-                  dataType="acquiring_institution"
-                  value={attempt.acquiring_institution || ''}
-                  onChange={(value) => updateAttempt(index, 'acquiring_institution', value)}
-                  placeholder="请选择收单机构"
-                  allowCustom
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">结账地点</label>
-                <SystemSelect
-                  dataType="checkout_locations"
-                  value={attempt.checkout_location || ''}
-                  onChange={(value) => updateAttempt(index, 'checkout_location', value as NonNullable<FormData['attempts']>[number]['checkout_location'])}
-                  placeholder="请选择结账地点"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">卡片名称</label>
-                <input
-                  type="text"
-                  className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                  value={attempt.card_name || ''}
-                  onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
-                  placeholder="如 Visa Signature"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">备注</label>
-              <input
-                type="text"
-                className="w-full bg-cream rounded-lg px-3 py-2 text-sm"
-                value={attempt.notes || ''}
-                onChange={(e) => updateAttempt(index, 'notes', e.target.value)}
-                placeholder="例如：需要签名，或被拒原因"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => saveAttemptAsCommonCard(index)}
-                  className="text-xs font-semibold text-soft-black bg-cream px-3 py-1.5 rounded-lg hover:bg-accent-yellow/20 transition-colors"
-                >
-                  保存为常用卡
-                </button>
-                {formData.common_cards && formData.common_cards.length > 0 && (
-                  <select
-                    className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1"
-                    defaultValue=""
-                    onChange={(e) => {
-                      const selected = parseInt(e.target.value, 10)
-                      if (!Number.isNaN(selected)) applyCommonCard(index, selected)
-                    }}
-                  >
-                    <option value="">快速填充常用卡</option>
-                    {formData.common_cards.map((card, cardIndex) => (
-                      <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
-                        {card.name}{card.method ? ` · ${card.method}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <input
-                id={`attempt-conclusive-${index}`}
-                type="checkbox"
-                checked={Boolean(attempt.is_conclusive_failure)}
-                onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
-              />
-              <label htmlFor={`attempt-conclusive-${index}`}>
-                明确失败（会被计入“不支持”推导）
-              </label>
-            </div>
+    return (
+      <div className="space-y-6 animate-fade-in-up">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400">尝试记录</p>
+            <h3 className="text-base font-semibold text-soft-black dark:text-gray-100">添加尝试记录</h3>
+            <p className="text-xs text-gray-500 mt-1">填写成功/失败的支付尝试，系统会据此推导支持情况。</p>
           </div>
-        ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft">
+              <Clock className="w-3.5 h-3.5 text-accent-yellow" />
+              已有 {attemptsCount} 条记录
+            </span>
+            <button
+              type="button"
+              onClick={addAttemptRow}
+              className="px-4 py-2 rounded-2xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
+            >
+              + 添加记录
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+          <div className="space-y-8">
+            {attemptsCount === 0 ? (
+              <div className="rounded-3xl border border-dashed border-gray-200 bg-white/90 p-6 text-sm text-gray-500">
+                还没有添加尝试记录，点击“添加记录”开始填写。
+              </div>
+            ) : (
+              attemptsList.map((attempt, index) => (
+                <div key={`attempt-${index}`} className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em]">
+                      尝试 {index + 1}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAttempt(index)}
+                      className="text-xs font-semibold text-red-500 hover:text-red-600"
+                    >
+                      删除
+                    </button>
+                  </div>
+
+                  <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试结果</h3>
+                        <p className="text-sm text-gray-500 mt-1">记录卡片与支付方式的实际表现。</p>
+                      </div>
+                      <span className="text-xs text-gray-400">* 为必填</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {attemptResultOptions.map((option) => {
+                        const Icon = option.icon
+                        const isSelected = attempt.result === option.value
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateAttempt(index, 'result', option.value)}
+                            className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                              isSelected
+                                ? 'bg-soft-black text-white border-soft-black shadow-lg shadow-blue-900/20'
+                                : 'bg-white/90 border-gray-200 text-gray-700 hover:border-accent-yellow/40 hover:bg-white'
+                            }`}
+                          >
+                            <Icon className={`w-5 h-5 mt-0.5 ${isSelected ? 'text-white' : option.iconClass}`} />
+                            <div>
+                              <div className="text-sm font-semibold">{option.label}</div>
+                              <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+                                {option.description}
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡片名称</label>
+                        <input
+                          type="text"
+                          value={attempt.card_name || ''}
+                          onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
+                          placeholder="如 Visa Signature"
+                          className={attemptFieldBase}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡组织</label>
+                        <select
+                          value={attempt.card_network || ''}
+                          onChange={(e) => updateAttempt(index, 'card_network', e.target.value)}
+                          className={attemptSelectBase}
+                        >
+                          <option value="">请选择卡组织</option>
+                          {CARD_NETWORKS.map((scheme) => (
+                            <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">发生时间</label>
+                        <input
+                          type="datetime-local"
+                          className={attemptFieldBase}
+                          value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
+                          onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                      <CreditCard className="w-4 h-4 text-accent-yellow" />
+                      支付方式与验证
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">支付方式</label>
+                        <select
+                          value={attempt.payment_method || ''}
+                          onChange={(e) => updateAttempt(index, 'payment_method', e.target.value as NonNullable<FormData['attempts']>[number]['payment_method'])}
+                          className={attemptSelectBase}
+                        >
+                          <option value="">请选择支付方式</option>
+                          <option value="tap">实体卡 Tap</option>
+                          <option value="insert">实体卡 Insert</option>
+                          <option value="swipe">实体卡 Swipe</option>
+                          <option value="apple_pay">Apple Pay</option>
+                          <option value="google_pay">Google Pay</option>
+                          <option value="hce">HCE</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">验证方式 (CVM)</label>
+                        <select
+                          value={attempt.cvm || 'unknown'}
+                          onChange={(e) => updateAttempt(index, 'cvm', e.target.value as NonNullable<FormData['attempts']>[number]['cvm'])}
+                          className={attemptSelectBase}
+                        >
+                          <option value="unknown">未知</option>
+                          <option value="no_pin">免密</option>
+                          <option value="pin">PIN</option>
+                          <option value="signature">签名</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单模式</label>
+                        <select
+                          value={attempt.acquiring_mode || 'unknown'}
+                          onChange={(e) => updateAttempt(index, 'acquiring_mode', e.target.value as NonNullable<FormData['attempts']>[number]['acquiring_mode'])}
+                          className={attemptSelectBase}
+                        >
+                          <option value="unknown">未知</option>
+                          <option value="DCC">DCC</option>
+                          <option value="EDC">EDC</option>
+                        </select>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                      <Settings className="w-4 h-4 text-accent-yellow" />
+                      设备与收单信息
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">设备状态</label>
+                        <SystemSelect
+                          dataType="device_status"
+                          value={attempt.device_status || 'active'}
+                          onChange={(value) => updateAttempt(index, 'device_status', value as NonNullable<FormData['attempts']>[number]['device_status'])}
+                          placeholder="请选择设备状态"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单机构</label>
+                        <SystemSelect
+                          dataType="acquiring_institution"
+                          value={attempt.acquiring_institution || ''}
+                          onChange={(value) => updateAttempt(index, 'acquiring_institution', value)}
+                          placeholder="请选择收单机构"
+                          allowCustom
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">结账地点</label>
+                        <SystemSelect
+                          dataType="checkout_locations"
+                          value={attempt.checkout_location || ''}
+                          onChange={(value) => updateAttempt(index, 'checkout_location', value as NonNullable<FormData['attempts']>[number]['checkout_location'])}
+                          placeholder="请选择结账地点"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
+                      <input
+                        id={`attempt-conclusive-${index}`}
+                        type="checkbox"
+                        checked={Boolean(attempt.is_conclusive_failure)}
+                        onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
+                      />
+                      明确失败（会被计入“不支持”推导）
+                    </label>
+                  </section>
+
+                  <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                      <FileText className="w-4 h-4 text-accent-yellow" />
+                      备注
+                    </div>
+                    <textarea
+                      value={attempt.notes || ''}
+                      onChange={(e) => updateAttempt(index, 'notes', e.target.value)}
+                      placeholder="例如：需要签名，或被拒原因"
+                      rows={4}
+                      className={attemptTextareaBase}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveAttemptAsCommonCard(index)}
+                        className="text-xs font-semibold text-soft-black bg-cream px-4 py-2 rounded-xl hover:bg-accent-yellow/20 transition-colors"
+                      >
+                        保存为常用卡
+                      </button>
+                      {formData.common_cards && formData.common_cards.length > 0 && (
+                        <select
+                          className="text-xs bg-white/90 border border-gray-200 rounded-xl px-3 py-2"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const selected = parseInt(e.target.value, 10)
+                            if (!Number.isNaN(selected)) applyCommonCard(index, selected)
+                          }}
+                        >
+                          <option value="">快速填充常用卡</option>
+                          {formData.common_cards.map((card, cardIndex) => (
+                            <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
+                              {card.name}{card.method ? ` · ${card.method}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ))
+            )}
+          </div>
+          {attemptSidebar}
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const renderStep3 = () => (
     <div className="space-y-4 animate-fade-in-up">
