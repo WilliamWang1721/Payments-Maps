@@ -150,7 +150,7 @@ const ADD_POS_TEXTS = {
   reselectLocationButton: '重新选择位置',
   merchantNameLabel: '商户名称 *',
   addressLabel: '地址 *',
-  coordinatesLabel: '坐标',
+  coordinatesLabel: '位置',
   transactionNameLabel: '交易票面名称',
   transactionTypeLabel: 'MCC代码或行业',
   deviceStatusLabel: '设备状态',
@@ -165,8 +165,8 @@ const ADD_POS_TEXTS = {
   submitButton: '提交',
   nextButton: '下一步',
   backButton: '返回',
-  mapPrefillNotice: '已根据地图选定坐标，无需再次选择，直接填写表单即可',
-  mapPrefillAddressLoading: '正在根据坐标解析地址…',
+  mapPrefillNotice: '已根据地图选定位置，无需再次选择，直接填写表单即可',
+  mapPrefillAddressLoading: '正在解析地址…',
   mapPrefillAddressFailed: '自动获取地址失败，请手动填写地址',
 } as const
 
@@ -217,6 +217,7 @@ const AddPOS = () => {
     location: false,
   })
   const lastValidationToast = useRef<Record<string, string>>({})
+  const submittingRef = useRef(false)
 
   const getFieldError = (field: keyof typeof touchedFields) =>
     touchedFields[field] ? validationErrors[field] : ''
@@ -322,7 +323,7 @@ const AddPOS = () => {
     const lng = Number(lngParam)
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
 
-    const fallbackAddress = addressFromQuery || `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+    const fallbackAddress = addressFromQuery || ''
 
     setPrefilledFromQuery(true)
     setFormData((prev) => ({
@@ -502,14 +503,16 @@ const AddPOS = () => {
       ...prev,
       latitude,
       longitude,
-      address: address || prev.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      address: address?.trim() || prev.address || '',
     }))
     notify.success('位置选择成功')
   }
 
   const handleSubmit = async () => {
+    if (loading || submittingRef.current) return
     if (!validateForm()) return
 
+    submittingRef.current = true
     setLoading(true)
     try {
       const timeoutMs = 60000
@@ -596,6 +599,7 @@ const AddPOS = () => {
       })
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
@@ -833,7 +837,8 @@ const AddPOS = () => {
           )}
           {formData.latitude !== 0 && formData.longitude !== 0 && (
             <div className="mt-2 flex items-center gap-2 text-xs text-accent-salmon font-bold bg-green-50 p-2 rounded-lg w-fit">
-              <CheckCircle className="w-3 h-3" /> {uiText.coordinatesLabel}: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
+              <CheckCircle className="w-3 h-3" />
+              {uiText.coordinatesLabel}: {formData.address?.trim() || '请填写详细地址'}
             </div>
           )}
         </div>
@@ -1590,6 +1595,8 @@ const AddPOS = () => {
     setIsAlbumPickerOpen(false)
   }
 
+  const isSubmitting = step === 5 && loading
+
   return (
     <div className="flex-1 p-4 sm:p-6 lg:p-8">
       <div className={`bg-white rounded-[32px] shadow-soft flex flex-col relative overflow-hidden min-h-[600px] transition-all duration-300 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
@@ -1636,9 +1643,13 @@ const AddPOS = () => {
             )}
             <button
               onClick={step === 5 ? handleSubmit : goNext}
-              className="px-8 py-3 rounded-2xl font-bold text-white bg-soft-black hover:bg-accent-yellow shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+              disabled={isSubmitting}
+              className={`px-8 py-3 rounded-2xl font-bold text-white bg-soft-black shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2 ${
+                isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-accent-yellow hover:scale-105 active:scale-95'
+              }`}
             >
-              {step === 5 ? uiText.submitButton : uiText.nextButton} <ChevronRight className="w-4 h-4" />
+              {step === 5 ? uiText.submitButton : uiText.nextButton}
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
             </button>
           </div>
         </div>

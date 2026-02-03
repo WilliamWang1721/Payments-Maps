@@ -4,6 +4,145 @@ import { locationUtils } from '@/lib/amap'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { parseSearchInput, type GlobalSearchQuery } from '@/utils/searchParser'
 
+const ADD_POS_IDEMPOTENCY_STORAGE_KEY = 'pos_add_idempotency_v1'
+const ADD_POS_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000
+const ADD_POS_DEDUPE_WINDOW_MS = ADD_POS_IDEMPOTENCY_TTL_MS
+const inFlightAddPOS = new Map<string, Promise<POSMachine>>()
+
+type IdempotencyRecord = { id: string; createdAt: number }
+
+const getLocalStorage = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+const loadIdempotencyMap = (): Record<string, IdempotencyRecord> => {
+  const storage = getLocalStorage()
+  if (!storage) return {}
+  try {
+    const raw = storage.getItem(ADD_POS_IDEMPOTENCY_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, IdempotencyRecord>) : {}
+  } catch {
+    return {}
+  }
+}
+
+const saveIdempotencyMap = (map: Record<string, IdempotencyRecord>) => {
+  const storage = getLocalStorage()
+  if (!storage) return
+  try {
+    storage.setItem(ADD_POS_IDEMPOTENCY_STORAGE_KEY, JSON.stringify(map))
+  } catch {
+    // ignore storage write errors
+  }
+}
+
+const pruneIdempotencyMap = (map: Record<string, IdempotencyRecord>, now: number) => {
+  Object.entries(map).forEach(([key, value]) => {
+    if (!value?.createdAt || now - value.createdAt > ADD_POS_IDEMPOTENCY_TTL_MS) {
+      delete map[key]
+    }
+  })
+}
+
+const generateIdempotencyKey = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const getOrCreateIdempotencyKey = (fingerprint: string) => {
+  const now = Date.now()
+  const map = loadIdempotencyMap()
+  pruneIdempotencyMap(map, now)
+  const existing = map[fingerprint]
+  if (existing?.id) {
+    saveIdempotencyMap(map)
+    return existing.id
+  }
+  const id = generateIdempotencyKey()
+  map[fingerprint] = { id, createdAt: now }
+  saveIdempotencyMap(map)
+  return id
+}
+
+const clearIdempotencyKey = (fingerprint: string) => {
+  const map = loadIdempotencyMap()
+  if (map[fingerprint]) {
+    delete map[fingerprint]
+    saveIdempotencyMap(map)
+  }
+}
+
+const buildAddPOSFingerprint = (data: { merchant_name?: string; address?: string; latitude?: number; longitude?: number }, userId: string) => {
+  const name = (data.merchant_name || '').trim().toLowerCase()
+  const address = (data.address || '').trim().toLowerCase()
+  const latitude = Number(data.latitude || 0).toFixed(6)
+  const longitude = Number(data.longitude || 0).toFixed(6)
+  return [userId, name, address, latitude, longitude].join('|')
+}
+
+const isNetworkError = (error: any) => {
+  const message = error?.message?.toLowerCase?.() || ''
+  return message.includes('timeout') || message.includes('network') || message.includes('fetch')
+}
+
+const processPOSMachine = (data: POSMachine) => ({
+  ...data,
+  longitude: Number(data.longitude),
+  latitude: Number(data.latitude),
+  avgRating: 0,
+  distance: 0,
+  reviewCount: 0,
+})
+
+const findPOSMachineByIdempotency = async (userId: string, requestId: string) => {
+  if (!requestId) return null
+  const { data, error } = await supabase
+    .from('pos_machines')
+    .select('*')
+    .eq('created_by', userId)
+    .contains('extended_fields', { client_request_id: requestId })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.warn('查询幂等请求失败:', error)
+    return null
+  }
+  return data ? processPOSMachine(data as POSMachine) : null
+}
+
+const findRecentDuplicate = async (
+  userId: string,
+  payload: { merchant_name?: string; address?: string; latitude?: number; longitude?: number },
+  windowMs: number
+) => {
+  const since = new Date(Date.now() - windowMs).toISOString()
+  const { data, error } = await supabase
+    .from('pos_machines')
+    .select('*')
+    .eq('created_by', userId)
+    .eq('merchant_name', payload.merchant_name || '')
+    .eq('address', payload.address || '')
+    .eq('latitude', payload.latitude || 0)
+    .eq('longitude', payload.longitude || 0)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.warn('查询重复POS失败:', error)
+    return null
+  }
+  return data ? processPOSMachine(data as POSMachine) : null
+}
+
 export interface MapState {
   // 地图状态
   mapInstance: AMap.Map | null
@@ -396,6 +535,15 @@ export const useMapStore = create<MapState>((set, get) => ({
   },
 
   addPOSMachine: async (posMachineData) => {
+    const commitPOSMachine = (machine: POSMachine) => {
+      set(state => {
+        if (state.posMachines.some(item => item.id === machine.id)) {
+          return state
+        }
+        return { posMachines: [...state.posMachines, machine] }
+      })
+    }
+
     try {
       console.log('开始添加POS机，数据:', posMachineData)
       
@@ -431,101 +579,146 @@ export const useMapStore = create<MapState>((set, get) => ({
       
       // 准备数据 - 移除attempts字段（attempts应保存到pos_attempts表），使用merchant_name作为name字段
       const { attempts: _, ...baseData } = posMachineData as any
-      const newPOSMachine = {
-        ...baseData,
-        name: baseData.merchant_name || '未命名POS机', // 确保name字段有值
-        created_by: userId,
-        status: 'active' as const
+      const fingerprint = buildAddPOSFingerprint(baseData, userId)
+      const idempotencyKey = getOrCreateIdempotencyKey(fingerprint)
+
+      const existingPromise = inFlightAddPOS.get(fingerprint)
+      if (existingPromise) {
+        return await existingPromise
       }
-      
-      console.log('准备插入的数据:', newPOSMachine)
-      
-      // 添加网络状态检查
-      if (!navigator.onLine) {
-        throw new Error('网络连接已断开，请检查网络后重试')
-      }
-      
-      console.log('开始数据库插入操作...')
-      const startTime = Date.now()
-      
-      // 保存到Supabase数据库
-      let { data, error } = await supabase
-        .from('pos_machines')
-        .insert([newPOSMachine])
-        .select()
-        .single()
-      
-      const endTime = Date.now()
-      console.log(`数据库插入耗时: ${endTime - startTime}ms`)
-      console.log('数据库插入结果:', { data, error })
-      
-      // 检查是否是网络超时错误
-      if (error && (error.message.includes('timeout') || error.message.includes('network') || error.message.includes('fetch'))) {
-        console.error('检测到网络相关错误:', error)
-        throw new Error('网络请求超时，请检查网络连接后重试')
-      }
-      
-      // 如果遇到列不存在的错误，尝试移除可能缺失的列后重试
-      if (error && error.message && (error.message.includes('custom_links') || error.message.includes('remarks') || error.message.includes('checkout_location') || error.message.includes('verification_modes') || error.message.includes('merchant_info'))) {
-        console.warn('检测到数据库列缺失，尝试移除相关字段后重试:', error.message)
-        
-        // 创建备份数据，并仅移除触发错误的列，保留其余字段
-        const fallbackData = { ...newPOSMachine }
-        if (error.message.includes('custom_links')) delete (fallbackData as any).custom_links
-        if (error.message.includes('remarks')) delete (fallbackData as any).remarks
-        if (error.message.includes('verification_modes')) delete (fallbackData as any).verification_modes
-        if (error.message.includes('merchant_info')) delete (fallbackData as any).merchant_info
-        if (error.message.includes('checkout_location')) {
-          // 如果checkout_location字段不存在，从basic_info中移除
-          if (fallbackData.basic_info && 'checkout_location' in fallbackData.basic_info) {
-            const { checkout_location: _, ...restBasicInfo } = fallbackData.basic_info
-            fallbackData.basic_info = restBasicInfo
-          }
+
+      const taskPromise = (async () => {
+        const existingById = await findPOSMachineByIdempotency(userId, idempotencyKey)
+        if (existingById) {
+          commitPOSMachine(existingById)
+          clearIdempotencyKey(fingerprint)
+          return existingById
         }
-        
-        console.log('重试插入的数据:', fallbackData)
-        
-        const { data: retryData, error: retryError } = await supabase
+
+        const recentDuplicate = await findRecentDuplicate(userId, baseData, ADD_POS_DEDUPE_WINDOW_MS)
+        if (recentDuplicate) {
+          commitPOSMachine(recentDuplicate)
+          clearIdempotencyKey(fingerprint)
+          return recentDuplicate
+        }
+
+        const newPOSMachine = {
+          ...baseData,
+          name: baseData.merchant_name || '未命名POS机', // 确保name字段有值
+          created_by: userId,
+          status: 'active' as const,
+          extended_fields: {
+            ...(baseData.extended_fields || {}),
+            client_request_id: idempotencyKey,
+            client_request_created_at: new Date().toISOString(),
+          },
+        }
+
+        console.log('准备插入的数据:', newPOSMachine)
+
+        // 添加网络状态检查
+        if (!navigator.onLine) {
+          throw new Error('网络连接已断开，请检查网络后重试')
+        }
+
+        console.log('开始数据库插入操作...')
+        const startTime = Date.now()
+
+        // 保存到Supabase数据库
+        let { data, error } = await supabase
           .from('pos_machines')
-          .insert([fallbackData])
+          .insert([newPOSMachine])
           .select()
           .single()
-        
-        console.log('重试插入结果:', { data: retryData, error: retryError })
-        
-        if (retryError) {
-          console.error('重试添加POS机失败:', retryError)
-          throw retryError
+
+        const endTime = Date.now()
+        console.log(`数据库插入耗时: ${endTime - startTime}ms`)
+        console.log('数据库插入结果:', { data, error })
+
+        // 检查是否是网络超时错误
+        if (error && isNetworkError(error)) {
+          console.error('检测到网络相关错误:', error)
+          const existingAfterError = await findPOSMachineByIdempotency(userId, idempotencyKey)
+          if (existingAfterError) {
+            commitPOSMachine(existingAfterError)
+            clearIdempotencyKey(fingerprint)
+            return existingAfterError
+          }
+          const recentAfterError = await findRecentDuplicate(userId, baseData, ADD_POS_DEDUPE_WINDOW_MS)
+          if (recentAfterError) {
+            commitPOSMachine(recentAfterError)
+            clearIdempotencyKey(fingerprint)
+            return recentAfterError
+          }
+          throw new Error('网络请求超时，请检查网络连接后重试')
         }
-        
-        data = retryData
-        error = null
+
+        // 如果遇到列不存在的错误，尝试移除可能缺失的列后重试
+        if (error && error.message && (error.message.includes('custom_links') || error.message.includes('remarks') || error.message.includes('checkout_location') || error.message.includes('verification_modes') || error.message.includes('merchant_info'))) {
+          console.warn('检测到数据库列缺失，尝试移除相关字段后重试:', error.message)
+
+          // 创建备份数据，并仅移除触发错误的列，保留其余字段
+          const fallbackData = { ...newPOSMachine }
+          if (error.message.includes('custom_links')) delete (fallbackData as any).custom_links
+          if (error.message.includes('remarks')) delete (fallbackData as any).remarks
+          if (error.message.includes('verification_modes')) delete (fallbackData as any).verification_modes
+          if (error.message.includes('merchant_info')) delete (fallbackData as any).merchant_info
+          if (error.message.includes('checkout_location')) {
+            // 如果checkout_location字段不存在，从basic_info中移除
+            if (fallbackData.basic_info && 'checkout_location' in fallbackData.basic_info) {
+              const { checkout_location: _, ...restBasicInfo } = fallbackData.basic_info
+              fallbackData.basic_info = restBasicInfo
+            }
+          }
+
+          console.log('重试插入的数据:', fallbackData)
+
+          const { data: retryData, error: retryError } = await supabase
+            .from('pos_machines')
+            .insert([fallbackData])
+            .select()
+            .single()
+
+          console.log('重试插入结果:', { data: retryData, error: retryError })
+
+          if (retryError) {
+            console.error('重试添加POS机失败:', retryError)
+            if (isNetworkError(retryError)) {
+              const existingAfterRetry = await findPOSMachineByIdempotency(userId, idempotencyKey)
+              if (existingAfterRetry) {
+                commitPOSMachine(existingAfterRetry)
+                clearIdempotencyKey(fingerprint)
+                return existingAfterRetry
+              }
+            }
+            throw retryError
+          }
+
+          data = retryData
+          error = null
+        }
+
+        // name字段已从数据库schema中移除，无需处理相关约束错误
+
+        if (error) {
+          console.error('添加POS机失败:', error)
+          throw error
+        }
+
+        console.log('成功添加POS机:', data)
+
+        const processedMachine = processPOSMachine(data as POSMachine)
+        commitPOSMachine(processedMachine)
+        clearIdempotencyKey(fingerprint)
+        return processedMachine
+      })()
+
+      inFlightAddPOS.set(fingerprint, taskPromise)
+      try {
+        return await taskPromise
+      } finally {
+        inFlightAddPOS.delete(fingerprint)
       }
-      
-      // name字段已从数据库schema中移除，无需处理相关约束错误
-      
-      if (error) {
-        console.error('添加POS机失败:', error)
-        throw error
-      }
-      
-      console.log('成功添加POS机:', data)
-      
-      // 更新本地状态
-      const processedMachine = {
-        ...data,
-        longitude: Number(data.longitude),
-        latitude: Number(data.latitude),
-        avgRating: 0,
-        distance: 0,
-        reviewCount: 0,
-      }
-      
-      set(state => ({
-        posMachines: [...state.posMachines, processedMachine]
-      }))
-      
-      return processedMachine
     } catch (error) {
       console.error('添加POS机失败:', error)
       throw error
