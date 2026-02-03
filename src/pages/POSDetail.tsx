@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Building, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2 } from 'lucide-react'
+import { ArrowLeft, Building, CheckCircle, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, XCircle } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { POSMachine } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -123,6 +124,36 @@ const POSDetail = () => {
   })
   const [activeTab, setActiveTab] = useState('overview')
 
+  const attemptResultOptions = [
+    {
+      value: 'success',
+      label: '成功',
+      description: '交易完成或确认支持',
+      icon: CheckCircle,
+      iconClass: 'text-emerald-500'
+    },
+    {
+      value: 'failure',
+      label: '失败',
+      description: '明确失败或无法使用',
+      icon: XCircle,
+      iconClass: 'text-red-500'
+    },
+    {
+      value: 'unknown',
+      label: '未知',
+      description: '结果不确定',
+      icon: HelpCircle,
+      iconClass: 'text-gray-400'
+    }
+  ] as const
+
+  const attemptFieldBase =
+    'w-full rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 text-[16px] text-soft-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-accent-yellow/20 focus:border-accent-yellow/40 min-h-[44px] touch-manipulation webkit-appearance-none webkit-tap-highlight-none dark:bg-slate-900/80 dark:text-gray-100 dark:border-slate-700 dark:placeholder:text-gray-500'
+
+  const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
+  const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
+
   const attemptMatrix = useMemo(() => {
     const initialMatrix = {
       cardNetworks: new Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>(),
@@ -177,6 +208,11 @@ const POSDetail = () => {
 
     return initialMatrix
   }, [attempts])
+
+  const attemptSuccessCount = attempts.filter((attempt) => attempt.result === 'success').length
+  const attemptFailureCount = attempts.filter((attempt) => attempt.result === 'failure').length
+  const attemptSuccessRate = attempts.length > 0 ? Math.round((attemptSuccessCount / attempts.length) * 100) : 0
+  const latestAttempt = attempts[0]
 
   const normalizeThreeState = (value?: boolean | ThreeStateValue): ThreeStateValue => {
     if (typeof value === 'boolean') {
@@ -1974,219 +2010,310 @@ const POSDetail = () => {
         </div>
       </AnimatedModal>
 
-      {/* 尝试记录模态框 */}
-      <AnimatedModal
-        isOpen={showAttemptModal}
-        onClose={() => setShowAttemptModal(false)}
-        title="记录尝试信息"
-        size="md"
-      >
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                尝试结果 *
-              </label>
-              <select
-                value={newAttempt.result}
-                onChange={(e) => setNewAttempt({ ...newAttempt, result: e.target.value as 'success' | 'failure' | 'unknown' })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="success">成功</option>
-                <option value="failure">失败</option>
-                <option value="unknown">未知</option>
-              </select>
+      {/* 尝试记录全屏页面 */}
+      <AnimatePresence>
+        {showAttemptModal && (
+          <motion.div
+            className="fixed inset-0 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-cream dark:bg-slate-950" />
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute -top-24 right-0 h-72 w-72 rounded-full bg-gradient-to-br from-accent-yellow/20 via-indigo-200/40 to-transparent blur-3xl" />
+              <div className="absolute bottom-0 left-0 h-96 w-96 rounded-full bg-gradient-to-tr from-blue-200/50 via-white/60 to-transparent blur-3xl" />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                卡片名称
-              </label>
-              <input
-                type="text"
-                value={newAttempt.card_name}
-                onChange={(e) => setNewAttempt({ ...newAttempt, card_name: e.target.value })}
-                placeholder="例如：招商银行信用卡"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">卡组织</label>
-              <select
-                value={newAttempt.card_network}
-                onChange={(e) => setNewAttempt({ ...newAttempt, card_network: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="">请选择卡组织</option>
-                {CARD_NETWORKS.map((scheme) => (
-                  <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                支付方式
-              </label>
-              <select
-                value={newAttempt.payment_method}
-                onChange={(e) => setNewAttempt({ ...newAttempt, payment_method: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="">请选择支付方式</option>
-                <option value="tap">实体卡 Tap</option>
-                <option value="insert">实体卡 Insert</option>
-                <option value="swipe">实体卡 Swipe</option>
-                <option value="apple_pay">Apple Pay</option>
-                <option value="google_pay">Google Pay</option>
-                <option value="hce">HCE</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">验证方式 (CVM)</label>
-              <select
-                value={newAttempt.cvm}
-                onChange={(e) => setNewAttempt({ ...newAttempt, cvm: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="unknown">未知</option>
-                <option value="no_pin">免密</option>
-                <option value="pin">PIN</option>
-                <option value="signature">签名</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">收单模式</label>
-              <select
-                value={newAttempt.acquiring_mode}
-                onChange={(e) => setNewAttempt({ ...newAttempt, acquiring_mode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="unknown">未知</option>
-                <option value="DCC">DCC</option>
-                <option value="EDC">EDC</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">设备状态</label>
-              <SystemSelect
-                dataType="device_status"
-                value={newAttempt.device_status}
-                onChange={(value) => setNewAttempt({ ...newAttempt, device_status: value })}
-                placeholder="请选择设备状态"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">收单机构</label>
-              <SystemSelect
-                dataType="acquiring_institution"
-                value={newAttempt.acquiring_institution}
-                onChange={(value) => setNewAttempt({ ...newAttempt, acquiring_institution: value })}
-                placeholder="请选择收单机构"
-                allowCustom
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">结账地点</label>
-              <SystemSelect
-                dataType="checkout_locations"
-                value={newAttempt.checkout_location}
-                onChange={(value) => setNewAttempt({ ...newAttempt, checkout_location: value })}
-                placeholder="请选择结账地点"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <input
-                id="attempt-conclusive"
-                type="checkbox"
-                checked={Boolean(newAttempt.is_conclusive_failure)}
-                onChange={(e) => setNewAttempt({ ...newAttempt, is_conclusive_failure: e.target.checked })}
-              />
-              <label htmlFor="attempt-conclusive">明确失败（会被计入“不支持”推导）</label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                备注
-              </label>
-              <textarea
-                value={newAttempt.notes}
-                onChange={(e) => setNewAttempt({ ...newAttempt, notes: e.target.value })}
-                placeholder="记录详细的尝试过程或遇到的问题..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px',
-                  WebkitOverflowScrolling: 'touch'
-                }}
-              />
-            </div>
-          </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <AnimatedButton
-              onClick={() => setShowAttemptModal(false)}
-              variant="outline"
-              className="flex-1"
+            <motion.div
+              className="relative flex min-h-screen flex-col"
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              transition={{ duration: 0.25 }}
             >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={submitAttempt}
-              loading={submittingAttempt}
-              className="flex-1"
-            >
-              提交记录
-            </AnimatedButton>
-          </div>
-        </div>
-      </AnimatedModal>
+              <div className="sticky top-0 z-20 border-b border-white/70 dark:border-slate-800 bg-cream/90 dark:bg-slate-950/90 backdrop-blur pt-safe-top">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttemptModal(false)}
+                      className="h-10 w-10 rounded-full bg-white shadow-soft border border-white/70 text-gray-600 hover:text-soft-black hover:bg-gray-50 transition-colors dark:bg-slate-900 dark:border-slate-800 dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-slate-800"
+                      aria-label="返回"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </button>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-gray-400">记录尝试</p>
+                      <h2 className="text-xl font-semibold text-soft-black dark:text-gray-100">添加尝试记录</h2>
+                      <p className="text-sm text-gray-500">
+                        {pos?.merchant_name}
+                        {pos?.address ? ` · ${pos.address}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft dark:bg-slate-900/80 dark:border-slate-800 dark:text-gray-300">
+                      <Clock className="w-3.5 h-3.5 text-accent-yellow" />
+                      已有 {attempts.length} 条记录
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
+                  <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+                    <div className="space-y-6">
+                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试结果</h3>
+                            <p className="text-sm text-gray-500 mt-1">记录卡片与支付方式的实际表现。</p>
+                          </div>
+                          <span className="text-xs text-gray-400">* 为必填</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {attemptResultOptions.map((option) => {
+                            const Icon = option.icon
+                            const isSelected = newAttempt.result === option.value
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setNewAttempt({ ...newAttempt, result: option.value })}
+                                className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                                  isSelected
+                                    ? 'bg-soft-black text-white border-soft-black shadow-lg shadow-blue-900/20'
+                                    : 'bg-white/90 border-gray-200 text-gray-700 hover:border-accent-yellow/40 hover:bg-white'
+                                }`}
+                              >
+                                <Icon className={`w-5 h-5 mt-0.5 ${isSelected ? 'text-white' : option.iconClass}`} />
+                                <div>
+                                  <div className="text-sm font-semibold">{option.label}</div>
+                                  <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+                                    {option.description}
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡片名称</label>
+                            <input
+                              type="text"
+                              value={newAttempt.card_name}
+                              onChange={(e) => setNewAttempt({ ...newAttempt, card_name: e.target.value })}
+                              placeholder="例如：招商银行信用卡"
+                              className={attemptFieldBase}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡组织</label>
+                            <select
+                              value={newAttempt.card_network}
+                              onChange={(e) => setNewAttempt({ ...newAttempt, card_network: e.target.value })}
+                              className={attemptSelectBase}
+                            >
+                              <option value="">请选择卡组织</option>
+                              {CARD_NETWORKS.map((scheme) => (
+                                <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                          <CreditCard className="w-4 h-4 text-accent-yellow" />
+                          支付方式与验证
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">支付方式</label>
+                            <select
+                              value={newAttempt.payment_method}
+                              onChange={(e) => setNewAttempt({ ...newAttempt, payment_method: e.target.value })}
+                              className={attemptSelectBase}
+                            >
+                              <option value="">请选择支付方式</option>
+                              <option value="tap">实体卡 Tap</option>
+                              <option value="insert">实体卡 Insert</option>
+                              <option value="swipe">实体卡 Swipe</option>
+                              <option value="apple_pay">Apple Pay</option>
+                              <option value="google_pay">Google Pay</option>
+                              <option value="hce">HCE</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">验证方式 (CVM)</label>
+                            <select
+                              value={newAttempt.cvm}
+                              onChange={(e) => setNewAttempt({ ...newAttempt, cvm: e.target.value })}
+                              className={attemptSelectBase}
+                            >
+                              <option value="unknown">未知</option>
+                              <option value="no_pin">免密</option>
+                              <option value="pin">PIN</option>
+                              <option value="signature">签名</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单模式</label>
+                            <select
+                              value={newAttempt.acquiring_mode}
+                              onChange={(e) => setNewAttempt({ ...newAttempt, acquiring_mode: e.target.value })}
+                              className={attemptSelectBase}
+                            >
+                              <option value="unknown">未知</option>
+                              <option value="DCC">DCC</option>
+                              <option value="EDC">EDC</option>
+                            </select>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                          <Settings className="w-4 h-4 text-accent-yellow" />
+                          设备与收单信息
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">设备状态</label>
+                            <SystemSelect
+                              dataType="device_status"
+                              value={newAttempt.device_status}
+                              onChange={(value) => setNewAttempt({ ...newAttempt, device_status: value })}
+                              placeholder="请选择设备状态"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单机构</label>
+                            <SystemSelect
+                              dataType="acquiring_institution"
+                              value={newAttempt.acquiring_institution}
+                              onChange={(value) => setNewAttempt({ ...newAttempt, acquiring_institution: value })}
+                              placeholder="请选择收单机构"
+                              allowCustom
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">结账地点</label>
+                            <SystemSelect
+                              dataType="checkout_locations"
+                              value={newAttempt.checkout_location}
+                              onChange={(value) => setNewAttempt({ ...newAttempt, checkout_location: value })}
+                              placeholder="请选择结账地点"
+                            />
+                          </div>
+                        </div>
+
+                        <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
+                          <input
+                            id="attempt-conclusive"
+                            type="checkbox"
+                            checked={Boolean(newAttempt.is_conclusive_failure)}
+                            onChange={(e) => setNewAttempt({ ...newAttempt, is_conclusive_failure: e.target.checked })}
+                            className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
+                          />
+                          明确失败（会被计入“不支持”推导）
+                        </label>
+                      </section>
+
+                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-4">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                          <FileText className="w-4 h-4 text-accent-yellow" />
+                          备注
+                        </div>
+                        <textarea
+                          value={newAttempt.notes}
+                          onChange={(e) => setNewAttempt({ ...newAttempt, notes: e.target.value })}
+                          placeholder="记录详细的尝试过程或遇到的问题..."
+                          rows={4}
+                          className={attemptTextareaBase}
+                        />
+                      </section>
+                    </div>
+
+                    <aside className="space-y-6">
+                      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-5 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
+                            <Building className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-semibold text-soft-black dark:text-gray-100">{pos?.merchant_name}</div>
+                            <div className="text-xs text-gray-500">{pos?.address || '暂无地址信息'}</div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-center">
+                          <div className="rounded-2xl border border-gray-100 bg-gray-50/80 px-3 py-3">
+                            <div className="text-lg font-semibold text-soft-black dark:text-gray-100">{attempts.length}</div>
+                            <div className="text-[11px] text-gray-500">总尝试</div>
+                          </div>
+                          <div className="rounded-2xl border border-green-100 bg-green-50/70 px-3 py-3">
+                            <div className="text-lg font-semibold text-green-600">{attemptSuccessCount}</div>
+                            <div className="text-[11px] text-gray-500">成功</div>
+                          </div>
+                          <div className="rounded-2xl border border-red-100 bg-red-50/70 px-3 py-3">
+                            <div className="text-lg font-semibold text-red-600">{attemptFailureCount}</div>
+                            <div className="text-[11px] text-gray-500">失败</div>
+                          </div>
+                          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3">
+                            <div className="text-lg font-semibold text-blue-600">{attemptSuccessRate}%</div>
+                            <div className="text-[11px] text-gray-500">成功率</div>
+                          </div>
+                        </div>
+                        {latestAttempt && (
+                          <div className="rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 text-xs text-gray-500">
+                            最近一次：{new Date(latestAttempt.created_at).toLocaleDateString('zh-CN')} · {getResultLabel(latestAttempt.result)}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="rounded-3xl border border-white/60 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/80 p-5 shadow-soft">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                          <Shield className="w-4 h-4 text-accent-yellow" />
+                          填写提示
+                        </div>
+                        <div className="mt-3 space-y-2 text-sm text-gray-500">
+                          <p>成功与明确失败会更新支持矩阵，影响默认推荐。</p>
+                          <p>若刷卡失败但原因不明，请选择“未知”并在备注说明。</p>
+                          <p>卡片名称可写具体发卡行或卡产品名，便于后续追踪。</p>
+                        </div>
+                      </div>
+                    </aside>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/70 dark:border-slate-800 bg-cream/90 dark:bg-slate-950/90 backdrop-blur pb-safe-bottom">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowAttemptModal(false)}
+                    className="px-6 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitAttempt}
+                    disabled={submittingAttempt}
+                    className="px-8 py-3 rounded-2xl font-semibold text-white bg-soft-black hover:bg-accent-yellow shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {submittingAttempt ? '提交中...' : '提交记录'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 状态修改模态框 */}
       <AnimatedModal
