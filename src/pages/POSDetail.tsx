@@ -541,12 +541,6 @@ const POSDetail = () => {
   useEffect(() => {
     if (pos) {
       loadExternalLinks(pos)
-      setNewAttempt((prev) => ({
-        ...prev,
-        device_status: pos.status || 'active',
-        acquiring_institution: pos.basic_info?.acquiring_institution || '',
-        checkout_location: pos.basic_info?.checkout_location || ''
-      }))
     } else {
       setExternalLinks([])
     }
