@@ -386,19 +386,53 @@ const POSDetail = () => {
         console.error('加载评价失败:', error)
         return
       }
+
+      const userIds = Array.from(new Set((reviewsData || [])
+        .map((review) => review.user_id)
+        .filter((userId): userId is string => Boolean(userId))))
+
+      const userMap = new Map<string, { display_name: string; avatar_url?: string }>()
+
+      if (userIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, user_metadata, email')
+          .in('id', userIds)
+
+        if (usersError) {
+          console.error('加载用户信息失败:', usersError)
+        } else {
+          ;(usersData || []).forEach((userRow: any) => {
+            const metadata = userRow?.user_metadata || {}
+            const displayName = metadata.display_name
+              || metadata.name
+              || (userRow?.email ? String(userRow.email).split('@')[0] : undefined)
+              || userRow?.email
+              || '匿名用户'
+            const avatarUrl = metadata.avatar_url || metadata.picture
+            userMap.set(userRow.id, {
+              display_name: displayName,
+              avatar_url: avatarUrl || undefined
+            })
+          })
+        }
+      }
       
       // 转换数据格式
-      const formattedReviews: Review[] = (reviewsData || []).map(review => ({
-        id: review.id,
-        rating: review.rating,
-        comment: review.content,
-        created_at: review.created_at,
-        user_id: review.user_id,
-        users: {
-          display_name: '匿名用户',
-          avatar_url: undefined
+      const formattedReviews: Review[] = (reviewsData || []).map(review => {
+        const userInfo = review.user_id ? userMap.get(review.user_id) : undefined
+        return {
+          id: review.id,
+          rating: review.rating,
+          comment: review.content,
+          created_at: review.created_at,
+          user_id: review.user_id,
+          users: {
+            display_name: userInfo?.display_name || '匿名用户',
+            avatar_url: userInfo?.avatar_url
+          }
         }
-      }))
+      })
       
       setReviews(formattedReviews)
     } catch (error) {
@@ -628,7 +662,7 @@ const POSDetail = () => {
         created_at: data.created_at,
         user_id: data.user_id,
         users: {
-          display_name: String(user.user_metadata?.full_name || user.email || '匿名用户'),
+          display_name: String(user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || '匿名用户'),
           avatar_url: user.user_metadata?.avatar_url
         }
       }
@@ -1706,7 +1740,7 @@ const POSDetail = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-soft-black dark:text-gray-100">
                     <MessageCircle className="w-5 h-5 text-accent-yellow" />
-                    用户评价
+                    用户评论
                   </CardTitle>
                   {permissions.canAdd && (
                     <AnimatedButton onClick={() => setShowReviewModal(true)} size="sm">
