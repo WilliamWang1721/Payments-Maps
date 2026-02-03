@@ -3,12 +3,20 @@
 // 检测开发环境
 const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost'
 
+// 兼容旧的环境变量命名（README 曾使用 VITE_AMAP_SECURITY_KEY）
+const securityJsCode =
+  import.meta.env.VITE_AMAP_SECURITY_JS_CODE || import.meta.env.VITE_AMAP_SECURITY_KEY
+
+let amapLoadPromise: Promise<any> | null = null
+let geocoderPromise: Promise<any> | null = null
+let geocoderInstance: any | null = null
+
 // 高德地图配置
 export const AMAP_CONFIG = {
   key: import.meta.env.VITE_AMAP_KEY,
   version: '2.0',
   plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.Geolocation', 'AMap.Geocoder'],
-  securityJsCode: import.meta.env.VITE_AMAP_SECURITY_JS_CODE,
+  securityJsCode,
   isDevelopment,
 }
 
@@ -132,69 +140,30 @@ export const locationUtils = {
   // 根据经纬度获取地址信息
   getAddress: async (longitude: number, latitude: number): Promise<string> => {
     try {
-      // 使用高德地图逆地理编码API
-      const AMap = await loadAMap()
-      
-      return new Promise((resolve, reject) => {
-        // 使用 AMap.plugin 显式加载 Geocoder 插件
-        AMap.plugin('AMap.Geocoder', () => {
-          try {
-            const geocoder = new AMap.Geocoder({
-              radius: 1000,
-              extensions: 'all'
-            })
-            
-            geocoder.getAddress([longitude, latitude], (status: string, result: any) => {
-              if (status === 'complete' && result.info === 'OK') {
-                const regeocode = result.regeocode
-                if (regeocode) {
-                  // 优先使用详细地址组合
-                  const addressComponent = regeocode.addressComponent
-                  if (addressComponent) {
-                    const province = addressComponent.province || ''
-                    const city = addressComponent.city || addressComponent.province || ''
-                    const district = addressComponent.district || ''
-                    const township = addressComponent.township || ''
-                    const street = addressComponent.streetNumber?.street || ''
-                    const number = addressComponent.streetNumber?.number || ''
-                    
-                    // 构建详细地址
-                    let detailedAddress = ''
-                    if (province && province !== city) detailedAddress += province
-                    if (city) detailedAddress += city
-                    if (district) detailedAddress += district
-                    if (township) detailedAddress += township
-                    if (street) detailedAddress += street
-                    if (number) detailedAddress += number
-                    
-                    if (detailedAddress) {
-                      resolve(detailedAddress)
-                      return
-                    }
-                  }
-                  
-                  // 回退到格式化地址
-                  const formattedAddress = regeocode.formattedAddress
-                  if (formattedAddress) {
-                    resolve(formattedAddress)
-                    return
-                  }
-                }
-                
-                // 最后回退
-                resolve('地址解析成功，但无详细信息')
-              } else {
-                console.warn('地址解析状态异常:', status, result)
-                reject(new Error(`地址解析失败: ${status}`))
-              }
-            })
-          } catch (pluginError) {
-            console.error('Geocoder插件初始化失败:', pluginError)
-            reject(new Error(`Geocoder插件初始化失败: ${pluginError}`))
+      const geocoder = await loadGeocoder()
+      const address = await new Promise<string>((resolve, reject) => {
+        geocoder.getAddress([longitude, latitude], (status: string, result: any) => {
+          if (status === 'complete' && result?.info === 'OK') {
+            const resolved = formatRegeocodeAddress(result.regeocode)
+            resolve(resolved || '地址解析成功，但无详细信息')
+            return
           }
+
+          console.warn('[amap] 地址解析状态异常:', status, result)
+          const hint = [result?.info, result?.infocode, status].filter(Boolean).join(' ') || '未知错误'
+          reject(handleApiError(hint, 'address'))
         })
       })
+
+      if (!address || address === '地址解析成功，但无详细信息') {
+        const restAddress = await fetchAddressByRestApi(longitude, latitude)
+        if (restAddress) return restAddress
+      }
+
+      return address
     } catch (error) {
+      const restAddress = await fetchAddressByRestApi(longitude, latitude)
+      if (restAddress) return restAddress
       console.error('获取地址失败:', error)
       throw error // 抛出错误而不是返回字符串
     }
@@ -202,7 +171,7 @@ export const locationUtils = {
 }
 
 // API错误处理函数
-const handleApiError = (error: any): Error => {
+const handleApiError = (error: any, context: 'map' | 'address' = 'map'): Error => {
   const errorMessage = error?.message || error?.toString() || '未知错误'
   
   if (errorMessage.includes('USERKEY_PLAT_NOMATCH')) {
@@ -220,73 +189,204 @@ const handleApiError = (error: any): Error => {
   if (errorMessage.includes('USER_KEY_RECYCLED')) {
     return new Error('API配置错误: API密钥已被回收，请重新申请。')
   }
+
+  if (errorMessage.includes('INVALID_USER_SCODE')) {
+    return new Error(
+      'API配置错误: 安全密钥无效或未配置。请检查 VITE_AMAP_SECURITY_JS_CODE（或旧版 VITE_AMAP_SECURITY_KEY）是否正确，并确认高德控制台已开启安全密钥。'
+    )
+  }
   
+  if (context === 'address') {
+    return new Error(`地址解析失败: ${errorMessage}`)
+  }
   return new Error(`地图加载失败: ${errorMessage}`)
+}
+
+const loadGeocoder = async (): Promise<any> => {
+  if (geocoderInstance) return geocoderInstance
+  if (geocoderPromise) return geocoderPromise
+
+  geocoderPromise = new Promise((resolve, reject) => {
+    loadAMap()
+      .then((AMap) => {
+        AMap.plugin('AMap.Geocoder', () => {
+          try {
+            if (!AMap.Geocoder) {
+              reject(new Error('Geocoder插件加载失败: AMap.Geocoder 未定义'))
+              return
+            }
+            geocoderInstance = new AMap.Geocoder({
+              radius: 1000,
+              extensions: 'all',
+            })
+            resolve(geocoderInstance)
+          } catch (pluginError) {
+            reject(pluginError)
+          }
+        })
+      })
+      .catch(reject)
+  }).catch((error) => {
+    geocoderPromise = null
+    geocoderInstance = null
+    throw error
+  })
+
+  return geocoderPromise
+}
+
+const formatRegeocodeAddress = (regeocode: any): string => {
+  if (!regeocode) return ''
+
+  const addressComponent = regeocode.addressComponent
+  if (addressComponent) {
+    const asText = (value: unknown): string => {
+      if (Array.isArray(value)) return value.join('')
+      if (typeof value === 'string') return value
+      return ''
+    }
+
+    const province = asText(addressComponent.province)
+    const city = asText(addressComponent.city) || province
+    const district = asText(addressComponent.district)
+    const township = asText(addressComponent.township)
+    const street = asText(addressComponent.streetNumber?.street)
+    const number = asText(addressComponent.streetNumber?.number)
+
+    let detailedAddress = ''
+    if (province && province !== city) detailedAddress += province
+    if (city) detailedAddress += city
+    if (district) detailedAddress += district
+    if (township) detailedAddress += township
+    if (street) detailedAddress += street
+    if (number) detailedAddress += number
+
+    if (detailedAddress) return detailedAddress
+  }
+
+  return regeocode.formattedAddress || ''
+}
+
+const fetchAddressByRestApi = async (longitude: number, latitude: number): Promise<string | null> => {
+  if (!AMAP_CONFIG.key) return null
+
+  try {
+    const url = new URL('https://restapi.amap.com/v3/geocode/regeo')
+    url.searchParams.set('key', AMAP_CONFIG.key)
+    url.searchParams.set('location', `${longitude},${latitude}`)
+    url.searchParams.set('radius', '1000')
+    url.searchParams.set('extensions', 'all')
+    url.searchParams.set('output', 'JSON')
+
+    const response = await fetch(url.toString())
+    if (!response.ok) return null
+
+    const data: any = await response.json()
+    if (data?.status !== '1') {
+      return null
+    }
+
+    const regeocode = data?.regeocode
+    if (!regeocode) return null
+
+    const addressComponent = regeocode.addressComponent
+    if (addressComponent) {
+      const province = addressComponent.province || ''
+      const city = addressComponent.city || province || ''
+      const district = addressComponent.district || ''
+      const township = addressComponent.township || ''
+      const street = addressComponent.streetNumber?.street || ''
+      const number = addressComponent.streetNumber?.number || ''
+
+      let detailedAddress = ''
+      if (province && province !== city) detailedAddress += province
+      if (city) detailedAddress += city
+      if (district) detailedAddress += district
+      if (township) detailedAddress += township
+      if (street) detailedAddress += street
+      if (number) detailedAddress += number
+
+      if (detailedAddress) return detailedAddress
+    }
+
+    return regeocode.formatted_address || null
+  } catch (error) {
+    console.warn('[amap] REST reverse geocode failed:', error)
+    return null
+  }
 }
 
 // 地图加载器
 export const loadAMap = (): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    if (window.AMap) {
-      console.log('高德地图已加载，直接返回');
-      return resolve(window.AMap);
-    }
+  if (window.AMap) {
+    console.log('高德地图已加载，直接返回')
+    return Promise.resolve(window.AMap)
+  }
 
+  if (amapLoadPromise) return amapLoadPromise
+
+  amapLoadPromise = new Promise((resolve, reject) => {
     if (!AMAP_CONFIG.key) {
-      const error = new Error('高德地图API密钥未配置 (VITE_AMAP_KEY)');
-      console.error(error);
-      return reject(error);
+      const error = new Error('高德地图API密钥未配置 (VITE_AMAP_KEY)')
+      console.error(error)
+      reject(error)
+      return
     }
 
     if (AMAP_CONFIG.securityJsCode) {
       window._AMapSecurityConfig = {
         securityJsCode: AMAP_CONFIG.securityJsCode,
-      };
-      console.log('高德地图安全密钥已设置');
+      }
+      console.log('高德地图安全密钥已设置')
     } else {
-      console.warn('高德地图安全密钥未设置，部分功能可能受限');
+      console.warn('高德地图安全密钥未设置（VITE_AMAP_SECURITY_JS_CODE），部分功能可能受限')
     }
 
-    const callbackName = 'amapInitCallback_' + Date.now();
+    const callbackName = 'amapInitCallback_' + Date.now()
 
     const timeoutId = setTimeout(() => {
       if ((window as any)[callbackName]) {
-        delete (window as any)[callbackName];
+        delete (window as any)[callbackName]
       }
-      const error = handleApiError('高德地图加载超时(15s)，请检查网络或API配置');
-      console.error(error);
-      reject(error);
-    }, 15000);
+      const error = handleApiError('高德地图加载超时(15s)，请检查网络或API配置')
+      console.error(error)
+      reject(error)
+    }, 15000)
 
-    (window as any)[callbackName] = () => {
-      clearTimeout(timeoutId);
-      delete (window as any)[callbackName];
+    ;(window as any)[callbackName] = () => {
+      clearTimeout(timeoutId)
+      delete (window as any)[callbackName]
       if (window.AMap) {
-        console.log('高德地图API加载成功');
-        resolve(window.AMap);
+        console.log('高德地图API加载成功')
+        resolve(window.AMap)
       } else {
-        const error = handleApiError('高德地图加载失败：window.AMap 未定义');
-        console.error(error);
-        reject(error);
+        const error = handleApiError('高德地图加载失败：window.AMap 未定义')
+        console.error(error)
+        reject(error)
       }
-    };
+    }
 
-    const script = document.createElement('script');
-    script.src = `https://webapi.amap.com/maps?v=${AMAP_CONFIG.version}&key=${AMAP_CONFIG.key}&plugin=${AMAP_CONFIG.plugins.join(',')}&callback=${callbackName}`;
-    script.async = true;
+    const script = document.createElement('script')
+    script.src = `https://webapi.amap.com/maps?v=${AMAP_CONFIG.version}&key=${AMAP_CONFIG.key}&plugin=${AMAP_CONFIG.plugins.join(',')}&callback=${callbackName}`
+    script.async = true
     script.onerror = (event) => {
-      clearTimeout(timeoutId);
+      clearTimeout(timeoutId)
       if ((window as any)[callbackName]) {
-        delete (window as any)[callbackName];
+        delete (window as any)[callbackName]
       }
-      const error = handleApiError('高德地图脚本加载失败，请检查网络连接或CSP策略');
-      console.error('Script load error:', event);
-      reject(error);
-    };
+      const error = handleApiError('高德地图脚本加载失败，请检查网络连接或CSP策略')
+      console.error('Script load error:', event)
+      reject(error)
+    }
 
-    document.head.appendChild(script);
-    console.log('正在加载高德地图API脚本...');
-  });
+    document.head.appendChild(script)
+    console.log('正在加载高德地图API脚本...')
+  }).catch((error) => {
+    amapLoadPromise = null
+    throw error
+  })
+
+  return amapLoadPromise
 };
 
 // 扩展全局类型

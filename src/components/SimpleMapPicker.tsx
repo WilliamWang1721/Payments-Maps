@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 import { notify } from '@/lib/notify'
@@ -28,7 +28,54 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   const [selectedPos, setSelectedPos] = useState({ lat: initialLat, lng: initialLng, address: '' })
   const [isLocating, setIsLocating] = useState(false)
   const [addressStatus, setAddressStatus] = useState<'idle' | 'loading' | 'resolved' | 'error'>('idle')
+  const [addressError, setAddressError] = useState('')
   const addressRequestIdRef = useRef(0)
+
+  const resolveAddress = useCallback(async (lng: number, lat: number) => {
+    const requestId = ++addressRequestIdRef.current
+    setAddressStatus('loading')
+    setAddressError('')
+    try {
+      const address = await locationUtils.getAddress(lng, lat)
+      if (addressRequestIdRef.current !== requestId) return
+      setSelectedPos((prev) => ({ ...prev, address }))
+      setAddressStatus(address ? 'resolved' : 'error')
+    } catch (error) {
+      if (addressRequestIdRef.current !== requestId) return
+      console.warn('[SimpleMapPicker] 地址解析失败:', error)
+      setSelectedPos((prev) => ({ ...prev, address: '' }))
+      setAddressError(error instanceof Error ? error.message : String(error))
+      setAddressStatus('error')
+    }
+  }, [])
+
+  const placeMarker = useCallback(
+    (lng: number, lat: number) => {
+      if (!mapRef.current) return
+
+      const AMap = (window as any).AMap
+      if (!AMap) return
+
+      // 移除旧标记
+      if (markerRef.current) {
+        mapRef.current.remove(markerRef.current)
+      }
+
+      // 创建新标记
+      const marker = new AMap.Marker({
+        position: [lng, lat],
+        map: mapRef.current,
+      })
+
+      markerRef.current = marker
+      setSelectedPos({ lat, lng, address: '' })
+      resolveAddress(lng, lat)
+
+      // 移动地图中心
+      mapRef.current.setCenter([lng, lat])
+    },
+    [resolveAddress]
+  )
 
   useEffect(() => {
     if (!isOpen) {
@@ -90,48 +137,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [isOpen, initialLat, initialLng])
-
-  const resolveAddress = async (lng: number, lat: number) => {
-    const requestId = ++addressRequestIdRef.current
-    setAddressStatus('loading')
-    try {
-      const address = await locationUtils.getAddress(lng, lat)
-      if (addressRequestIdRef.current !== requestId) return
-      setSelectedPos((prev) => ({ ...prev, address }))
-      setAddressStatus(address ? 'resolved' : 'error')
-    } catch (error) {
-      if (addressRequestIdRef.current !== requestId) return
-      console.warn('[SimpleMapPicker] 地址解析失败:', error)
-      setSelectedPos((prev) => ({ ...prev, address: '' }))
-      setAddressStatus('error')
-    }
-  }
-
-  const placeMarker = (lng: number, lat: number) => {
-    if (!mapRef.current) return
-    
-    const AMap = (window as any).AMap
-    if (!AMap) return
-    
-    // 移除旧标记
-    if (markerRef.current) {
-      mapRef.current.remove(markerRef.current)
-    }
-    
-    // 创建新标记
-    const marker = new AMap.Marker({
-      position: [lng, lat],
-      map: mapRef.current
-    })
-    
-    markerRef.current = marker
-    setSelectedPos({ lat, lng, address: '' })
-    resolveAddress(lng, lat)
-    
-    // 移动地图中心
-    mapRef.current.setCenter([lng, lat])
-  }
+  }, [isOpen, initialLat, initialLng, placeMarker])
 
   const handleConfirm = () => {
     onConfirm(selectedPos.lat, selectedPos.lng, selectedPos.address)
@@ -244,7 +250,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
               <span className="text-gray-800 flex-1">
                 {addressStatus === 'loading'
                   ? '正在解析地址...'
-                  : selectedPos.address || '地址解析失败，请在表单中手动填写'}
+                  : selectedPos.address || addressError || '地址解析失败，请在表单中手动填写'}
               </span>
             </div>
           </div>
