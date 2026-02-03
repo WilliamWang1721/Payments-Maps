@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Building, CheckCircle, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, XCircle } from 'lucide-react'
+import { ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { POSMachine } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
 import { useMapStore } from '@/stores/useMapStore'
+import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { usePermissions } from '@/hooks/usePermissions'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedCard from '@/components/ui/AnimatedCard'
@@ -63,6 +64,21 @@ interface Attempt {
   user_id?: string
 }
 
+type AttemptDraft = {
+  result: 'success' | 'failure' | 'unknown'
+  attempted_at?: string
+  card_network?: string
+  payment_method?: 'tap' | 'insert' | 'swipe' | 'apple_pay' | 'google_pay' | 'hce'
+  cvm?: 'no_pin' | 'pin' | 'signature' | 'unknown'
+  acquiring_mode?: 'DCC' | 'EDC' | 'unknown'
+  device_status?: 'active' | 'inactive' | 'maintenance' | 'disabled'
+  acquiring_institution?: string
+  checkout_location?: '自助收银' | '人工收银'
+  card_name?: string
+  notes?: string
+  is_conclusive_failure?: boolean
+}
+
 type SupportEvidence = 'supported' | 'unsupported'
 interface SupportEvidenceItem {
   type: SupportEvidence
@@ -80,6 +96,7 @@ const POSDetail = () => {
   const { posMachines, deletePOSMachine, selectPOSMachine } = useMapStore()
   const permissions = usePermissions()
   const { reports, addReport, resolveReport } = useIssueReportStore()
+  const albumCards = useCardAlbumStore((state) => state.cards)
   
   const [pos, setPOS] = useState<POSMachine | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
@@ -94,19 +111,11 @@ const POSDetail = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showAttemptModal, setShowAttemptModal] = useState(false)
-  const [newAttempt, setNewAttempt] = useState({
-    result: 'success' as 'success' | 'failure' | 'unknown',
-    card_name: '',
-    card_network: '',
-    payment_method: '',
-    cvm: 'unknown',
-    acquiring_mode: 'unknown',
-    device_status: 'active',
-    acquiring_institution: '',
-    checkout_location: '',
-    notes: '',
-    is_conclusive_failure: false
-  })
+  const [draftAttempts, setDraftAttempts] = useState<AttemptDraft[]>([])
+  const [commonCards, setCommonCards] = useState<Array<{ name: string; method?: string }>>([])
+  const [isAlbumPickerOpen, setIsAlbumPickerOpen] = useState(false)
+  const [albumScopeFilter, setAlbumScopeFilter] = useState<'personal' | 'public'>('personal')
+  const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
   const [submittingAttempt, setSubmittingAttempt] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [newStatus, setNewStatus] = useState<POSStatus>('active')
@@ -153,6 +162,81 @@ const POSDetail = () => {
 
   const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
   const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
+
+  const addAttemptRow = () => {
+    setDraftAttempts((prev) => ([
+      ...prev,
+      {
+        result: 'success',
+        attempted_at: new Date().toISOString(),
+        card_network: '',
+        payment_method: 'tap',
+        cvm: 'unknown',
+        acquiring_mode: 'unknown',
+        device_status: pos?.status || 'active',
+        acquiring_institution: pos?.basic_info?.acquiring_institution || '',
+        checkout_location: pos?.basic_info?.checkout_location,
+        card_name: '',
+        notes: '',
+        is_conclusive_failure: false,
+      },
+    ]))
+  }
+
+  const getAttemptMethodLabel = (method: NonNullable<AttemptDraft['payment_method']>) => {
+    switch (method) {
+      case 'tap':
+        return '实体卡 Tap'
+      case 'insert':
+        return '实体卡 Insert'
+      case 'swipe':
+        return '实体卡 Swipe'
+      case 'apple_pay':
+        return 'Apple Pay'
+      case 'google_pay':
+        return 'Google Pay'
+      case 'hce':
+        return 'HCE'
+      default:
+        return ''
+    }
+  }
+
+  const updateAttempt = (index: number, field: keyof AttemptDraft, value: any) => {
+    setDraftAttempts((prev) => prev.map((attempt, i) => (i === index ? { ...attempt, [field]: value } : attempt)))
+  }
+
+  const removeAttempt = (index: number) => {
+    setDraftAttempts((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const saveAttemptAsCommonCard = (index: number) => {
+    const attempt = draftAttempts[index]
+    if (!attempt) return
+    const name = attempt.card_name?.trim()
+    const method = attempt.payment_method
+    if (!name && !method) {
+      notify.error('请先填写卡片名称或支付方式再保存')
+      return
+    }
+    const methodLabel = method ? getAttemptMethodLabel(method) : ''
+    setCommonCards((prev) => {
+      const exists = prev.some((item) => item.name === (name || '') && item.method === (methodLabel || ''))
+      if (exists) {
+        notify.success('已在常用卡片列表中')
+        return prev
+      }
+      notify.success('常用卡片已保存')
+      return [...prev, { name: name || methodLabel || '未命名卡片', method: methodLabel }]
+    })
+  }
+
+  const applyCommonCard = (index: number, cardIndex: number) => {
+    const card = commonCards[cardIndex]
+    if (!card) return
+    updateAttempt(index, 'card_name', card.name)
+    updateAttempt(index, 'notes', card.method || '')
+  }
 
   const attemptMatrix = useMemo(() => {
     const initialMatrix = {
@@ -209,10 +293,138 @@ const POSDetail = () => {
     return initialMatrix
   }, [attempts])
 
-  const attemptSuccessCount = attempts.filter((attempt) => attempt.result === 'success').length
-  const attemptFailureCount = attempts.filter((attempt) => attempt.result === 'failure').length
-  const attemptSuccessRate = attempts.length > 0 ? Math.round((attemptSuccessCount / attempts.length) * 100) : 0
-  const latestAttempt = attempts[0]
+  const attemptsList = draftAttempts || []
+  const attemptsCount = attemptsList.length
+  const attemptSuccessCount = attemptsList.filter((attempt) => attempt.result === 'success').length
+  const attemptFailureCount = attemptsList.filter((attempt) => attempt.result === 'failure').length
+  const attemptSuccessRate = attemptsCount > 0 ? Math.round((attemptSuccessCount / attemptsCount) * 100) : 0
+  const latestAttempt = attemptsList[attemptsCount - 1]
+  const latestAttemptLabel = latestAttempt?.attempted_at
+    ? new Date(latestAttempt.attempted_at).toLocaleString('zh-CN')
+    : ''
+  const latestResultLabel =
+    latestAttempt?.result === 'success'
+      ? '成功'
+      : latestAttempt?.result === 'failure'
+      ? '失败'
+      : latestAttempt?.result === 'unknown'
+      ? '未知'
+      : ''
+  const showAlbumCard = attemptsCount > 0 && albumCards.length > 0
+
+  const selectedAlbumCardLabel = useMemo(() => {
+    if (!selectedAlbumCard) return ''
+    const card = albumCards.find((item) => item.id === selectedAlbumCard)
+    if (!card) return ''
+    return `${card.title} · ${card.issuer} · ${card.organization} (${getAlbumScopeLabel(card.scope)})`
+  }, [albumCards, selectedAlbumCard])
+
+  const filteredAlbumCards = useMemo(() => {
+    return albumCards.filter((card) => card.scope === albumScopeFilter)
+  }, [albumCards, albumScopeFilter])
+
+  const handleApplyAlbumCard = () => {
+    if (!selectedAlbumCard) {
+      notify.error('请选择要使用的卡片')
+      return
+    }
+    const selectedCard = albumCards.find((card) => card.id === selectedAlbumCard)
+    if (!selectedCard) {
+      notify.error('未找到卡片信息')
+      return
+    }
+    const targetIndex = attemptsCount - 1
+    if (targetIndex < 0) {
+      notify.error('请先添加一条尝试记录')
+      return
+    }
+    const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
+    const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.group]
+      .filter(Boolean)
+      .join(' · ')
+    updateAttempt(targetIndex, 'card_name', cardLabel)
+    updateAttempt(targetIndex, 'notes', methodLabel)
+    notify.success('已填充卡片信息')
+    setIsAlbumPickerOpen(false)
+  }
+
+  const attemptSidebar = (
+    <aside className="space-y-6">
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
+            <Building className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-soft-black dark:text-gray-100">
+              {pos?.merchant_name || '未命名 POS'}
+            </div>
+            <div className="text-xs text-gray-500">{pos?.address || '暂无地址信息'}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-center">
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/80 px-3 py-3">
+            <div className="text-lg font-semibold text-soft-black dark:text-gray-100">{attemptsCount}</div>
+            <div className="text-[11px] text-gray-500">总尝试</div>
+          </div>
+          <div className="rounded-2xl border border-green-100 bg-green-50/70 px-3 py-3">
+            <div className="text-lg font-semibold text-green-600">{attemptSuccessCount}</div>
+            <div className="text-[11px] text-gray-500">成功</div>
+          </div>
+          <div className="rounded-2xl border border-red-100 bg-red-50/70 px-3 py-3">
+            <div className="text-lg font-semibold text-red-600">{attemptFailureCount}</div>
+            <div className="text-[11px] text-gray-500">失败</div>
+          </div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3">
+            <div className="text-lg font-semibold text-blue-600">{attemptSuccessRate}%</div>
+            <div className="text-[11px] text-gray-500">成功率</div>
+          </div>
+        </div>
+        {latestAttempt && (
+          <div className="rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 text-xs text-gray-500">
+            最近一次：{latestAttemptLabel} · {latestResultLabel}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-white/60 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/80 p-5 shadow-soft">
+        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+          <Shield className="w-4 h-4 text-accent-yellow" />
+          填写提示
+        </div>
+        <div className="mt-3 space-y-2 text-sm text-gray-500">
+          <p>成功与明确失败会更新支持矩阵，影响默认推荐。</p>
+          <p>若刷卡失败但原因不明，请选择“未知”并在备注说明。</p>
+          <p>卡片名称可写具体发卡行或卡产品名，便于后续追踪。</p>
+        </div>
+      </div>
+
+      {showAlbumCard && (
+        <div className="rounded-3xl border border-white/60 bg-white/90 p-5 shadow-soft space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+            <CreditCard className="w-4 h-4 text-accent-yellow" />
+            从卡册选择
+          </div>
+          <p className="text-[11px] text-gray-400">选择卡片后会自动填充到最新一条尝试记录。</p>
+          <button
+            type="button"
+            onClick={() => setIsAlbumPickerOpen(true)}
+            className="w-full px-4 py-3 rounded-2xl text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
+          >
+            <span>{selectedAlbumCardLabel || '从卡册中选择卡片'}</span>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          </button>
+          <button
+            type="button"
+            className="w-full px-4 py-3 rounded-2xl text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
+            onClick={handleApplyAlbumCard}
+          >
+            填充到最新记录
+          </button>
+        </div>
+      )}
+    </aside>
+  )
 
   const normalizeThreeState = (value?: boolean | ThreeStateValue): ThreeStateValue => {
     if (typeof value === 'boolean') {
@@ -697,30 +909,13 @@ const POSDetail = () => {
       return
     }
 
-    // 验证必填字段
-    if (!newAttempt.result) {
-      notify.error('请选择尝试结果')
+    if (attemptsCount === 0) {
+      notify.error('请先添加一条尝试记录')
       return
     }
 
     setSubmittingAttempt(true)
     try {
-      console.log('开始提交尝试记录:', {
-        pos_id: id,
-        user_id: user.id,
-        result: newAttempt.result,
-        card_name: newAttempt.card_name.trim() || null,
-        card_network: newAttempt.card_network || null,
-        payment_method: newAttempt.payment_method || null,
-        cvm: newAttempt.cvm || 'unknown',
-        acquiring_mode: newAttempt.acquiring_mode || 'unknown',
-        device_status: newAttempt.device_status || pos?.status || 'active',
-        acquiring_institution: newAttempt.acquiring_institution?.trim() || null,
-        checkout_location: newAttempt.checkout_location || pos?.basic_info?.checkout_location || null,
-        notes: newAttempt.notes.trim() || null,
-        is_conclusive_failure: newAttempt.is_conclusive_failure || false
-      })
-
       // 检查用户认证状态
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !session) {
@@ -747,27 +942,29 @@ const POSDetail = () => {
       }
       const nextAttemptNumber = latestAttempt?.attempt_number ? latestAttempt.attempt_number + 1 : 1
 
+      const attemptsPayload = attemptsList.map((attempt, index) => ({
+        pos_id: id,
+        user_id: user.id,
+        attempt_number: nextAttemptNumber + index,
+        result: attempt.result,
+        card_name: attempt.card_name?.trim() || null,
+        card_network: attempt.card_network || null,
+        payment_method: attempt.payment_method || null,
+        cvm: attempt.cvm || 'unknown',
+        acquiring_mode: attempt.acquiring_mode || 'unknown',
+        device_status: attempt.device_status || pos?.status || 'active',
+        acquiring_institution: attempt.acquiring_institution?.trim() || null,
+        checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
+        notes: attempt.notes?.trim() || null,
+        attempted_at: attempt.attempted_at || null,
+        is_conclusive_failure: attempt.is_conclusive_failure || false,
+      }))
+
       // 保存尝试记录到Supabase数据库
       const { data, error } = await supabase
         .from('pos_attempts')
-        .insert({
-          pos_id: id,
-          user_id: user.id,
-          attempt_number: nextAttemptNumber,
-          result: newAttempt.result,
-          card_name: newAttempt.card_name.trim() || null,
-          card_network: newAttempt.card_network || null,
-          payment_method: newAttempt.payment_method || null,
-          cvm: newAttempt.cvm || 'unknown',
-          acquiring_mode: newAttempt.acquiring_mode || 'unknown',
-          device_status: newAttempt.device_status || pos?.status || 'active',
-          acquiring_institution: newAttempt.acquiring_institution?.trim() || null,
-          checkout_location: newAttempt.checkout_location || pos?.basic_info?.checkout_location || null,
-          notes: newAttempt.notes.trim() || null,
-          is_conclusive_failure: newAttempt.is_conclusive_failure || false
-        })
+        .insert(attemptsPayload)
         .select()
-        .single()
       
       if (error) {
         console.error('提交尝试记录失败:', {
@@ -791,43 +988,34 @@ const POSDetail = () => {
         return
       }
       
-      // 添加到本地列表
-      const newAttemptData: Attempt = {
-        id: data.id,
-        created_at: data.created_at,
-        result: data.result,
-        card_name: data.card_name,
-        card_network: data.card_network,
-        payment_method: data.payment_method,
-        cvm: data.cvm,
-        acquiring_mode: data.acquiring_mode,
-        device_status: data.device_status,
-        acquiring_institution: data.acquiring_institution,
-        checkout_location: data.checkout_location,
-        notes: data.notes,
-        attempted_at: data.attempted_at,
-        is_conclusive_failure: data.is_conclusive_failure,
-        user_id: data.user_id
+      const insertedAttempts: Attempt[] = (data || []).map((item) => ({
+        id: item.id,
+        created_at: item.created_at,
+        result: item.result,
+        card_name: item.card_name,
+        card_network: item.card_network,
+        payment_method: item.payment_method,
+        cvm: item.cvm,
+        acquiring_mode: item.acquiring_mode,
+        device_status: item.device_status,
+        acquiring_institution: item.acquiring_institution,
+        checkout_location: item.checkout_location,
+        notes: item.notes,
+        attempted_at: item.attempted_at,
+        is_conclusive_failure: item.is_conclusive_failure,
+        user_id: item.user_id,
+      }))
+
+      if (insertedAttempts.length > 0) {
+        insertedAttempts.sort((a, b) => b.created_at.localeCompare(a.created_at))
+        setAttempts((prev) => [...insertedAttempts, ...prev])
       }
-      
-      setAttempts(prev => [newAttemptData, ...prev])
       
       notify.success('尝试记录提交成功')
       
-      // 确保状态重置在同一个事件循环中完成
-      setNewAttempt({
-        result: 'success',
-        card_name: '',
-        card_network: '',
-        payment_method: '',
-        cvm: 'unknown',
-        acquiring_mode: 'unknown',
-        device_status: pos?.status || 'active',
-        acquiring_institution: pos?.basic_info?.acquiring_institution || '',
-        checkout_location: pos?.basic_info?.checkout_location || '',
-        notes: '',
-        is_conclusive_failure: false
-      })
+      setDraftAttempts([])
+      setSelectedAlbumCard('')
+      setIsAlbumPickerOpen(false)
       
       // 使用setTimeout确保模态框能正确关闭
       setTimeout(() => {
@@ -2055,238 +2243,271 @@ const POSDetail = () => {
                   <div className="hidden sm:flex items-center gap-2">
                     <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft dark:bg-slate-900/80 dark:border-slate-800 dark:text-gray-300">
                       <Clock className="w-3.5 h-3.5 text-accent-yellow" />
-                      已有 {attempts.length} 条记录
+                      已有 {attemptsCount} 条记录
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
-                  <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
-                    <div className="space-y-6">
-                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试结果</h3>
-                            <p className="text-sm text-gray-500 mt-1">记录卡片与支付方式的实际表现。</p>
-                          </div>
-                          <span className="text-xs text-gray-400">* 为必填</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {attemptResultOptions.map((option) => {
-                            const Icon = option.icon
-                            const isSelected = newAttempt.result === option.value
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => setNewAttempt({ ...newAttempt, result: option.value })}
-                                className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
-                                  isSelected
-                                    ? 'bg-soft-black text-white border-soft-black shadow-lg shadow-blue-900/20'
-                                    : 'bg-white/90 border-gray-200 text-gray-700 hover:border-accent-yellow/40 hover:bg-white'
-                                }`}
-                              >
-                                <Icon className={`w-5 h-5 mt-0.5 ${isSelected ? 'text-white' : option.iconClass}`} />
-                                <div>
-                                  <div className="text-sm font-semibold">{option.label}</div>
-                                  <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
-                                    {option.description}
-                                  </div>
-                                </div>
-                              </button>
-                            )
-                          })}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡片名称</label>
-                            <input
-                              type="text"
-                              value={newAttempt.card_name}
-                              onChange={(e) => setNewAttempt({ ...newAttempt, card_name: e.target.value })}
-                              placeholder="例如：招商银行信用卡"
-                              className={attemptFieldBase}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡组织</label>
-                            <select
-                              value={newAttempt.card_network}
-                              onChange={(e) => setNewAttempt({ ...newAttempt, card_network: e.target.value })}
-                              className={attemptSelectBase}
-                            >
-                              <option value="">请选择卡组织</option>
-                              {CARD_NETWORKS.map((scheme) => (
-                                <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </section>
-
-                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
-                          <CreditCard className="w-4 h-4 text-accent-yellow" />
-                          支付方式与验证
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">支付方式</label>
-                            <select
-                              value={newAttempt.payment_method}
-                              onChange={(e) => setNewAttempt({ ...newAttempt, payment_method: e.target.value })}
-                              className={attemptSelectBase}
-                            >
-                              <option value="">请选择支付方式</option>
-                              <option value="tap">实体卡 Tap</option>
-                              <option value="insert">实体卡 Insert</option>
-                              <option value="swipe">实体卡 Swipe</option>
-                              <option value="apple_pay">Apple Pay</option>
-                              <option value="google_pay">Google Pay</option>
-                              <option value="hce">HCE</option>
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">验证方式 (CVM)</label>
-                            <select
-                              value={newAttempt.cvm}
-                              onChange={(e) => setNewAttempt({ ...newAttempt, cvm: e.target.value })}
-                              className={attemptSelectBase}
-                            >
-                              <option value="unknown">未知</option>
-                              <option value="no_pin">免密</option>
-                              <option value="pin">PIN</option>
-                              <option value="signature">签名</option>
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单模式</label>
-                            <select
-                              value={newAttempt.acquiring_mode}
-                              onChange={(e) => setNewAttempt({ ...newAttempt, acquiring_mode: e.target.value })}
-                              className={attemptSelectBase}
-                            >
-                              <option value="unknown">未知</option>
-                              <option value="DCC">DCC</option>
-                              <option value="EDC">EDC</option>
-                            </select>
-                          </div>
-                        </div>
-                      </section>
-
-                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
-                          <Settings className="w-4 h-4 text-accent-yellow" />
-                          设备与收单信息
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">设备状态</label>
-                            <SystemSelect
-                              dataType="device_status"
-                              value={newAttempt.device_status}
-                              onChange={(value) => setNewAttempt({ ...newAttempt, device_status: value })}
-                              placeholder="请选择设备状态"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单机构</label>
-                            <SystemSelect
-                              dataType="acquiring_institution"
-                              value={newAttempt.acquiring_institution}
-                              onChange={(value) => setNewAttempt({ ...newAttempt, acquiring_institution: value })}
-                              placeholder="请选择收单机构"
-                              allowCustom
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">结账地点</label>
-                            <SystemSelect
-                              dataType="checkout_locations"
-                              value={newAttempt.checkout_location}
-                              onChange={(value) => setNewAttempt({ ...newAttempt, checkout_location: value })}
-                              placeholder="请选择结账地点"
-                            />
-                          </div>
-                        </div>
-
-                        <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
-                          <input
-                            id="attempt-conclusive"
-                            type="checkbox"
-                            checked={Boolean(newAttempt.is_conclusive_failure)}
-                            onChange={(e) => setNewAttempt({ ...newAttempt, is_conclusive_failure: e.target.checked })}
-                            className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
-                          />
-                          明确失败（会被计入“不支持”推导）
-                        </label>
-                      </section>
-
-                      <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-4">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
-                          <FileText className="w-4 h-4 text-accent-yellow" />
-                          备注
-                        </div>
-                        <textarea
-                          value={newAttempt.notes}
-                          onChange={(e) => setNewAttempt({ ...newAttempt, notes: e.target.value })}
-                          placeholder="记录详细的尝试过程或遇到的问题..."
-                          rows={4}
-                          className={attemptTextareaBase}
-                        />
-                      </section>
+                <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
+                  <div className="space-y-6 animate-fade-in-up">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400">尝试记录</p>
+                        <h3 className="text-base font-semibold text-soft-black dark:text-gray-100">添加尝试记录</h3>
+                        <p className="text-xs text-gray-500 mt-1">填写成功/失败的支付尝试，系统会据此推导支持情况。</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft">
+                          <Clock className="w-3.5 h-3.5 text-accent-yellow" />
+                          已有 {attemptsCount} 条记录
+                        </span>
+                        <button
+                          type="button"
+                          onClick={addAttemptRow}
+                          className="px-4 py-2 rounded-2xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
+                        >
+                          + 添加记录
+                        </button>
+                      </div>
                     </div>
 
-                    <aside className="space-y-6">
-                      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-5 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-2xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
-                            <Building className="w-6 h-6" />
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+                      <div className="space-y-8">
+                        {attemptsCount === 0 ? (
+                          <div className="rounded-3xl border border-dashed border-gray-200 bg-white/90 p-6 text-sm text-gray-500">
+                            还没有添加尝试记录，点击“添加记录”开始填写。
                           </div>
-                          <div>
-                            <div className="text-sm font-semibold text-soft-black dark:text-gray-100">{pos?.merchant_name}</div>
-                            <div className="text-xs text-gray-500">{pos?.address || '暂无地址信息'}</div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 text-center">
-                          <div className="rounded-2xl border border-gray-100 bg-gray-50/80 px-3 py-3">
-                            <div className="text-lg font-semibold text-soft-black dark:text-gray-100">{attempts.length}</div>
-                            <div className="text-[11px] text-gray-500">总尝试</div>
-                          </div>
-                          <div className="rounded-2xl border border-green-100 bg-green-50/70 px-3 py-3">
-                            <div className="text-lg font-semibold text-green-600">{attemptSuccessCount}</div>
-                            <div className="text-[11px] text-gray-500">成功</div>
-                          </div>
-                          <div className="rounded-2xl border border-red-100 bg-red-50/70 px-3 py-3">
-                            <div className="text-lg font-semibold text-red-600">{attemptFailureCount}</div>
-                            <div className="text-[11px] text-gray-500">失败</div>
-                          </div>
-                          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3">
-                            <div className="text-lg font-semibold text-blue-600">{attemptSuccessRate}%</div>
-                            <div className="text-[11px] text-gray-500">成功率</div>
-                          </div>
-                        </div>
-                        {latestAttempt && (
-                          <div className="rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 text-xs text-gray-500">
-                            最近一次：{new Date(latestAttempt.created_at).toLocaleDateString('zh-CN')} · {getResultLabel(latestAttempt.result)}
-                          </div>
+                        ) : (
+                          attemptsList.map((attempt, index) => (
+                            <div key={`attempt-${index}`} className="space-y-6">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em]">
+                                  尝试 {index + 1}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAttempt(index)}
+                                  className="text-xs font-semibold text-red-500 hover:text-red-600"
+                                >
+                                  删除
+                                </button>
+                              </div>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试结果</h3>
+                                    <p className="text-sm text-gray-500 mt-1">记录卡片与支付方式的实际表现。</p>
+                                  </div>
+                                  <span className="text-xs text-gray-400">* 为必填</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  {attemptResultOptions.map((option) => {
+                                    const Icon = option.icon
+                                    const isSelected = attempt.result === option.value
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => updateAttempt(index, 'result', option.value)}
+                                        className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                                          isSelected
+                                            ? 'bg-soft-black text-white border-soft-black shadow-lg shadow-blue-900/20'
+                                            : 'bg-white/90 border-gray-200 text-gray-700 hover:border-accent-yellow/40 hover:bg-white'
+                                        }`}
+                                      >
+                                        <Icon className={`w-5 h-5 mt-0.5 ${isSelected ? 'text-white' : option.iconClass}`} />
+                                        <div>
+                                          <div className="text-sm font-semibold">{option.label}</div>
+                                          <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+                                            {option.description}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡片名称</label>
+                                    <input
+                                      type="text"
+                                      value={attempt.card_name || ''}
+                                      onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
+                                      placeholder="如 Visa Signature"
+                                      className={attemptFieldBase}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡组织</label>
+                                    <select
+                                      value={attempt.card_network || ''}
+                                      onChange={(e) => updateAttempt(index, 'card_network', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="">请选择卡组织</option>
+                                      {CARD_NETWORKS.map((scheme) => (
+                                        <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">发生时间</label>
+                                    <input
+                                      type="datetime-local"
+                                      className={attemptFieldBase}
+                                      value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
+                                      onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                                    />
+                                  </div>
+                                </div>
+                              </section>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                                  <CreditCard className="w-4 h-4 text-accent-yellow" />
+                                  支付方式与验证
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">支付方式</label>
+                                    <select
+                                      value={attempt.payment_method || ''}
+                                      onChange={(e) => updateAttempt(index, 'payment_method', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="">请选择支付方式</option>
+                                      <option value="tap">实体卡 Tap</option>
+                                      <option value="insert">实体卡 Insert</option>
+                                      <option value="swipe">实体卡 Swipe</option>
+                                      <option value="apple_pay">Apple Pay</option>
+                                      <option value="google_pay">Google Pay</option>
+                                      <option value="hce">HCE</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">验证方式 (CVM)</label>
+                                    <select
+                                      value={attempt.cvm || 'unknown'}
+                                      onChange={(e) => updateAttempt(index, 'cvm', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="unknown">未知</option>
+                                      <option value="no_pin">免密</option>
+                                      <option value="pin">PIN</option>
+                                      <option value="signature">签名</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单模式</label>
+                                    <select
+                                      value={attempt.acquiring_mode || 'unknown'}
+                                      onChange={(e) => updateAttempt(index, 'acquiring_mode', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="unknown">未知</option>
+                                      <option value="DCC">DCC</option>
+                                      <option value="EDC">EDC</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              </section>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                                  <Settings className="w-4 h-4 text-accent-yellow" />
+                                  设备与收单信息
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">设备状态</label>
+                                    <SystemSelect
+                                      dataType="device_status"
+                                      value={attempt.device_status || 'active'}
+                                      onChange={(value) => updateAttempt(index, 'device_status', value)}
+                                      placeholder="请选择设备状态"
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单机构</label>
+                                    <SystemSelect
+                                      dataType="acquiring_institution"
+                                      value={attempt.acquiring_institution || ''}
+                                      onChange={(value) => updateAttempt(index, 'acquiring_institution', value)}
+                                      placeholder="请选择收单机构"
+                                      allowCustom
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">结账地点</label>
+                                    <SystemSelect
+                                      dataType="checkout_locations"
+                                      value={attempt.checkout_location || ''}
+                                      onChange={(value) => updateAttempt(index, 'checkout_location', value)}
+                                      placeholder="请选择结账地点"
+                                    />
+                                  </div>
+                                </div>
+
+                                <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
+                                  <input
+                                    id={`attempt-conclusive-${index}`}
+                                    type="checkbox"
+                                    checked={Boolean(attempt.is_conclusive_failure)}
+                                    onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
+                                  />
+                                  明确失败（会被计入“不支持”推导）
+                                </label>
+                              </section>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-4">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                                  <FileText className="w-4 h-4 text-accent-yellow" />
+                                  备注
+                                </div>
+                                <textarea
+                                  value={attempt.notes || ''}
+                                  onChange={(e) => updateAttempt(index, 'notes', e.target.value)}
+                                  placeholder="例如：需要签名，或被拒原因"
+                                  rows={4}
+                                  className={attemptTextareaBase}
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveAttemptAsCommonCard(index)}
+                                    className="text-xs font-semibold text-soft-black bg-cream px-4 py-2 rounded-xl hover:bg-accent-yellow/20 transition-colors"
+                                  >
+                                    保存为常用卡
+                                  </button>
+                                  {commonCards.length > 0 && (
+                                    <select
+                                      className="text-xs bg-white/90 border border-gray-200 rounded-xl px-3 py-2"
+                                      defaultValue=""
+                                      onChange={(e) => {
+                                        const selected = parseInt(e.target.value, 10)
+                                        if (!Number.isNaN(selected)) applyCommonCard(index, selected)
+                                      }}
+                                    >
+                                      <option value="">快速填充常用卡</option>
+                                      {commonCards.map((card, cardIndex) => (
+                                        <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
+                                          {card.name}{card.method ? ` · ${card.method}` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
+                              </section>
+                            </div>
+                          ))
                         )}
                       </div>
-
-                      <div className="rounded-3xl border border-white/60 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/80 p-5 shadow-soft">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
-                          <Shield className="w-4 h-4 text-accent-yellow" />
-                          填写提示
-                        </div>
-                        <div className="mt-3 space-y-2 text-sm text-gray-500">
-                          <p>成功与明确失败会更新支持矩阵，影响默认推荐。</p>
-                          <p>若刷卡失败但原因不明，请选择“未知”并在备注说明。</p>
-                          <p>卡片名称可写具体发卡行或卡产品名，便于后续追踪。</p>
-                        </div>
-                      </div>
-                    </aside>
+                      {attemptSidebar}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2311,6 +2532,103 @@ const POSDetail = () => {
                 </div>
               </div>
             </motion.div>
+
+            <AnimatePresence>
+              {isAlbumPickerOpen && (
+                <motion.div
+                  className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsAlbumPickerOpen(false)}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, x: 40 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 40 }}
+                    transition={{ duration: 0.25 }}
+                    className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                      <div className="text-sm font-semibold text-gray-900">选择卡册中的卡片</div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAlbumPickerOpen(false)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="p-6 border-b border-gray-100">
+                      <div className="inline-flex bg-cream rounded-full p-1">
+                        {(['personal', 'public'] as const).map((scope) => (
+                          <button
+                            key={scope}
+                            type="button"
+                            onClick={() => setAlbumScopeFilter(scope)}
+                            className={`px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+                              albumScopeFilter === scope
+                                ? 'bg-soft-black text-white shadow-sm'
+                                : 'text-gray-500 hover:text-soft-black'
+                            }`}
+                          >
+                            {scope === 'personal' ? '个人卡册' : '公共卡册'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-2">请选择要填充到最新尝试记录的卡片。</div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                      {filteredAlbumCards.length === 0 && (
+                        <div className="text-sm text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 p-6 text-center">
+                          暂无{albumScopeFilter === 'personal' ? '个人' : '公共'}卡册卡片
+                        </div>
+                      )}
+                      {filteredAlbumCards.map((card) => {
+                        const label = `${card.title} · ${card.issuer} · ${card.organization}`
+                        const isActive = selectedAlbumCard === card.id
+                        return (
+                          <button
+                            key={card.id}
+                            type="button"
+                            onClick={() => setSelectedAlbumCard(card.id)}
+                            className={`w-full text-left border rounded-2xl px-4 py-3 transition-all ${
+                              isActive
+                                ? 'border-soft-black bg-soft-black/5'
+                                : 'border-gray-100 hover:border-accent-yellow/50 hover:bg-cream/60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-soft-black">{label}</div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  {getAlbumScopeLabel(card.scope)} · BIN {card.bin || '—'} · {card.group || '未分组'}
+                                </div>
+                              </div>
+                              {isActive && (
+                                <span className="text-xs font-semibold text-soft-black bg-accent-yellow/20 px-3 py-1 rounded-full">
+                                  已选择
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="border-t border-gray-100 p-5 bg-white/80">
+                      <button
+                        type="button"
+                        onClick={handleApplyAlbumCard}
+                        className="w-full px-4 py-3 rounded-2xl text-sm font-semibold text-white bg-soft-black hover:bg-accent-yellow transition-colors"
+                      >
+                        填充到最新记录
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
