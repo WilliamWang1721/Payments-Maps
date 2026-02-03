@@ -262,6 +262,31 @@ const formatRegeocodeAddress = (regeocode: any): string => {
   if (!regeocode) return ''
 
   const addressComponent = regeocode.addressComponent
+  const formattedAddress = regeocode.formattedAddress || ''
+
+  const normalizeLandmarkName = (value: unknown): string => {
+    if (typeof value !== 'string') return ''
+    return value.trim()
+  }
+
+  const pickNearestLandmark = (): { name: string; distance?: number } | null => {
+    const poi = Array.isArray(regeocode.pois) ? regeocode.pois[0] : null
+    const aoi = Array.isArray(regeocode.aois) ? regeocode.aois[0] : null
+
+    const poiName = normalizeLandmarkName(poi?.name)
+    const aoiName = normalizeLandmarkName(aoi?.name)
+
+    if (poiName) {
+      const distance = Number(poi?.distance)
+      return Number.isFinite(distance) ? { name: poiName, distance } : { name: poiName }
+    }
+    if (aoiName) {
+      const distance = Number(aoi?.distance)
+      return Number.isFinite(distance) ? { name: aoiName, distance } : { name: aoiName }
+    }
+    return null
+  }
+
   if (addressComponent) {
     const asText = (value: unknown): string => {
       if (Array.isArray(value)) return value.join('')
@@ -275,6 +300,8 @@ const formatRegeocodeAddress = (regeocode: any): string => {
     const township = asText(addressComponent.township)
     const street = asText(addressComponent.streetNumber?.street)
     const number = asText(addressComponent.streetNumber?.number)
+    const building = asText(addressComponent.building?.name)
+    const neighborhood = asText(addressComponent.neighborhood?.name)
 
     let detailedAddress = ''
     if (province && province !== city) detailedAddress += province
@@ -284,10 +311,45 @@ const formatRegeocodeAddress = (regeocode: any): string => {
     if (street) detailedAddress += street
     if (number) detailedAddress += number
 
-    if (detailedAddress) return detailedAddress
+    // 更精确：补充小区/楼宇信息（如果有）
+    const maybeAppend = (value: string) => {
+      if (!value) return
+      if (detailedAddress.includes(value)) return
+      detailedAddress += value
+    }
+    maybeAppend(neighborhood)
+    maybeAppend(building)
+
+    // 选择更“长”的版本（通常更详细）
+    const base = [formattedAddress, detailedAddress].reduce((best: string, current: string) => {
+      if (!current) return best
+      return current.length > best.length ? current : best
+    }, '')
+
+    if (!base) return ''
+
+    const landmark = pickNearestLandmark()
+    if (!landmark?.name) return base
+    if (base.includes(landmark.name)) return base
+
+    const distanceText =
+      typeof landmark.distance === 'number' && landmark.distance > 0
+        ? `（约${Math.round(landmark.distance)}m）`
+        : ''
+
+    return `${base}（附近：${landmark.name}${distanceText}）`
   }
 
-  return regeocode.formattedAddress || ''
+  const base = formattedAddress
+  if (!base) return ''
+  const landmark = pickNearestLandmark()
+  if (!landmark?.name) return base
+  if (base.includes(landmark.name)) return base
+
+  const distanceText =
+    typeof landmark.distance === 'number' && landmark.distance > 0 ? `（约${Math.round(landmark.distance)}m）` : ''
+
+  return `${base}（附近：${landmark.name}${distanceText}）`
 }
 
 const fetchAddressByRestApi = async (longitude: number, latitude: number): Promise<string | null> => {
@@ -313,6 +375,8 @@ const fetchAddressByRestApi = async (longitude: number, latitude: number): Promi
     if (!regeocode) return null
 
     const addressComponent = regeocode.addressComponent
+    const formattedAddress = regeocode.formatted_address || ''
+
     if (addressComponent) {
       const province = addressComponent.province || ''
       const city = addressComponent.city || province || ''
@@ -320,6 +384,8 @@ const fetchAddressByRestApi = async (longitude: number, latitude: number): Promi
       const township = addressComponent.township || ''
       const street = addressComponent.streetNumber?.street || ''
       const number = addressComponent.streetNumber?.number || ''
+      const building = addressComponent.building?.name || ''
+      const neighborhood = addressComponent.neighborhood?.name || ''
 
       let detailedAddress = ''
       if (province && province !== city) detailedAddress += province
@@ -328,11 +394,44 @@ const fetchAddressByRestApi = async (longitude: number, latitude: number): Promi
       if (township) detailedAddress += township
       if (street) detailedAddress += street
       if (number) detailedAddress += number
+      if (neighborhood && !detailedAddress.includes(neighborhood)) detailedAddress += neighborhood
+      if (building && !detailedAddress.includes(building)) detailedAddress += building
 
-      if (detailedAddress) return detailedAddress
+      const base = [formattedAddress, detailedAddress].reduce((best: string, current: string) => {
+        if (!current) return best
+        return current.length > best.length ? current : best
+      }, '')
+
+      if (!base) return null
+
+      const poi = Array.isArray(regeocode.pois) ? regeocode.pois[0] : null
+      const aoi = Array.isArray(regeocode.aois) ? regeocode.aois[0] : null
+      const landmarkName =
+        (typeof poi?.name === 'string' && poi.name.trim()) ||
+        (typeof aoi?.name === 'string' && aoi.name.trim()) ||
+        ''
+
+      if (!landmarkName) return base
+      if (base.includes(landmarkName)) return base
+
+      const distance = Number(poi?.distance ?? aoi?.distance)
+      const distanceText = Number.isFinite(distance) && distance > 0 ? `（约${Math.round(distance)}m）` : ''
+
+      return `${base}（附近：${landmarkName}${distanceText}）`
     }
 
-    return regeocode.formatted_address || null
+    if (!formattedAddress) return null
+    const poi = Array.isArray(regeocode.pois) ? regeocode.pois[0] : null
+    const aoi = Array.isArray(regeocode.aois) ? regeocode.aois[0] : null
+    const landmarkName =
+      (typeof poi?.name === 'string' && poi.name.trim()) || (typeof aoi?.name === 'string' && aoi.name.trim()) || ''
+    if (!landmarkName) return formattedAddress
+    if (formattedAddress.includes(landmarkName)) return formattedAddress
+
+    const distance = Number(poi?.distance ?? aoi?.distance)
+    const distanceText = Number.isFinite(distance) && distance > 0 ? `（约${Math.round(distance)}m）` : ''
+
+    return `${formattedAddress}（附近：${landmarkName}${distanceText}）`
   } catch (error) {
     console.warn('[amap] REST reverse geocode failed:', error)
     return null
