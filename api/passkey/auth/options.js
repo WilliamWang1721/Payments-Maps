@@ -22,6 +22,8 @@ const parseBody = async (req) => {
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase()
 
+const AUTHENTICATOR_TRANSPORTS = ['internal', 'hybrid', 'usb', 'nfc', 'ble']
+
 const findAuthUsersByEmail = async (supabaseAdmin, email) => {
   if (typeof supabaseAdmin.auth?.admin?.getUserByEmail === 'function') {
     const { data, error } = await supabaseAdmin.auth.admin.getUserByEmail(email)
@@ -96,7 +98,8 @@ export default async function handler(req, res) {
 
     const allowCredentials = credentials.map((cred) => ({
       id: base64UrlToBuffer(cred.credential_id),
-      type: 'public-key'
+      type: 'public-key',
+      transports: AUTHENTICATOR_TRANSPORTS
     }))
 
     const options = await generateAuthenticationOptions({
@@ -104,6 +107,9 @@ export default async function handler(req, res) {
       allowCredentials,
       userVerification: 'preferred'
     })
+
+    // Prefer built-in and hybrid authenticators (e.g. password managers) instead of only hardware keys.
+    options.hints = ['client-device', 'hybrid']
 
     const uniqueUserIds = Array.from(new Set(credentials.map((cred) => cred.user_id)))
 
