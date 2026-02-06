@@ -176,6 +176,25 @@ const ADD_POS_TEXTS = {
   mapPrefillAddressFailed: '自动获取地址失败，请手动填写地址',
 } as const
 
+const ATTEMPT_RESULT_OPTIONS = ['success', 'failure', 'unknown'] as const
+const ATTEMPT_PAYMENT_METHOD_OPTIONS = ['tap', 'insert', 'swipe', 'apple_pay', 'google_pay', 'hce'] as const
+const ATTEMPT_CVM_OPTIONS = ['no_pin', 'pin', 'signature', 'unknown'] as const
+const ATTEMPT_ACQUIRING_MODE_OPTIONS = ['DCC', 'EDC', 'unknown'] as const
+const ATTEMPT_DEVICE_STATUS_OPTIONS = ['active', 'inactive', 'maintenance', 'disabled'] as const
+const ATTEMPT_CHECKOUT_LOCATION_OPTIONS = ['自助收银', '人工收银'] as const
+
+const isOptionIncluded = <T extends readonly string[]>(options: T, value: unknown): value is T[number] =>
+  typeof value === 'string' && options.includes(value as T[number])
+
+const normalizeAttemptedAt = (value?: string) => {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+  return parsed.toISOString()
+}
+
 const tapToThreeState = (state: TapState): ThreeStateValue => {
   if (state === 'yes') return 'supported'
   if (state === 'no') return 'unsupported'
@@ -580,32 +599,100 @@ const AddPOS = () => {
       const { attempts: _attempts, ...posPayload } = payload
       const result = await Promise.race([addPOSMachine(posPayload), timeoutPromise]) as POSMachine
 
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const attemptUserId = authUser?.id || user?.id || result.created_by || null
+
+      if (result.created_by && attemptUserId && result.created_by !== attemptUserId) {
+        console.warn('[AddPOS] 用户ID不一致，写入尝试记录时将使用当前认证用户ID', {
+          posCreatedBy: result.created_by,
+          attemptUserId,
+        })
+      }
+
       const attemptsPayload = (formData.attempts || []).map((attempt, index) => ({
         pos_id: result.id,
-        user_id: user?.id || null,
+        user_id: attemptUserId,
         attempt_number: index + 1,
-        result: attempt.result,
+        result: isOptionIncluded(ATTEMPT_RESULT_OPTIONS, attempt.result) ? attempt.result : 'unknown',
         card_network: attempt.card_network || null,
-        payment_method: attempt.payment_method || null,
-        cvm: attempt.cvm || 'unknown',
-        acquiring_mode: attempt.acquiring_mode || 'unknown',
-        device_status: attempt.device_status || payload.status || 'active',
+        payment_method: isOptionIncluded(ATTEMPT_PAYMENT_METHOD_OPTIONS, attempt.payment_method)
+          ? attempt.payment_method
+          : null,
+        cvm: isOptionIncluded(ATTEMPT_CVM_OPTIONS, attempt.cvm) ? attempt.cvm : 'unknown',
+        acquiring_mode: isOptionIncluded(ATTEMPT_ACQUIRING_MODE_OPTIONS, attempt.acquiring_mode)
+          ? attempt.acquiring_mode
+          : 'unknown',
+        device_status: isOptionIncluded(ATTEMPT_DEVICE_STATUS_OPTIONS, attempt.device_status)
+          ? attempt.device_status
+          : payload.status || 'active',
         acquiring_institution: attempt.acquiring_institution?.trim() || null,
-        checkout_location: attempt.checkout_location || payload.basic_info.checkout_location || null,
+        checkout_location: isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, attempt.checkout_location)
+          ? attempt.checkout_location
+          : isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, payload.basic_info.checkout_location)
+            ? payload.basic_info.checkout_location
+            : null,
         card_name: attempt.card_name?.trim() || null,
         notes: attempt.notes?.trim() || null,
-        attempted_at: attempt.attempted_at || attempt.timestamp || null,
+        attempted_at: normalizeAttemptedAt(attempt.attempted_at || attempt.timestamp),
         is_conclusive_failure: attempt.is_conclusive_failure || false,
       }))
 
       if (attemptsPayload.length > 0) {
-        const { error: attemptsError } = await supabase
-          .from('pos_attempts')
-          .insert(attemptsPayload)
+        const attemptsDebugMeta = {
+          posId: result.id,
+          attemptsCount: attemptsPayload.length,
+          attemptUserId,
+          posCreatedBy: result.created_by || null,
+          authUserId: authUser?.id || null,
+          authStoreUserId: user?.id || null,
+        }
 
-        if (attemptsError) {
-          console.error('[AddPOS] 保存尝试记录失败:', attemptsError)
-          notify.error('POS 已创建，但尝试记录保存失败')
+        console.groupCollapsed('[AddPOS] 准备写入尝试记录')
+        console.log('写入元数据:', attemptsDebugMeta)
+        console.log('原始尝试记录(formData.attempts):', formData.attempts || [])
+        console.log('标准化后写入载荷(attemptsPayload):', attemptsPayload)
+        console.groupEnd()
+
+        if (!attemptUserId) {
+          console.error('[AddPOS] 保存尝试记录失败：缺少用户ID', attemptsDebugMeta)
+          notify.error('POS 已创建，但尝试记录保存失败（缺少用户身份）')
+        } else {
+          const attemptsInsertStartedAt = Date.now()
+          const {
+            data: insertedAttempts,
+            error: attemptsError,
+            status: attemptsStatus,
+            statusText: attemptsStatusText,
+          } = await supabase
+            .from('pos_attempts')
+            .insert(attemptsPayload)
+            .select('id, attempt_number, result, payment_method, created_at')
+
+          const attemptsInsertDurationMs = Date.now() - attemptsInsertStartedAt
+
+          if (attemptsError) {
+            console.error('[AddPOS] 保存尝试记录失败:', {
+              meta: attemptsDebugMeta,
+              status: attemptsStatus,
+              statusText: attemptsStatusText,
+              durationMs: attemptsInsertDurationMs,
+              errorCode: attemptsError.code,
+              errorMessage: attemptsError.message,
+              errorDetails: attemptsError.details,
+              errorHint: attemptsError.hint,
+              attemptsPayload,
+            })
+            notify.error(`POS 已创建，但尝试记录保存失败：${attemptsError.message || '未知错误'}`)
+          } else {
+            console.info('[AddPOS] 尝试记录保存成功:', {
+              meta: attemptsDebugMeta,
+              status: attemptsStatus,
+              statusText: attemptsStatusText,
+              durationMs: attemptsInsertDurationMs,
+              insertedCount: insertedAttempts?.length || 0,
+              insertedAttempts,
+            })
+          }
         }
       }
 
