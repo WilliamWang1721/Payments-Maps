@@ -1769,7 +1769,13 @@ const AddPOS = () => {
           <div className="p-8 pb-4 border-b border-gray-50 z-10 bg-white">
             <div className="flex items-center justify-between">
               <button
-                onClick={() => navigate(-1)}
+                onClick={() => {
+                  if (step > 1) {
+                    goPrev()
+                    return
+                  }
+                  navigate(-1)
+                }}
                 className="px-4 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors flex items-center gap-2"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -1796,17 +1802,7 @@ const AddPOS = () => {
             {step === 5 && renderStep5()}
             <div className="h-10" />
           </div>
-          <div className="p-6 border-t border-gray-50 bg-white w-full flex justify-between items-center">
-            {step > 1 ? (
-              <button
-                onClick={goPrev}
-                className="px-6 py-3 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-colors flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" /> {uiText.backButton}
-              </button>
-            ) : (
-              <div />
-            )}
+          <div className="p-6 border-t border-gray-50 bg-white w-full flex justify-end items-center">
             <button
               onClick={step === 5 ? handleSubmit : goNext}
               disabled={isSubmitting}
