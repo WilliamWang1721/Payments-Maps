@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { POSMachine } from '@/lib/supabase'
@@ -12,8 +12,6 @@ import { usePermissions } from '@/hooks/usePermissions'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedCard from '@/components/ui/AnimatedCard'
 import AnimatedModal from '@/components/ui/AnimatedModal'
-import ContactlessDisplay from '@/components/ui/ContactlessDisplay'
-import CardNetworkIcon from '@/components/ui/CardNetworkIcon'
 import SystemSelect from '@/components/ui/SystemSelect'
 import { type ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -84,6 +82,28 @@ type SupportEvidence = 'supported' | 'unsupported'
 interface SupportEvidenceItem {
   type: SupportEvidence
   attempt: Attempt
+}
+
+type SupportResolutionSource = 'manual' | 'inferred' | 'both' | 'conflict' | 'none'
+interface SupportFusionItem {
+  key: string
+  label: string
+  manualState: ThreeStateValue
+  inferredState: ThreeStateValue
+  resolvedState: ThreeStateValue
+  source: SupportResolutionSource
+  sourceLabel: string
+  hasConflict: boolean
+  manualNote?: string
+  evidenceNote?: string
+}
+
+interface SupportFusionSection {
+  key: string
+  title: string
+  description: string
+  icon: typeof CreditCard
+  items: SupportFusionItem[]
 }
 
 const PAYMENT_METHOD_OPTIONS = ['tap', 'insert', 'swipe', 'apple_pay', 'google_pay', 'hce'] as const
@@ -430,16 +450,60 @@ const POSDetail = () => {
     if (typeof value === 'boolean') {
       return value ? 'supported' : 'unsupported'
     }
-    return value || 'unknown'
+    return value === 'supported' || value === 'unsupported' || value === 'unknown' ? value : 'unknown'
   }
 
-  const mergeSupportState = (manualState: ThreeStateValue | undefined, evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }) => {
-    if (manualState === 'supported' || manualState === 'unsupported') {
-      return manualState
+  const getInferredState = (evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }) => {
+    const hasSupported = evidence.supported.length > 0
+    const hasUnsupported = evidence.unsupported.length > 0
+
+    if (hasSupported && !hasUnsupported) {
+      return { state: 'supported' as ThreeStateValue, hasConflict: false }
     }
-    if (evidence.supported.length > 0) return 'supported'
-    if (evidence.unsupported.length > 0) return 'unsupported'
-    return 'unknown'
+    if (!hasSupported && hasUnsupported) {
+      return { state: 'unsupported' as ThreeStateValue, hasConflict: false }
+    }
+    if (hasSupported && hasUnsupported) {
+      return { state: 'unknown' as ThreeStateValue, hasConflict: true }
+    }
+    return { state: 'unknown' as ThreeStateValue, hasConflict: false }
+  }
+
+  const resolveSupportState = (
+    manualState: ThreeStateValue,
+    inferredState: ThreeStateValue,
+    inferredConflict: boolean
+  ): { state: ThreeStateValue; source: SupportResolutionSource; hasConflict: boolean } => {
+    if (inferredConflict) {
+      if (manualState === 'supported' || manualState === 'unsupported') {
+        return { state: manualState, source: 'manual', hasConflict: true }
+      }
+      return { state: 'unknown', source: 'conflict', hasConflict: true }
+    }
+
+    if (manualState === 'unknown' && inferredState === 'unknown') {
+      return { state: 'unknown', source: 'none', hasConflict: false }
+    }
+    if (manualState === 'unknown') {
+      return { state: inferredState, source: 'inferred', hasConflict: false }
+    }
+    if (inferredState === 'unknown') {
+      return { state: manualState, source: 'manual', hasConflict: false }
+    }
+    if (manualState === inferredState) {
+      return { state: manualState, source: 'both', hasConflict: false }
+    }
+    return { state: 'unknown', source: 'conflict', hasConflict: true }
+  }
+
+  const getSourceLabel = (source: SupportResolutionSource, hasConflict: boolean) => {
+    if (source === 'manual') {
+      return hasConflict ? '手动录入（推导证据冲突）' : '手动录入'
+    }
+    if (source === 'inferred') return '尝试推导'
+    if (source === 'both') return '手动 + 推导一致'
+    if (source === 'conflict') return '手动与推导冲突'
+    return '待补充数据'
   }
 
   const formatEvidenceLabel = (items: SupportEvidenceItem[]) => {
@@ -458,61 +522,307 @@ const POSDetail = () => {
     return `${labels.join(' / ')}${more}`
   }
 
-  const renderAttemptBadge = (state: ThreeStateValue, label: string, evidenceText?: string) => {
-    const styleMap: Record<ThreeStateValue, string> = {
-      supported: 'bg-green-50 text-green-700 border-green-200',
-      unsupported: 'bg-red-50 text-red-700 border-red-200',
-      unknown: 'bg-gray-50 text-gray-500 border-gray-200',
+  const formatEvidenceSummary = (
+    evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] },
+    inferredState: ThreeStateValue,
+    inferredConflict: boolean
+  ) => {
+    const supportedLabel = formatEvidenceLabel(evidence.supported)
+    const unsupportedLabel = formatEvidenceLabel(evidence.unsupported)
+
+    if (inferredConflict) {
+      const parts: string[] = []
+      if (supportedLabel) parts.push(`支持证据：${supportedLabel}`)
+      if (unsupportedLabel) parts.push(`不支持证据：${unsupportedLabel}`)
+      return parts.join('；')
     }
-    const dotMap: Record<ThreeStateValue, string> = {
-      supported: 'bg-green-500',
-      unsupported: 'bg-red-500',
-      unknown: 'bg-gray-400',
-    }
-    return (
-      <div className={`rounded-xl border px-3 py-2 space-y-1 ${styleMap[state]}`}>
-        <div className="flex items-center justify-between text-xs font-semibold">
-          <span>{label}</span>
-          <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${styleMap[state]}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${dotMap[state]}`} />
-            {state === 'supported' ? '支持' : state === 'unsupported' ? '不支持' : '未知'}
-          </span>
-        </div>
-        {evidenceText && (
-          <div className="text-[10px] text-gray-500 leading-relaxed">{evidenceText}</div>
-        )}
-      </div>
-    )
+
+    if (inferredState === 'supported' && supportedLabel) return `推导支持：${supportedLabel}`
+    if (inferredState === 'unsupported' && unsupportedLabel) return `推导不支持：${unsupportedLabel}`
+    return ''
   }
 
-  const renderMatrixSection = (
-    title: string,
+  const getManualPaymentMethodState = (key: string): ThreeStateValue => {
+    if (!pos?.basic_info) return 'unknown'
+    if (key === 'tap') return normalizeThreeState(pos.basic_info.supports_contactless)
+    if (key === 'apple_pay') return normalizeThreeState(pos.basic_info.supports_apple_pay)
+    if (key === 'google_pay') return normalizeThreeState(pos.basic_info.supports_google_pay)
+    if (key === 'hce') return normalizeThreeState(pos.basic_info.supports_hce_simulation)
+    return 'unknown'
+  }
+
+  const getManualVerificationState = (key: string): ThreeStateValue => {
+    const modes = pos?.verification_modes
+    if (!modes) return 'unknown'
+
+    if (key === 'no_pin') {
+      if (modes.small_amount_no_pin_unsupported) return 'unsupported'
+      if (modes.small_amount_no_pin && modes.small_amount_no_pin.length > 0) return 'supported'
+      if (modes.small_amount_no_pin_uncertain) return 'unknown'
+      return 'unknown'
+    }
+    if (key === 'pin') {
+      if (modes.requires_password_unsupported) return 'unsupported'
+      if (modes.requires_password && modes.requires_password.length > 0) return 'supported'
+      if (modes.requires_password_uncertain) return 'unknown'
+      return 'unknown'
+    }
+    if (key === 'signature') {
+      if (modes.requires_signature_unsupported) return 'unsupported'
+      if (modes.requires_signature && modes.requires_signature.length > 0) return 'supported'
+      if (modes.requires_signature_uncertain) return 'unknown'
+      return 'unknown'
+    }
+    return 'unknown'
+  }
+
+  const getManualVerificationNote = (key: string) => {
+    const modes = pos?.verification_modes
+    if (!modes) return undefined
+
+    if (key === 'no_pin') {
+      if (modes.small_amount_no_pin && modes.small_amount_no_pin.length > 0) {
+        return `手动信息：${modes.small_amount_no_pin.join('、')}`
+      }
+      if (modes.small_amount_no_pin_uncertain) return '手动信息：待确认'
+    }
+    if (key === 'pin') {
+      if (modes.requires_password && modes.requires_password.length > 0) {
+        return `手动信息：${modes.requires_password.join('、')}`
+      }
+      if (modes.requires_password_uncertain) return '手动信息：待确认'
+    }
+    if (key === 'signature') {
+      if (modes.requires_signature && modes.requires_signature.length > 0) {
+        return `手动信息：${modes.requires_signature.join('、')}`
+      }
+      if (modes.requires_signature_uncertain) return '手动信息：待确认'
+    }
+    return undefined
+  }
+
+  const getManualAcquiringModeState = (key: string): ThreeStateValue => {
+    const basicInfo = pos?.basic_info
+    if (!basicInfo) return 'unknown'
+
+    if (key === 'DCC') {
+      if (basicInfo.supports_dcc !== undefined) return normalizeThreeState(basicInfo.supports_dcc)
+      if (basicInfo.acquiring_modes?.includes('DCC')) return 'supported'
+    }
+
+    if (key === 'EDC') {
+      if (basicInfo.supports_edc !== undefined) return normalizeThreeState(basicInfo.supports_edc)
+      if (basicInfo.acquiring_modes?.includes('EDC')) return 'supported'
+    }
+
+    return 'unknown'
+  }
+
+  const getManualAcquiringModeNote = (key: string) => {
+    if (!pos?.basic_info?.acquiring_modes?.includes(key)) return undefined
+    return '手动信息：收单模式配置包含该项'
+  }
+
+  const getManualCheckoutState = (key: string): ThreeStateValue => {
+    if (!pos?.basic_info?.checkout_location) return 'unknown'
+    return pos.basic_info.checkout_location === key ? 'supported' : 'unknown'
+  }
+
+  const getManualCheckoutNote = (key: string) => {
+    if (pos?.basic_info?.checkout_location !== key) return undefined
+    return '手动信息：当前记录的结账位置'
+  }
+
+  const getManualDeviceStatusState = (key: string): ThreeStateValue => {
+    if (!pos?.status) return 'unknown'
+    return pos.status === key ? 'supported' : 'unknown'
+  }
+
+  const getManualDeviceStatusNote = (key: string) => {
+    if (pos?.status !== key) return undefined
+    return '手动信息：当前设备状态'
+  }
+
+  const getManualInstitutionState = (key: string): ThreeStateValue => {
+    if (!pos?.basic_info?.acquiring_institution) return 'unknown'
+    return pos.basic_info.acquiring_institution === key ? 'supported' : 'unknown'
+  }
+
+  const getManualInstitutionNote = (key: string) => {
+    if (pos?.basic_info?.acquiring_institution !== key) return undefined
+    return '手动信息：当前主收单机构'
+  }
+
+  const buildSupportFusionItems = (
     items: Array<{ key: string; label: string }>,
     evidenceMap: Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>,
-    manualStateResolver?: (key: string) => ThreeStateValue | undefined
-  ) => {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-soft-black dark:text-gray-100">{title}</h4>
-          <span className="text-[10px] text-gray-400">基于成功尝试/明确失败推导</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {items.map((item) => {
-            const evidence = evidenceMap.get(item.key) || { supported: [], unsupported: [] }
-            const state = mergeSupportState(manualStateResolver?.(item.key), evidence)
-            const evidenceText = formatEvidenceLabel(
-              state === 'supported' ? evidence.supported : state === 'unsupported' ? evidence.unsupported : []
-            )
-            return (
-              <div key={item.key}>
-                {renderAttemptBadge(state, item.label, evidenceText)}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
+    resolveManualState: (key: string) => ThreeStateValue,
+    resolveManualNote?: (key: string) => string | undefined
+  ): SupportFusionItem[] => {
+    return items.map((item) => {
+      const evidence = evidenceMap.get(item.key) || { supported: [], unsupported: [] }
+      const { state: inferredState, hasConflict: inferredConflict } = getInferredState(evidence)
+      const manualState = resolveManualState(item.key)
+      const resolved = resolveSupportState(manualState, inferredState, inferredConflict)
+
+      return {
+        key: item.key,
+        label: item.label,
+        manualState,
+        inferredState,
+        resolvedState: resolved.state,
+        source: resolved.source,
+        sourceLabel: getSourceLabel(resolved.source, resolved.hasConflict),
+        hasConflict: resolved.hasConflict,
+        manualNote: resolveManualNote?.(item.key),
+        evidenceNote: formatEvidenceSummary(evidence, inferredState, inferredConflict),
+      }
+    })
+  }
+
+  const acquiringInstitutionKeys = Array.from(
+    new Set([pos?.basic_info?.acquiring_institution, ...Array.from(attemptMatrix.acquiringInstitutions.keys())].filter(Boolean))
+  ) as string[]
+
+  const supportFusionSections: SupportFusionSection[] = [
+    {
+      key: 'network',
+      title: '卡组织支持',
+      description: '手动配置与尝试推导融合',
+      icon: CreditCard,
+      items: buildSupportFusionItems(
+        CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
+        attemptMatrix.cardNetworks,
+        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? 'supported' : 'unknown'),
+        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? '手动信息：列入支持卡组织' : undefined)
+      ),
+    },
+    {
+      key: 'payment-method',
+      title: '支付方式',
+      description: 'NFC / 钱包 / 插卡能力',
+      icon: Smartphone,
+      items: buildSupportFusionItems(
+        PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
+        attemptMatrix.paymentMethods,
+        getManualPaymentMethodState,
+        (key) => {
+          if (key === 'tap' && pos?.basic_info?.min_amount_no_pin) {
+            return `手动信息：免密金额上限 ¥${pos.basic_info.min_amount_no_pin}`
+          }
+          return undefined
+        }
+      ),
+    },
+    {
+      key: 'cvm',
+      title: '验证方式 (CVM)',
+      description: '免密 / PIN / 签名三态',
+      icon: Shield,
+      items: buildSupportFusionItems(
+        CVM_OPTIONS.map((cvm) => ({
+          key: cvm,
+          label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名',
+        })),
+        attemptMatrix.cvm,
+        getManualVerificationState,
+        getManualVerificationNote
+      ),
+    },
+    {
+      key: 'acquiring-mode',
+      title: '收单模式',
+      description: 'DCC / EDC 支持情况',
+      icon: Settings,
+      items: buildSupportFusionItems(
+        ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
+        attemptMatrix.acquiringModes,
+        getManualAcquiringModeState,
+        getManualAcquiringModeNote
+      ),
+    },
+    {
+      key: 'checkout-location',
+      title: '结账位置',
+      description: '自助与人工收银场景',
+      icon: MapPin,
+      items: buildSupportFusionItems(
+        [
+          { key: '自助收银', label: '自助收银' },
+          { key: '人工收银', label: '人工收银' },
+        ],
+        attemptMatrix.checkoutLocations,
+        getManualCheckoutState,
+        getManualCheckoutNote
+      ),
+    },
+    {
+      key: 'device-status',
+      title: '设备状态',
+      description: '运行状态与尝试反馈',
+      icon: Settings,
+      items: buildSupportFusionItems(
+        [
+          { key: 'active', label: '正常运行' },
+          { key: 'inactive', label: '暂时不可用' },
+          { key: 'maintenance', label: '维修中' },
+          { key: 'disabled', label: '已停用' },
+        ],
+        attemptMatrix.deviceStatus,
+        getManualDeviceStatusState,
+        getManualDeviceStatusNote
+      ),
+    },
+    {
+      key: 'institution',
+      title: '收单机构',
+      description: '主收单方与尝试反馈',
+      icon: Building,
+      items: buildSupportFusionItems(
+        acquiringInstitutionKeys.map((key) => ({ key, label: key })),
+        attemptMatrix.acquiringInstitutions,
+        getManualInstitutionState,
+        getManualInstitutionNote
+      ),
+    },
+  ]
+
+  const allFusionItems = supportFusionSections.flatMap((section) => section.items)
+  const supportFusionSummary = {
+    total: allFusionItems.length,
+    supported: allFusionItems.filter((item) => item.resolvedState === 'supported').length,
+    unsupported: allFusionItems.filter((item) => item.resolvedState === 'unsupported').length,
+    unknown: allFusionItems.filter((item) => item.resolvedState === 'unknown').length,
+    conflicts: allFusionItems.filter((item) => item.hasConflict).length,
+  }
+
+  const hasManualPaymentData = !!pos && (
+    (!!pos.basic_info && Object.keys(pos.basic_info).length > 0) ||
+    (!!pos.verification_modes && Object.keys(pos.verification_modes).length > 0)
+  )
+
+  const supportStateLabelMap: Record<ThreeStateValue, string> = {
+    supported: '支持',
+    unsupported: '不支持',
+    unknown: '未知',
+  }
+
+  const supportStateCardClassMap: Record<ThreeStateValue, string> = {
+    supported: 'bg-emerald-50/80 border-emerald-200/90',
+    unsupported: 'bg-rose-50/80 border-rose-200/90',
+    unknown: 'bg-slate-50/90 border-slate-200/90',
+  }
+
+  const supportStateBadgeClassMap: Record<ThreeStateValue, string> = {
+    supported: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    unsupported: 'bg-rose-100 text-rose-700 border border-rose-200',
+    unknown: 'bg-slate-100 text-slate-600 border border-slate-200',
+  }
+
+  const supportStateDotClassMap: Record<ThreeStateValue, string> = {
+    supported: 'bg-emerald-500',
+    unsupported: 'bg-rose-500',
+    unknown: 'bg-slate-400',
   }
 
   const isMobileActionsDisabled = !pos?.id
@@ -1517,140 +1827,162 @@ const POSDetail = () => {
 
           {activeTab === 'payment' && (
             <>
-              {pos.basic_info && Object.keys(pos.basic_info).length > 0 ? (
+              {hasManualPaymentData || attempts.length > 0 ? (
                 <>
                   <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-3 mb-6">
-                        <CreditCard className="w-5 h-5 text-accent-yellow" />
-                        <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">支持的卡组织</h3>
-                      </div>
-                      {pos.basic_info.supported_card_networks && pos.basic_info.supported_card_networks.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {pos.basic_info.supported_card_networks.map((network) => (
-                            <div
-                              key={network}
-                              className="flex flex-col items-center p-4 rounded-2xl border border-gray-100 bg-gray-50/80"
-                            >
-                              <div className="w-14 h-10 rounded-xl bg-white shadow-soft flex items-center justify-center mb-2">
-                                <CardNetworkIcon network={network} className="w-12 h-8" />
+                    <CardContent className="p-0 overflow-hidden">
+                      <div className="relative overflow-hidden rounded-t-[28px] border-b border-gray-100 bg-gradient-to-br from-slate-50 via-white to-blue-50/80 p-6 md:p-7">
+                        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-yellow/10 blur-3xl" />
+                        <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-emerald-200/30 blur-3xl" />
+                        <div className="relative space-y-5">
+                          <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-2xl bg-accent-yellow/15 text-accent-yellow shadow-soft flex items-center justify-center">
+                                  <Shield className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">支付能力融合矩阵</h3>
+                                  <p className="text-sm text-gray-500">
+                                    手动录入 + 尝试推导，统一展示三态：支持 / 不支持 / 未知
+                                  </p>
+                                </div>
                               </div>
-                              <span className="text-xs font-semibold text-gray-600 text-center">
-                                {getCardNetworkLabel(network)}
-                              </span>
                             </div>
-                          ))}
+                            <div className="inline-flex items-center rounded-full border border-white/80 bg-white/80 px-3 py-1 text-xs font-semibold text-gray-600 shadow-soft">
+                              <Clock className="mr-1.5 h-3.5 w-3.5 text-accent-yellow" />
+                              尝试记录 {attempts.length} 条
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                            <div className="rounded-2xl border border-white/70 bg-white/85 px-3 py-3 text-center shadow-soft">
+                              <div className="text-base font-semibold text-soft-black">{supportFusionSummary.total}</div>
+                              <div className="text-[11px] text-gray-500">矩阵项</div>
+                            </div>
+                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/90 px-3 py-3 text-center">
+                              <div className="text-base font-semibold text-emerald-700">{supportFusionSummary.supported}</div>
+                              <div className="text-[11px] text-emerald-600/80">支持</div>
+                            </div>
+                            <div className="rounded-2xl border border-rose-100 bg-rose-50/90 px-3 py-3 text-center">
+                              <div className="text-base font-semibold text-rose-700">{supportFusionSummary.unsupported}</div>
+                              <div className="text-[11px] text-rose-600/80">不支持</div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-3 py-3 text-center">
+                              <div className="text-base font-semibold text-slate-600">{supportFusionSummary.unknown}</div>
+                              <div className="text-[11px] text-slate-500">未知</div>
+                            </div>
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50/90 px-3 py-3 text-center">
+                              <div className="text-base font-semibold text-amber-700">{supportFusionSummary.conflicts}</div>
+                              <div className="text-[11px] text-amber-600/80">待复核</div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              支持
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 font-medium text-rose-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                              不支持
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              未知
+                            </span>
+                          </div>
+
+                          {supportFusionSummary.conflicts > 0 && (
+                            <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-700">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              存在 {supportFusionSummary.conflicts} 项冲突，建议补充备注或新增尝试记录核实。
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-6 text-center text-sm text-gray-500">
-                          暂无卡组织信息
+                      </div>
+
+                      <div className="p-6 md:p-7 space-y-6">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                          {supportFusionSections.map((section) => {
+                            const SectionIcon = section.icon
+                            return (
+                              <div key={section.key} className="rounded-3xl border border-white/80 bg-white/90 p-4 sm:p-5 shadow-soft">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-8 w-8 rounded-xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center">
+                                      <SectionIcon className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-soft-black dark:text-gray-100">{section.title}</h4>
+                                      <p className="text-xs text-gray-500">{section.description}</p>
+                                    </div>
+                                  </div>
+                                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                    {section.items.length} 项
+                                  </span>
+                                </div>
+
+                                {section.items.length > 0 ? (
+                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {section.items.map((item) => (
+                                      <div
+                                        key={item.key}
+                                        className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                          item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                        }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                            {supportStateLabelMap[item.resolvedState]}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2 text-[11px]">
+                                          <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-0.5 text-gray-500 border border-white/70">
+                                            手动：{supportStateLabelMap[item.manualState]}
+                                          </span>
+                                          <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-0.5 text-gray-500 border border-white/70">
+                                            推导：{supportStateLabelMap[item.inferredState]}
+                                          </span>
+                                        </div>
+
+                                        <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.8rem]">
+                                          {item.manualNote && <p>{item.manualNote}</p>}
+                                          {item.evidenceNote && <p>{item.evidenceNote}</p>}
+                                          {!item.manualNote && !item.evidenceNote && <p>暂无手动信息与尝试证据</p>}
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[11px] text-gray-500">{item.sourceLabel}</span>
+                                          {item.hasConflict && (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              需复核
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
+                                    暂无可融合数据
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
-                      )}
+
+                        <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3 text-xs text-gray-500 leading-relaxed">
+                          说明：成功尝试会推导为“支持”，明确失败会推导为“不支持”；若手动与推导相冲突，则会显示“需复核”，并保持三态结果为“未知”或标记冲突来源。
+                        </div>
+                      </div>
                     </CardContent>
                   </AnimatedCard>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                      <CardContent className="p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <Smartphone className="w-5 h-5 text-accent-yellow" />
-                          <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">Contactless 支持</h3>
-                        </div>
-                        <ContactlessDisplay
-                          supports_contactless={pos.basic_info.supports_contactless}
-                          supports_apple_pay={pos.basic_info.supports_apple_pay}
-                          supports_google_pay={pos.basic_info.supports_google_pay}
-                          supports_hce_simulation={pos.basic_info.supports_hce_simulation}
-                        />
-                      </CardContent>
-                    </AnimatedCard>
-
-                    <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                      <CardContent className="p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <Shield className="w-5 h-5 text-accent-yellow" />
-                          <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">验证模式详情</h3>
-                        </div>
-                        <div className="grid gap-3 text-sm">
-                          <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-                            <span className="text-gray-600">小额免密</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              pos.verification_modes?.small_amount_no_pin_unsupported
-                                ? 'bg-red-100 text-red-700'
-                                : pos.verification_modes?.small_amount_no_pin_uncertain
-                                ? 'bg-orange-100 text-orange-700'
-                                : pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {pos.verification_modes?.small_amount_no_pin_unsupported
-                                ? '不支持'
-                                : pos.verification_modes?.small_amount_no_pin_uncertain
-                                ? '未确定'
-                                : pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0
-                                ? '支持'
-                                : '未确定'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-                            <span className="text-gray-600">PIN验证</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              pos.verification_modes?.requires_password_unsupported
-                                ? 'bg-red-100 text-red-700'
-                                : pos.verification_modes?.requires_password_uncertain
-                                ? 'bg-orange-100 text-orange-700'
-                                : pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {pos.verification_modes?.requires_password_unsupported
-                                ? '不支持'
-                                : pos.verification_modes?.requires_password_uncertain
-                                ? '未确定'
-                                : pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0
-                                ? '支持'
-                                : '未确定'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-                            <span className="text-gray-600">签名验证</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              pos.verification_modes?.requires_signature_unsupported
-                                ? 'bg-red-100 text-red-700'
-                                : pos.verification_modes?.requires_signature_uncertain
-                                ? 'bg-orange-100 text-orange-700'
-                                : pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {pos.verification_modes?.requires_signature_unsupported
-                                ? '不支持'
-                                : pos.verification_modes?.requires_signature_uncertain
-                                ? '未确定'
-                                : pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0
-                                ? '支持'
-                                : '未确定'}
-                            </span>
-                          </div>
-                        </div>
-                        {((pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0) ||
-                          (pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0) ||
-                          (pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0)) && (
-                          <div className="grid gap-2 text-xs text-gray-500">
-                            {pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0 && (
-                              <div>小额免密：{pos.verification_modes.small_amount_no_pin.join('、')}</div>
-                            )}
-                            {pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0 && (
-                              <div>PIN：{pos.verification_modes.requires_password.join('、')}</div>
-                            )}
-                            {pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0 && (
-                              <div>签名：{pos.verification_modes.requires_signature.join('、')}</div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </AnimatedCard>
-                  </div>
 
                   {pos.fees && (
                     <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
@@ -1714,97 +2046,7 @@ const POSDetail = () => {
               ) : (
                 <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
                   <CardContent className="p-6 text-center text-sm text-gray-500">
-                    {attempts.length > 0 ? '暂无手动填写的支付与验证信息' : '暂无支付与验证信息'}
-                  </CardContent>
-                </AnimatedCard>
-              )}
-
-              {attempts.length > 0 && (
-                <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                  <CardContent className="p-6 space-y-5">
-                    <div className="flex items-center gap-3">
-                      <Clock className="w-5 h-5 text-accent-yellow" />
-                      <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试推导支持矩阵</h3>
-                    </div>
-
-                    <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
-                      {renderMatrixSection(
-                        '卡组织支持矩阵',
-                        CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
-                        attemptMatrix.cardNetworks,
-                        (key) => {
-                          const hasManualSupported = pos?.basic_info?.supported_card_networks?.includes(key)
-                          return hasManualSupported ? 'supported' : 'unknown'
-                        }
-                      )}
-
-                      {renderMatrixSection(
-                        '支付方式支持矩阵',
-                        PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
-                        attemptMatrix.paymentMethods,
-                        (key) => {
-                          if (!pos?.basic_info) return 'unknown'
-                          if (key === 'tap') {
-                            return normalizeThreeState(pos.basic_info.supports_contactless)
-                          }
-                          if (key === 'apple_pay') {
-                            return normalizeThreeState(pos.basic_info.supports_apple_pay)
-                          }
-                          if (key === 'google_pay') {
-                            return normalizeThreeState(pos.basic_info.supports_google_pay)
-                          }
-                          if (key === 'hce') {
-                            return normalizeThreeState(pos.basic_info.supports_hce_simulation)
-                          }
-                          return 'unknown'
-                        }
-                      )}
-
-                      {renderMatrixSection(
-                        '验证方式 (CVM)',
-                        CVM_OPTIONS.map((cvm) => ({ key: cvm, label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名' })),
-                        attemptMatrix.cvm
-                      )}
-
-                      {renderMatrixSection(
-                        '收单模式',
-                        ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
-                        attemptMatrix.acquiringModes
-                      )}
-                    </div>
-
-                    <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
-                      {renderMatrixSection(
-                        '结账地点',
-                        [
-                          { key: '自助收银', label: '自助收银' },
-                          { key: '人工收银', label: '人工收银' },
-                        ],
-                        attemptMatrix.checkoutLocations
-                      )}
-
-                      {renderMatrixSection(
-                        '设备状态',
-                        [
-                          { key: 'active', label: '正常运行' },
-                          { key: 'inactive', label: '暂时不可用' },
-                          { key: 'maintenance', label: '维修中' },
-                          { key: 'disabled', label: '已停用' },
-                        ],
-                        attemptMatrix.deviceStatus
-                      )}
-
-                      {renderMatrixSection(
-                        '收单机构',
-                        Array.from(attemptMatrix.acquiringInstitutions.keys()).map((key) => ({ key, label: key })),
-                        attemptMatrix.acquiringInstitutions,
-                        (key) => (key === pos?.basic_info?.acquiring_institution ? 'supported' : 'unknown')
-                      )}
-                    </div>
-
-                    <div className="text-xs text-gray-500 bg-gray-50/80 border border-gray-100 rounded-xl p-3">
-                      说明：成功尝试会推导“支持”，明确失败会推导“不支持”。手动设置的支持项优先显示，若与尝试记录冲突请以备注核实。
-                    </div>
+                    暂无支付能力数据，请先补充手动信息或新增尝试记录。
                   </CardContent>
                 </AnimatedCard>
               )}
