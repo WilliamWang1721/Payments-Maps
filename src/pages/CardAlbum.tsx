@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Edit, FileText, Filter, Plus, Trash2, User, Users } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { Check, ChevronDown, Edit, FileText, Filter, Plus, Trash2, User, Users, X } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedListItem from '@/components/AnimatedListItem'
 import clsx from 'clsx'
 import { useMapStore } from '@/stores/useMapStore'
 import AnimatedModal from '@/components/ui/AnimatedModal'
+import SystemSelect from '@/components/ui/SystemSelect'
 import { usePermissions } from '@/hooks/usePermissions'
 import { notify } from '@/lib/notify'
+import { CARD_NETWORKS } from '@/lib/cardNetworks'
 import {
   type AlbumScope,
   type CardAlbumItem,
@@ -22,6 +25,67 @@ const TAB_OPTIONS = [
   { key: 'personal', label: '个人卡册', icon: User },
 ] as const
 
+type IssuerCategory = 'domestic' | 'foreign'
+type ForeignIssuerCategory = 'hongKong' | 'unitedStates' | 'unitedKingdom' | 'institutions' | 'asiaPacific'
+
+const CARD_ORGANIZATION_OPTIONS = CARD_NETWORKS.map((network) => ({
+  value: network.label,
+  label: network.label,
+}))
+
+const DOMESTIC_ISSUER_GROUPS = [
+  {
+    title: '国有大型银行',
+    issuers: ['中国工商银行', '中国建设银行', '中国农业银行', '中国银行', '交通银行', '中国邮政储蓄银行'],
+  },
+  {
+    title: '全国性股份制银行',
+    issuers: ['招商银行', '中信银行', '浦发银行', '兴业银行', '平安银行', '广发银行', '中国民生银行'],
+  },
+  {
+    title: '城市与互联网银行',
+    issuers: ['北京银行', '上海银行', '宁波银行', '江苏银行', '微众银行', '网商银行'],
+  },
+] as const
+
+const FOREIGN_ISSUER_GROUPS: Array<{
+  key: ForeignIssuerCategory
+  label: string
+  description: string
+  issuers: string[]
+}> = [
+  {
+    key: 'hongKong',
+    label: '香港银行',
+    description: '常见港区发卡机构',
+    issuers: ['汇丰银行（香港）', '中银香港', '恒生银行', '渣打银行（香港）', '花旗银行（香港）'],
+  },
+  {
+    key: 'unitedStates',
+    label: '美国银行',
+    description: '美国本土主流银行',
+    issuers: ['美国银行', '摩根大通', '花旗银行', '富国银行', 'Capital One'],
+  },
+  {
+    key: 'unitedKingdom',
+    label: '英国银行',
+    description: '英国及离岸常见发卡行',
+    issuers: ['汇丰银行（英国）', '巴克莱银行', '劳埃德银行集团', 'NatWest', '渣打银行（英国）'],
+  },
+  {
+    key: 'institutions',
+    label: '金融机构',
+    description: '非传统银行类发卡机构',
+    issuers: ['American Express', 'Discover Financial Services', 'Diners Club International', 'Revolut', 'Wise'],
+  },
+  {
+    key: 'asiaPacific',
+    label: '亚太银行',
+    description: '亚太地区常见发卡行',
+    issuers: ['星展银行 DBS', '华侨银行 OCBC', '大华银行 UOB', '三菱 UFJ 银行', '瑞穗银行'],
+  },
+]
+
 const CardAlbum = () => {
   const [activeTab, setActiveTab] = useState<AlbumScope>('public')
   const { cards, addCard, addToPersonal, updateCard, removeCard } = useCardAlbumStore()
@@ -35,6 +99,10 @@ const CardAlbum = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [cardToDelete, setCardToDelete] = useState<CardAlbumItem | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [showIssuerMenu, setShowIssuerMenu] = useState(false)
+  const [issuerCategory, setIssuerCategory] = useState<IssuerCategory>('domestic')
+  const [foreignIssuerCategory, setForeignIssuerCategory] = useState<ForeignIssuerCategory>('hongKong')
+  const [showAdvancedMenu, setShowAdvancedMenu] = useState(false)
   const [reportForm, setReportForm] = useState({
     issueType: '',
     description: '',
@@ -47,6 +115,11 @@ const CardAlbum = () => {
     organization: '',
     group: '',
     description: '',
+    isCoBranded: false,
+    hasPointsProgram: false,
+    pointsProgramName: '',
+    hasClubPoints: false,
+    clubPointsProgram: '',
     scope: 'public' as AlbumScope,
   })
   const searchKeyword = useMapStore((state) => state.searchKeyword)
@@ -92,6 +165,20 @@ const CardAlbum = () => {
       }
     })
   }, [touchedFields, validationErrors])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showIssuerMenu) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [showIssuerMenu])
 
   const markTouched = (field: keyof typeof touchedFields) => {
     setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
@@ -144,6 +231,11 @@ const CardAlbum = () => {
     return reports.filter((report) => report.itemType === 'card' && report.itemId === selectedCard.id)
   }, [reports, selectedCard])
 
+  const activeForeignIssuerGroup = useMemo(
+    () => FOREIGN_ISSUER_GROUPS.find((group) => group.key === foreignIssuerCategory) ?? FOREIGN_ISSUER_GROUPS[0],
+    [foreignIssuerCategory]
+  )
+
   const handleOpenAddPage = () => {
     setFormData({
       issuer: '',
@@ -152,11 +244,26 @@ const CardAlbum = () => {
       organization: '',
       group: '',
       description: '',
+      isCoBranded: false,
+      hasPointsProgram: false,
+      pointsProgramName: '',
+      hasClubPoints: false,
+      clubPointsProgram: '',
       scope: activeTab,
     })
     setTouchedFields({ issuer: false, title: false, bin: false })
     lastValidationToast.current = {}
+    setShowIssuerMenu(false)
+    setShowAdvancedMenu(false)
+    setIssuerCategory('domestic')
+    setForeignIssuerCategory('hongKong')
     setShowAddPage(true)
+  }
+
+  const handleSelectIssuer = (issuer: string) => {
+    markTouched('issuer')
+    setFormData((prev) => ({ ...prev, issuer }))
+    setShowIssuerMenu(false)
   }
 
   const handleSaveCard = () => {
@@ -170,6 +277,9 @@ const CardAlbum = () => {
     }
 
     const updatedAt = new Date().toISOString().slice(0, 10)
+    const normalizedPointsProgram = formData.hasPointsProgram ? formData.pointsProgramName.trim() : ''
+    const normalizedClubPointsProgram = formData.hasClubPoints ? formData.clubPointsProgram.trim() : ''
+
     if (editingCard) {
       updateCard({
         ...editingCard,
@@ -179,10 +289,16 @@ const CardAlbum = () => {
         organization: formData.organization.trim() || '未知卡组织',
         group: formData.group.trim() || '未分类卡组',
         description: formData.description.trim() || '暂无描述',
+        isCoBranded: formData.isCoBranded,
+        hasPointsProgram: formData.hasPointsProgram,
+        pointsProgramName: normalizedPointsProgram,
+        hasClubPoints: formData.hasClubPoints,
+        clubPointsProgram: normalizedClubPointsProgram,
         scope: formData.scope,
         updatedAt,
       })
       setShowAddPage(false)
+      setShowIssuerMenu(false)
       setEditingCard(null)
       notify.success('卡片信息已更新')
       return
@@ -196,12 +312,18 @@ const CardAlbum = () => {
       organization: formData.organization.trim() || '未知卡组织',
       group: formData.group.trim() || '未分类卡组',
       description: formData.description.trim() || '暂无描述',
+      isCoBranded: formData.isCoBranded,
+      hasPointsProgram: formData.hasPointsProgram,
+      pointsProgramName: normalizedPointsProgram,
+      hasClubPoints: formData.hasClubPoints,
+      clubPointsProgram: normalizedClubPointsProgram,
       scope: formData.scope,
       updatedAt,
     }
 
     addCard(newCard)
     setShowAddPage(false)
+    setShowIssuerMenu(false)
     notify.success('已添加卡片')
   }
 
@@ -219,10 +341,21 @@ const CardAlbum = () => {
       organization: card.organization,
       group: card.group,
       description: card.description,
+      isCoBranded: Boolean(card.isCoBranded),
+      hasPointsProgram: Boolean(card.hasPointsProgram),
+      pointsProgramName: card.pointsProgramName || '',
+      hasClubPoints: Boolean(card.hasClubPoints),
+      clubPointsProgram: card.clubPointsProgram || '',
       scope: card.scope,
     })
     setTouchedFields({ issuer: false, title: false, bin: false })
     lastValidationToast.current = {}
+    setShowIssuerMenu(false)
+    setShowAdvancedMenu(
+      Boolean(card.isCoBranded) || Boolean(card.hasPointsProgram) || Boolean(card.hasClubPoints)
+    )
+    setIssuerCategory('domestic')
+    setForeignIssuerCategory('hongKong')
     setShowAddPage(true)
   }
 
@@ -290,6 +423,7 @@ const CardAlbum = () => {
                   type="button"
                   onClick={() => {
                     setShowAddPage(false)
+                    setShowIssuerMenu(false)
                     setEditingCard(null)
                   }}
                   className="px-6 py-3 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
@@ -322,16 +456,27 @@ const CardAlbum = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">发卡行</label>
-                <input
-                  value={formData.issuer}
-                  onChange={(event) => {
+                <button
+                  type="button"
+                  onClick={() => {
                     markTouched('issuer')
-                    setFormData((prev) => ({ ...prev, issuer: event.target.value }))
+                    setShowIssuerMenu(true)
                   }}
-                  onBlur={() => markTouched('issuer')}
-                  placeholder="请输入发卡行名称"
-                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-                />
+                  className={clsx(
+                    'w-full rounded-xl border px-4 py-3 text-sm transition-all flex items-center justify-between',
+                    formData.issuer
+                      ? 'border-soft-black/25 bg-soft-black/5 text-soft-black'
+                      : 'border-gray-200 text-gray-500 hover:border-accent-yellow/50'
+                  )}
+                >
+                  <span>{formData.issuer || '点击选择发卡行'}</span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {formData.issuer && (
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-xs font-medium border border-blue-100">
+                    已选择：{formData.issuer}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">卡BIN</label>
@@ -349,11 +494,11 @@ const CardAlbum = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">卡组织</label>
-                  <input
+                  <SystemSelect
                     value={formData.organization}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, organization: event.target.value }))}
-                    placeholder="Visa / Mastercard / UnionPay"
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                    onChange={(value) => setFormData((prev) => ({ ...prev, organization: value }))}
+                    options={CARD_ORGANIZATION_OPTIONS}
+                    placeholder="请选择卡组织"
                   />
                 </div>
                 <div>
@@ -365,6 +510,151 @@ const CardAlbum = () => {
                     className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
                   />
                 </div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedMenu((prev) => !prev)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <span className="text-sm font-semibold text-gray-800">高级菜单</span>
+                  <ChevronDown
+                    className={clsx(
+                      'w-4 h-4 text-gray-400 transition-transform',
+                      showAdvancedMenu && 'rotate-180'
+                    )}
+                  />
+                </button>
+
+                {showAdvancedMenu && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">是否联名卡</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, isCoBranded: true }))}
+                          className={clsx(
+                            'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                            formData.isCoBranded
+                              ? 'border-soft-black bg-soft-black text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                          )}
+                        >
+                          是
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, isCoBranded: false }))}
+                          className={clsx(
+                            'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                            !formData.isCoBranded
+                              ? 'border-soft-black bg-soft-black text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                          )}
+                        >
+                          否
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">是否有积分计划</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({ ...prev, hasPointsProgram: true }))
+                          }
+                          className={clsx(
+                            'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                            formData.hasPointsProgram
+                              ? 'border-soft-black bg-soft-black text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                          )}
+                        >
+                          是
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              hasPointsProgram: false,
+                              pointsProgramName: '',
+                            }))
+                          }
+                          className={clsx(
+                            'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                            !formData.hasPointsProgram
+                              ? 'border-soft-black bg-soft-black text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                          )}
+                        >
+                          否
+                        </button>
+                      </div>
+                      {formData.hasPointsProgram && (
+                        <input
+                          value={formData.pointsProgramName}
+                          onChange={(event) =>
+                            setFormData((prev) => ({ ...prev, pointsProgramName: event.target.value }))
+                          }
+                          placeholder="例如 Membership Rewards / Flying Club"
+                          className="mt-3 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">是否积累俱乐部积分</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({ ...prev, hasClubPoints: true }))
+                          }
+                          className={clsx(
+                            'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                            formData.hasClubPoints
+                              ? 'border-soft-black bg-soft-black text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                          )}
+                        >
+                          是
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              hasClubPoints: false,
+                              clubPointsProgram: '',
+                            }))
+                          }
+                          className={clsx(
+                            'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                            !formData.hasClubPoints
+                              ? 'border-soft-black bg-soft-black text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                          )}
+                        >
+                          否
+                        </button>
+                      </div>
+                      {formData.hasClubPoints && (
+                        <input
+                          value={formData.clubPointsProgram}
+                          onChange={(event) =>
+                            setFormData((prev) => ({ ...prev, clubPointsProgram: event.target.value }))
+                          }
+                          placeholder="例如 亚洲万里通 / Marriott Bonvoy"
+                          className="mt-3 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">卡片描述</label>
@@ -606,6 +896,155 @@ const CardAlbum = () => {
         </>
       )}
 
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {showAddPage && showIssuerMenu && (
+              <motion.div
+                className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowIssuerMenu(false)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, x: 40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 40 }}
+                  transition={{ duration: 0.25 }}
+                  className="absolute right-6 top-6 bottom-6 w-[min(92vw,720px)] md:w-[min(48%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">选择发卡行</div>
+                      <div className="text-xs text-gray-400 mt-1">点击银行条目后将自动填充到卡片表单</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowIssuerMenu(false)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="px-6 py-4 border-b border-gray-100 space-y-3">
+                    <div className="inline-flex rounded-full bg-cream p-1">
+                      <button
+                        type="button"
+                        onClick={() => setIssuerCategory('domestic')}
+                        className={clsx(
+                          'px-4 py-2 rounded-full text-xs font-semibold transition-all',
+                          issuerCategory === 'domestic'
+                            ? 'bg-soft-black text-white shadow-sm'
+                            : 'text-gray-500 hover:text-soft-black'
+                        )}
+                      >
+                        国内银行
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIssuerCategory('foreign')}
+                        className={clsx(
+                          'px-4 py-2 rounded-full text-xs font-semibold transition-all',
+                          issuerCategory === 'foreign'
+                            ? 'bg-soft-black text-white shadow-sm'
+                            : 'text-gray-500 hover:text-soft-black'
+                        )}
+                      >
+                        国外银行
+                      </button>
+                    </div>
+
+                    {issuerCategory === 'foreign' && (
+                      <div className="flex flex-wrap gap-2">
+                        {FOREIGN_ISSUER_GROUPS.map((group) => (
+                          <button
+                            key={group.key}
+                            type="button"
+                            onClick={() => setForeignIssuerCategory(group.key)}
+                            className={clsx(
+                              'px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                              foreignIssuerCategory === group.key
+                                ? 'border-soft-black bg-soft-black text-white'
+                                : 'border-gray-200 text-gray-600 hover:border-accent-yellow/50'
+                            )}
+                          >
+                            {group.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-6">
+                    {issuerCategory === 'domestic' ? (
+                      <div className="space-y-6">
+                        {DOMESTIC_ISSUER_GROUPS.map((group) => (
+                          <section key={group.title} className="space-y-2">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                              {group.title}
+                            </div>
+                            <div className="space-y-2">
+                              {group.issuers.map((issuer) => {
+                                const isActive = formData.issuer === issuer
+                                return (
+                                  <button
+                                    key={issuer}
+                                    type="button"
+                                    onClick={() => handleSelectIssuer(issuer)}
+                                    className={clsx(
+                                      'w-full text-left rounded-2xl border px-4 py-3 text-sm transition-all',
+                                      isActive
+                                        ? 'border-soft-black bg-soft-black/5 text-soft-black'
+                                        : 'border-gray-100 text-gray-700 hover:border-accent-yellow/50 hover:bg-cream/60'
+                                    )}
+                                  >
+                                    {issuer}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    ) : (
+                      <section className="space-y-3">
+                        <div className="rounded-2xl border border-gray-100 bg-cream/70 px-4 py-3">
+                          <div className="text-sm font-semibold text-soft-black">{activeForeignIssuerGroup.label}</div>
+                          <div className="text-xs text-gray-500 mt-1">{activeForeignIssuerGroup.description}</div>
+                        </div>
+                        <div className="space-y-2">
+                          {activeForeignIssuerGroup.issuers.map((issuer) => {
+                            const isActive = formData.issuer === issuer
+                            return (
+                              <button
+                                key={issuer}
+                                type="button"
+                                onClick={() => handleSelectIssuer(issuer)}
+                                className={clsx(
+                                  'w-full text-left rounded-2xl border px-4 py-3 text-sm transition-all',
+                                  isActive
+                                    ? 'border-soft-black bg-soft-black/5 text-soft-black'
+                                    : 'border-gray-100 text-gray-700 hover:border-accent-yellow/50 hover:bg-cream/60'
+                                )}
+                              >
+                                {issuer}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
       {showDetailModal && selectedCard && (
         <AnimatedModal
           isOpen={showDetailModal}
@@ -648,6 +1087,26 @@ const CardAlbum = () => {
                 <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
                   <span className="text-gray-500">卡组</span>
                   <span className="font-medium text-gray-900">{selectedCard.group}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-500">联名卡</span>
+                  <span className="font-medium text-gray-900">{selectedCard.isCoBranded ? '是' : '否'}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-500">积分计划</span>
+                  <span className="font-medium text-gray-900">
+                    {selectedCard.hasPointsProgram
+                      ? (selectedCard.pointsProgramName || '已开启')
+                      : '无'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 sm:col-span-2">
+                  <span className="text-gray-500">俱乐部积分关联</span>
+                  <span className="font-medium text-gray-900">
+                    {selectedCard.hasClubPoints
+                      ? (selectedCard.clubPointsProgram || '已关联')
+                      : '无'}
+                  </span>
                 </div>
               </div>
             </div>
