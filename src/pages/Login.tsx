@@ -228,7 +228,7 @@ const Login = () => {
             <div>
               <label className="text-xs font-medium text-gray-600">使用 Passkey 登录</label>
               <p className="text-[11px] text-gray-500 mt-1">
-                在设置页面注册过 Passkey 的邮箱即可直接唤起指纹/Face ID 登录
+                在设置页面注册过 Passkey 的邮箱即可登录，支持系统生物识别与 1Password 等验证器
               </p>
             </div>
             {!showPasskeyForm ? (

@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Building, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { POSMachine } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
 import { useMapStore } from '@/stores/useMapStore'
+import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { usePermissions } from '@/hooks/usePermissions'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedCard from '@/components/ui/AnimatedCard'
 import AnimatedModal from '@/components/ui/AnimatedModal'
-import ContactlessDisplay from '@/components/ui/ContactlessDisplay'
-import CardNetworkIcon from '@/components/ui/CardNetworkIcon'
 import SystemSelect from '@/components/ui/SystemSelect'
 import { type ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -20,6 +20,7 @@ import { AnimatedTabBar } from '@/components/AnimatedNavigation'
 import { CARD_NETWORKS, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { getPaymentMethodLabel, getResultLabel } from '@/lib/utils'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
 import { exportToHTML, exportToJSON, exportToPDF, getFormatDisplayName, getStyleDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
 import { feeUtils } from '@/types/fees'
@@ -62,10 +63,44 @@ interface Attempt {
   user_id?: string
 }
 
+type AttemptDraft = {
+  result: 'success' | 'failure' | 'unknown'
+  attempted_at?: string
+  card_network?: string
+  payment_method?: 'tap' | 'insert' | 'swipe' | 'apple_pay' | 'google_pay' | 'hce'
+  cvm?: 'no_pin' | 'pin' | 'signature' | 'unknown'
+  acquiring_mode?: 'DCC' | 'EDC' | 'unknown'
+  device_status?: 'active' | 'inactive' | 'maintenance' | 'disabled'
+  acquiring_institution?: string
+  checkout_location?: '自助收银' | '人工收银'
+  card_name?: string
+  notes?: string
+  is_conclusive_failure?: boolean
+}
+
 type SupportEvidence = 'supported' | 'unsupported'
 interface SupportEvidenceItem {
   type: SupportEvidence
   attempt: Attempt
+}
+
+interface SupportFusionItem {
+  key: string
+  label: string
+  manualState: ThreeStateValue
+  inferredState: ThreeStateValue
+  resolvedState: ThreeStateValue
+  hasConflict: boolean
+  manualNote?: string
+  evidenceNote?: string
+}
+
+interface SupportFusionSection {
+  key: string
+  title: string
+  description: string
+  icon: typeof CreditCard
+  items: SupportFusionItem[]
 }
 
 const PAYMENT_METHOD_OPTIONS = ['tap', 'insert', 'swipe', 'apple_pay', 'google_pay', 'hce'] as const
@@ -79,6 +114,7 @@ const POSDetail = () => {
   const { posMachines, deletePOSMachine, selectPOSMachine } = useMapStore()
   const permissions = usePermissions()
   const { reports, addReport, resolveReport } = useIssueReportStore()
+  const albumCards = useCardAlbumStore((state) => state.cards)
   
   const [pos, setPOS] = useState<POSMachine | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
@@ -93,19 +129,11 @@ const POSDetail = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showAttemptModal, setShowAttemptModal] = useState(false)
-  const [newAttempt, setNewAttempt] = useState({
-    result: 'success' as 'success' | 'failure' | 'unknown',
-    card_name: '',
-    card_network: '',
-    payment_method: '',
-    cvm: 'unknown',
-    acquiring_mode: 'unknown',
-    device_status: 'active',
-    acquiring_institution: '',
-    checkout_location: '',
-    notes: '',
-    is_conclusive_failure: false
-  })
+  const [draftAttempts, setDraftAttempts] = useState<AttemptDraft[]>([])
+  const [commonCards, setCommonCards] = useState<Array<{ name: string; method?: string }>>([])
+  const [isAlbumPickerOpen, setIsAlbumPickerOpen] = useState(false)
+  const [albumScopeFilter, setAlbumScopeFilter] = useState<'personal' | 'public'>('personal')
+  const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
   const [submittingAttempt, setSubmittingAttempt] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [newStatus, setNewStatus] = useState<POSStatus>('active')
@@ -122,6 +150,110 @@ const POSDetail = () => {
     contact: '',
   })
   const [activeTab, setActiveTab] = useState('overview')
+
+  const attemptResultOptions = [
+    {
+      value: 'success',
+      label: '成功',
+      description: '交易完成或确认支持',
+      icon: CheckCircle,
+      iconClass: 'text-emerald-500'
+    },
+    {
+      value: 'failure',
+      label: '失败',
+      description: '明确失败或无法使用',
+      icon: XCircle,
+      iconClass: 'text-red-500'
+    },
+    {
+      value: 'unknown',
+      label: '未知',
+      description: '结果不确定',
+      icon: HelpCircle,
+      iconClass: 'text-gray-400'
+    }
+  ] as const
+
+  const attemptFieldBase =
+    'w-full rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 text-[16px] text-soft-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-accent-yellow/20 focus:border-accent-yellow/40 min-h-[44px] touch-manipulation webkit-appearance-none webkit-tap-highlight-none dark:bg-slate-900/80 dark:text-gray-100 dark:border-slate-700 dark:placeholder:text-gray-500'
+
+  const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
+  const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
+
+  const createAttemptDraft = (): AttemptDraft => ({
+    result: 'success',
+    attempted_at: new Date().toISOString(),
+    card_network: '',
+    payment_method: 'tap',
+    cvm: 'unknown',
+    acquiring_mode: 'unknown',
+    device_status: pos?.status || 'active',
+    acquiring_institution: pos?.basic_info?.acquiring_institution || '',
+    checkout_location: pos?.basic_info?.checkout_location,
+    card_name: '',
+    notes: '',
+    is_conclusive_failure: false,
+  })
+
+  const addAttemptRow = () => {
+    setDraftAttempts((prev) => [...prev, createAttemptDraft()])
+  }
+
+  const getAttemptMethodLabel = (method: NonNullable<AttemptDraft['payment_method']>) => {
+    switch (method) {
+      case 'tap':
+        return '实体卡 Tap'
+      case 'insert':
+        return '实体卡 Insert'
+      case 'swipe':
+        return '实体卡 Swipe'
+      case 'apple_pay':
+        return 'Apple Pay'
+      case 'google_pay':
+        return 'Google Pay'
+      case 'hce':
+        return 'HCE'
+      default:
+        return ''
+    }
+  }
+
+  const updateAttempt = (index: number, field: keyof AttemptDraft, value: any) => {
+    setDraftAttempts((prev) => prev.map((attempt, i) => (i === index ? { ...attempt, [field]: value } : attempt)))
+  }
+
+  const removeAttempt = (index: number) => {
+    setDraftAttempts((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const saveAttemptAsCommonCard = (index: number) => {
+    const attempt = draftAttempts[index]
+    if (!attempt) return
+    const name = attempt.card_name?.trim()
+    const method = attempt.payment_method
+    if (!name && !method) {
+      notify.error('请先填写卡片名称或支付方式再保存')
+      return
+    }
+    const methodLabel = method ? getAttemptMethodLabel(method) : ''
+    setCommonCards((prev) => {
+      const exists = prev.some((item) => item.name === (name || '') && item.method === (methodLabel || ''))
+      if (exists) {
+        notify.success('已在常用卡片列表中')
+        return prev
+      }
+      notify.success('常用卡片已保存')
+      return [...prev, { name: name || methodLabel || '未命名卡片', method: methodLabel }]
+    })
+  }
+
+  const applyCommonCard = (index: number, cardIndex: number) => {
+    const card = commonCards[cardIndex]
+    if (!card) return
+    updateAttempt(index, 'card_name', card.name)
+    updateAttempt(index, 'notes', card.method || '')
+  }
 
   const attemptMatrix = useMemo(() => {
     const initialMatrix = {
@@ -178,20 +310,181 @@ const POSDetail = () => {
     return initialMatrix
   }, [attempts])
 
+  const attemptsList = draftAttempts || []
+  const attemptsCount = attemptsList.length
+  const attemptSuccessCount = attemptsList.filter((attempt) => attempt.result === 'success').length
+  const attemptFailureCount = attemptsList.filter((attempt) => attempt.result === 'failure').length
+  const attemptSuccessRate = attemptsCount > 0 ? Math.round((attemptSuccessCount / attemptsCount) * 100) : 0
+  const latestAttempt = attemptsList[attemptsCount - 1]
+  const latestAttemptLabel = latestAttempt?.attempted_at
+    ? new Date(latestAttempt.attempted_at).toLocaleString('zh-CN')
+    : ''
+  const latestResultLabel =
+    latestAttempt?.result === 'success'
+      ? '成功'
+      : latestAttempt?.result === 'failure'
+      ? '失败'
+      : latestAttempt?.result === 'unknown'
+      ? '未知'
+      : ''
+  const showAlbumCard = attemptsCount > 0 && albumCards.length > 0
+
+  const selectedAlbumCardLabel = useMemo(() => {
+    if (!selectedAlbumCard) return ''
+    const card = albumCards.find((item) => item.id === selectedAlbumCard)
+    if (!card) return ''
+    return `${card.title} · ${card.issuer} · ${card.organization} (${getAlbumScopeLabel(card.scope)})`
+  }, [albumCards, selectedAlbumCard])
+
+  const filteredAlbumCards = useMemo(() => {
+    return albumCards.filter((card) => card.scope === albumScopeFilter)
+  }, [albumCards, albumScopeFilter])
+
+  const handleApplyAlbumCard = () => {
+    if (!selectedAlbumCard) {
+      notify.error('请选择要使用的卡片')
+      return
+    }
+    const selectedCard = albumCards.find((card) => card.id === selectedAlbumCard)
+    if (!selectedCard) {
+      notify.error('未找到卡片信息')
+      return
+    }
+    const targetIndex = attemptsCount - 1
+    if (targetIndex < 0) {
+      notify.error('请先添加一条尝试记录')
+      return
+    }
+    const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
+    const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.group]
+      .filter(Boolean)
+      .join(' · ')
+    updateAttempt(targetIndex, 'card_name', cardLabel)
+    updateAttempt(targetIndex, 'notes', methodLabel)
+    notify.success('已填充卡片信息')
+    setIsAlbumPickerOpen(false)
+  }
+
+  const attemptSidebar = (
+    <aside className="space-y-6">
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center shadow-soft">
+            <Building className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-soft-black dark:text-gray-100">
+              {pos?.merchant_name || '未命名 POS'}
+            </div>
+            <div className="text-xs text-gray-500">{pos?.address || '暂无地址信息'}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-center">
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/80 px-3 py-3">
+            <div className="text-lg font-semibold text-soft-black dark:text-gray-100">{attemptsCount}</div>
+            <div className="text-[11px] text-gray-500">总尝试</div>
+          </div>
+          <div className="rounded-2xl border border-green-100 bg-green-50/70 px-3 py-3">
+            <div className="text-lg font-semibold text-green-600">{attemptSuccessCount}</div>
+            <div className="text-[11px] text-gray-500">成功</div>
+          </div>
+          <div className="rounded-2xl border border-red-100 bg-red-50/70 px-3 py-3">
+            <div className="text-lg font-semibold text-red-600">{attemptFailureCount}</div>
+            <div className="text-[11px] text-gray-500">失败</div>
+          </div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3">
+            <div className="text-lg font-semibold text-blue-600">{attemptSuccessRate}%</div>
+            <div className="text-[11px] text-gray-500">成功率</div>
+          </div>
+        </div>
+        {latestAttempt && (
+          <div className="rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 text-xs text-gray-500">
+            最近一次：{latestAttemptLabel} · {latestResultLabel}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-white/60 bg-gradient-to-br from-white/90 via-white/80 to-blue-50/80 p-5 shadow-soft">
+        <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+          <Shield className="w-4 h-4 text-accent-yellow" />
+          填写提示
+        </div>
+        <div className="mt-3 space-y-2 text-sm text-gray-500">
+          <p>成功与明确失败会更新支持矩阵，影响默认推荐。</p>
+          <p>若刷卡失败但原因不明，请选择“未知”并在备注说明。</p>
+          <p>卡片名称可写具体发卡行或卡产品名，便于后续追踪。</p>
+        </div>
+      </div>
+
+      {showAlbumCard && (
+        <div className="rounded-3xl border border-white/60 bg-white/90 p-5 shadow-soft space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+            <CreditCard className="w-4 h-4 text-accent-yellow" />
+            从卡册选择
+          </div>
+          <p className="text-[11px] text-gray-400">选择卡片后会自动填充到最新一条尝试记录。</p>
+          <button
+            type="button"
+            onClick={() => setIsAlbumPickerOpen(true)}
+            className="w-full px-4 py-3 rounded-2xl text-sm font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors flex items-center justify-between"
+          >
+            <span>{selectedAlbumCardLabel || '从卡册中选择卡片'}</span>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          </button>
+          <button
+            type="button"
+            className="w-full px-4 py-3 rounded-2xl text-xs font-semibold text-soft-black bg-cream hover:bg-accent-yellow/20 transition-colors"
+            onClick={handleApplyAlbumCard}
+          >
+            填充到最新记录
+          </button>
+        </div>
+      )}
+    </aside>
+  )
+
   const normalizeThreeState = (value?: boolean | ThreeStateValue): ThreeStateValue => {
     if (typeof value === 'boolean') {
       return value ? 'supported' : 'unsupported'
     }
-    return value || 'unknown'
+    return value === 'supported' || value === 'unsupported' || value === 'unknown' ? value : 'unknown'
   }
 
-  const mergeSupportState = (manualState: ThreeStateValue | undefined, evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }) => {
-    if (manualState === 'supported' || manualState === 'unsupported') {
-      return manualState
+  const getInferredState = (evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }) => {
+    const hasSupported = evidence.supported.length > 0
+    const hasUnsupported = evidence.unsupported.length > 0
+
+    if (hasSupported && !hasUnsupported) {
+      return { state: 'supported' as ThreeStateValue, hasConflict: false }
     }
-    if (evidence.supported.length > 0) return 'supported'
-    if (evidence.unsupported.length > 0) return 'unsupported'
-    return 'unknown'
+    if (!hasSupported && hasUnsupported) {
+      return { state: 'unsupported' as ThreeStateValue, hasConflict: false }
+    }
+    if (hasSupported && hasUnsupported) {
+      return { state: 'unknown' as ThreeStateValue, hasConflict: true }
+    }
+    return { state: 'unknown' as ThreeStateValue, hasConflict: false }
+  }
+
+  const resolveSupportState = (
+    manualState: ThreeStateValue,
+    inferredState: ThreeStateValue,
+    inferredConflict: boolean
+  ): { state: ThreeStateValue; hasConflict: boolean } => {
+    if (inferredConflict) {
+      return { state: 'unknown', hasConflict: true }
+    }
+
+    if (inferredState !== 'unknown') {
+      const hasConflict = manualState !== 'unknown' && manualState !== inferredState
+      return { state: inferredState, hasConflict }
+    }
+
+    if (manualState !== 'unknown') {
+      return { state: manualState, hasConflict: false }
+    }
+
+    return { state: 'unknown', hasConflict: false }
   }
 
   const formatEvidenceLabel = (items: SupportEvidenceItem[]) => {
@@ -210,67 +503,401 @@ const POSDetail = () => {
     return `${labels.join(' / ')}${more}`
   }
 
-  const renderAttemptBadge = (state: ThreeStateValue, label: string, evidenceText?: string) => {
-    const styleMap: Record<ThreeStateValue, string> = {
-      supported: 'bg-green-50 text-green-700 border-green-200',
-      unsupported: 'bg-red-50 text-red-700 border-red-200',
-      unknown: 'bg-gray-50 text-gray-500 border-gray-200',
+  const formatEvidenceSummary = (
+    evidence: { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] },
+    inferredState: ThreeStateValue,
+    inferredConflict: boolean
+  ) => {
+    const supportedLabel = formatEvidenceLabel(evidence.supported)
+    const unsupportedLabel = formatEvidenceLabel(evidence.unsupported)
+
+    if (inferredConflict) {
+      const parts: string[] = []
+      if (supportedLabel) parts.push(`支持证据：${supportedLabel}`)
+      if (unsupportedLabel) parts.push(`不支持证据：${unsupportedLabel}`)
+      return parts.join('；')
     }
-    const dotMap: Record<ThreeStateValue, string> = {
-      supported: 'bg-green-500',
-      unsupported: 'bg-red-500',
-      unknown: 'bg-gray-400',
-    }
-    return (
-      <div className={`rounded-xl border px-3 py-2 space-y-1 ${styleMap[state]}`}>
-        <div className="flex items-center justify-between text-xs font-semibold">
-          <span>{label}</span>
-          <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${styleMap[state]}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${dotMap[state]}`} />
-            {state === 'supported' ? '支持' : state === 'unsupported' ? '不支持' : '未知'}
-          </span>
-        </div>
-        {evidenceText && (
-          <div className="text-[10px] text-gray-500 leading-relaxed">{evidenceText}</div>
-        )}
-      </div>
-    )
+
+    if (inferredState === 'supported' && supportedLabel) return `尝试记录：${supportedLabel}`
+    if (inferredState === 'unsupported' && unsupportedLabel) return `失败记录：${unsupportedLabel}`
+    return ''
   }
 
-  const renderMatrixSection = (
-    title: string,
+  const getManualPaymentMethodState = (key: string): ThreeStateValue => {
+    if (!pos?.basic_info) return 'unknown'
+    if (key === 'tap') return normalizeThreeState(pos.basic_info.supports_contactless)
+    if (key === 'apple_pay') return normalizeThreeState(pos.basic_info.supports_apple_pay)
+    if (key === 'google_pay') return normalizeThreeState(pos.basic_info.supports_google_pay)
+    if (key === 'hce') return normalizeThreeState(pos.basic_info.supports_hce_simulation)
+    return 'unknown'
+  }
+
+  const getManualVerificationState = (key: string): ThreeStateValue => {
+    const modes = pos?.verification_modes
+    if (!modes) return 'unknown'
+
+    if (key === 'no_pin') {
+      if (modes.small_amount_no_pin_unsupported) return 'unsupported'
+      if (modes.small_amount_no_pin && modes.small_amount_no_pin.length > 0) return 'supported'
+      if (modes.small_amount_no_pin_uncertain) return 'unknown'
+      return 'unknown'
+    }
+    if (key === 'pin') {
+      if (modes.requires_password_unsupported) return 'unsupported'
+      if (modes.requires_password && modes.requires_password.length > 0) return 'supported'
+      if (modes.requires_password_uncertain) return 'unknown'
+      return 'unknown'
+    }
+    if (key === 'signature') {
+      if (modes.requires_signature_unsupported) return 'unsupported'
+      if (modes.requires_signature && modes.requires_signature.length > 0) return 'supported'
+      if (modes.requires_signature_uncertain) return 'unknown'
+      return 'unknown'
+    }
+    return 'unknown'
+  }
+
+  const getManualVerificationNote = (key: string) => {
+    const modes = pos?.verification_modes
+    if (!modes) return undefined
+
+    if (key === 'no_pin') {
+      if (modes.small_amount_no_pin && modes.small_amount_no_pin.length > 0) {
+        return `配置记录：${modes.small_amount_no_pin.join('、')}`
+      }
+      if (modes.small_amount_no_pin_uncertain) return '配置记录：待确认'
+    }
+    if (key === 'pin') {
+      if (modes.requires_password && modes.requires_password.length > 0) {
+        return `配置记录：${modes.requires_password.join('、')}`
+      }
+      if (modes.requires_password_uncertain) return '配置记录：待确认'
+    }
+    if (key === 'signature') {
+      if (modes.requires_signature && modes.requires_signature.length > 0) {
+        return `配置记录：${modes.requires_signature.join('、')}`
+      }
+      if (modes.requires_signature_uncertain) return '配置记录：待确认'
+    }
+    return undefined
+  }
+
+  const getManualAcquiringModeState = (key: string): ThreeStateValue => {
+    const basicInfo = pos?.basic_info
+    if (!basicInfo) return 'unknown'
+
+    if (key === 'DCC') {
+      if (basicInfo.supports_dcc !== undefined) return normalizeThreeState(basicInfo.supports_dcc)
+      if (basicInfo.acquiring_modes?.includes('DCC')) return 'supported'
+    }
+
+    if (key === 'EDC') {
+      if (basicInfo.supports_edc !== undefined) return normalizeThreeState(basicInfo.supports_edc)
+      if (basicInfo.acquiring_modes?.includes('EDC')) return 'supported'
+    }
+
+    return 'unknown'
+  }
+
+  const getManualAcquiringModeNote = (key: string) => {
+    if (!pos?.basic_info?.acquiring_modes?.includes(key)) return undefined
+    return '配置记录：收单模式包含该项'
+  }
+
+  const getManualCheckoutState = (key: string): ThreeStateValue => {
+    if (!pos?.basic_info?.checkout_location) return 'unknown'
+    return pos.basic_info.checkout_location === key ? 'supported' : 'unknown'
+  }
+
+  const getManualCheckoutNote = (key: string) => {
+    if (pos?.basic_info?.checkout_location !== key) return undefined
+    return '配置记录：当前结账位置'
+  }
+
+  const getManualDeviceStatusState = (key: string): ThreeStateValue => {
+    if (!pos?.status) return 'unknown'
+    return pos.status === key ? 'supported' : 'unknown'
+  }
+
+  const getManualDeviceStatusNote = (key: string) => {
+    if (pos?.status !== key) return undefined
+    return '配置记录：当前设备状态'
+  }
+
+  const getManualInstitutionState = (key: string): ThreeStateValue => {
+    if (!pos?.basic_info?.acquiring_institution) return 'unknown'
+    return pos.basic_info.acquiring_institution === key ? 'supported' : 'unknown'
+  }
+
+  const getManualInstitutionNote = (key: string) => {
+    if (pos?.basic_info?.acquiring_institution !== key) return undefined
+    return '配置记录：当前主收单机构'
+  }
+
+  const buildSupportFusionItems = (
     items: Array<{ key: string; label: string }>,
     evidenceMap: Map<string, { supported: SupportEvidenceItem[]; unsupported: SupportEvidenceItem[] }>,
-    manualStateResolver?: (key: string) => ThreeStateValue | undefined
-  ) => {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-soft-black dark:text-gray-100">{title}</h4>
-          <span className="text-[10px] text-gray-400">基于成功尝试/明确失败推导</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {items.map((item) => {
-            const evidence = evidenceMap.get(item.key) || { supported: [], unsupported: [] }
-            const state = mergeSupportState(manualStateResolver?.(item.key), evidence)
-            const evidenceText = formatEvidenceLabel(
-              state === 'supported' ? evidence.supported : state === 'unsupported' ? evidence.unsupported : []
-            )
-            return (
-              <div key={item.key}>
-                {renderAttemptBadge(state, item.label, evidenceText)}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
+    resolveManualState: (key: string) => ThreeStateValue,
+    resolveManualNote?: (key: string) => string | undefined
+  ): SupportFusionItem[] => {
+    return items.map((item) => {
+      const evidence = evidenceMap.get(item.key) || { supported: [], unsupported: [] }
+      const { state: inferredState, hasConflict: inferredConflict } = getInferredState(evidence)
+      const manualState = resolveManualState(item.key)
+      const resolved = resolveSupportState(manualState, inferredState, inferredConflict)
+
+      return {
+        key: item.key,
+        label: item.label,
+        manualState,
+        inferredState,
+        resolvedState: resolved.state,
+        hasConflict: resolved.hasConflict,
+        manualNote: resolveManualNote?.(item.key),
+        evidenceNote: formatEvidenceSummary(evidence, inferredState, inferredConflict),
+      }
+    })
+  }
+
+  const acquiringInstitutionKeys = Array.from(
+    new Set([pos?.basic_info?.acquiring_institution, ...Array.from(attemptMatrix.acquiringInstitutions.keys())].filter(Boolean))
+  ) as string[]
+
+  const supportFusionSections: SupportFusionSection[] = [
+    {
+      key: 'network',
+      title: '卡组织支持',
+      description: '配置与尝试记录综合结果',
+      icon: CreditCard,
+      items: buildSupportFusionItems(
+        CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
+        attemptMatrix.cardNetworks,
+        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? 'supported' : 'unknown'),
+        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? '配置记录：列入支持卡组织' : undefined)
+      ),
+    },
+    {
+      key: 'payment-method',
+      title: '支付方式',
+      description: 'NFC / 钱包 / 插卡能力',
+      icon: Smartphone,
+      items: buildSupportFusionItems(
+        PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
+        attemptMatrix.paymentMethods,
+        getManualPaymentMethodState,
+        (key) => {
+          if (key === 'tap' && pos?.basic_info?.min_amount_no_pin) {
+            return `配置记录：免密金额上限 ¥${pos.basic_info.min_amount_no_pin}`
+          }
+          return undefined
+        }
+      ),
+    },
+    {
+      key: 'cvm',
+      title: '验证方式 (CVM)',
+      description: '免密 / PIN / 签名三态',
+      icon: Shield,
+      items: buildSupportFusionItems(
+        CVM_OPTIONS.map((cvm) => ({
+          key: cvm,
+          label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名',
+        })),
+        attemptMatrix.cvm,
+        getManualVerificationState,
+        getManualVerificationNote
+      ),
+    },
+    {
+      key: 'acquiring-mode',
+      title: '收单模式',
+      description: 'DCC / EDC 支持情况',
+      icon: Settings,
+      items: buildSupportFusionItems(
+        ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
+        attemptMatrix.acquiringModes,
+        getManualAcquiringModeState,
+        getManualAcquiringModeNote
+      ),
+    },
+    {
+      key: 'checkout-location',
+      title: '结账位置',
+      description: '自助与人工收银场景',
+      icon: MapPin,
+      items: buildSupportFusionItems(
+        [
+          { key: '自助收银', label: '自助收银' },
+          { key: '人工收银', label: '人工收银' },
+        ],
+        attemptMatrix.checkoutLocations,
+        getManualCheckoutState,
+        getManualCheckoutNote
+      ),
+    },
+    {
+      key: 'device-status',
+      title: '设备状态',
+      description: '运行状态与尝试反馈',
+      icon: Settings,
+      items: buildSupportFusionItems(
+        [
+          { key: 'active', label: '正常运行' },
+          { key: 'inactive', label: '暂时不可用' },
+          { key: 'maintenance', label: '维修中' },
+          { key: 'disabled', label: '已停用' },
+        ],
+        attemptMatrix.deviceStatus,
+        getManualDeviceStatusState,
+        getManualDeviceStatusNote
+      ),
+    },
+    {
+      key: 'institution',
+      title: '收单机构',
+      description: '主收单方与尝试反馈',
+      icon: Building,
+      items: buildSupportFusionItems(
+        acquiringInstitutionKeys.map((key) => ({ key, label: key })),
+        attemptMatrix.acquiringInstitutions,
+        getManualInstitutionState,
+        getManualInstitutionNote
+      ),
+    },
+  ]
+
+  const allFusionItems = supportFusionSections.flatMap((section) => section.items)
+  const supportFusionSummary = {
+    total: allFusionItems.length,
+    supported: allFusionItems.filter((item) => item.resolvedState === 'supported').length,
+    unsupported: allFusionItems.filter((item) => item.resolvedState === 'unsupported').length,
+    unknown: allFusionItems.filter((item) => item.resolvedState === 'unknown').length,
+    conflicts: allFusionItems.filter((item) => item.hasConflict).length,
+  }
+
+  const hasManualPaymentData = !!pos && (
+    (!!pos.basic_info && Object.keys(pos.basic_info).length > 0) ||
+    (!!pos.verification_modes && Object.keys(pos.verification_modes).length > 0)
+  )
+
+  const supportStateLabelMap: Record<ThreeStateValue, string> = {
+    supported: '支持',
+    unsupported: '不支持',
+    unknown: '未知',
+  }
+
+  const paymentOverviewCardClass = 'rounded-2xl border border-gray-100 bg-gray-50/80'
+
+  const supportStateCardClassMap: Record<ThreeStateValue, string> = {
+    supported: paymentOverviewCardClass,
+    unsupported: paymentOverviewCardClass,
+    unknown: paymentOverviewCardClass,
+  }
+
+  const supportStateBadgeClassMap: Record<ThreeStateValue, string> = {
+    supported: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    unsupported: 'bg-rose-100 text-rose-700 border border-rose-200',
+    unknown: 'bg-slate-100 text-slate-600 border border-slate-200',
+  }
+
+  const supportStateDotClassMap: Record<ThreeStateValue, string> = {
+    supported: 'bg-emerald-500',
+    unsupported: 'bg-rose-500',
+    unknown: 'bg-slate-400',
+  }
+
+  const supportSectionStyleMap: Record<
+    string,
+    {
+      panelClass: string
+      iconClass: string
+      countClass: string
+      gridClass: string
+      layout: 'network' | 'method' | 'cvm' | 'default'
+    }
+  > = {
+    network: {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'network',
+    },
+    'payment-method': {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 space-y-2.5',
+      layout: 'method',
+    },
+    cvm: {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 space-y-2.5',
+      layout: 'cvm',
+    },
+    'acquiring-mode': {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    'checkout-location': {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    'device-status': {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    institution: {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    default: {
+      panelClass: 'border-gray-100 bg-gray-50/80',
+      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
+      countClass: 'border border-gray-100 bg-white text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+  }
+
+  const paymentMethodIconMap: Record<string, typeof CreditCard> = {
+    tap: Smartphone,
+    insert: CreditCard,
+    swipe: CreditCard,
+    apple_pay: Smartphone,
+    google_pay: Smartphone,
+    hce: Shield,
+  }
+
+  const getUnifiedSupportNote = (item: SupportFusionItem) => {
+    if (item.evidenceNote) return item.evidenceNote
+    if (item.manualNote) return item.manualNote
+    return '暂无相关记录'
   }
 
   const isMobileActionsDisabled = !pos?.id
-  const handleAttemptClick = () => {
+  const openAttemptModal = () => {
     if (!pos) return
+    setDraftAttempts((prev) => (prev.length > 0 ? prev : [createAttemptDraft()]))
     setShowAttemptModal(true)
+  }
+
+  const handleAttemptClick = () => {
+    openAttemptModal()
   }
   const handleReviewClick = () => {
     if (!pos) return
@@ -293,12 +920,6 @@ const POSDetail = () => {
   useEffect(() => {
     if (pos) {
       loadExternalLinks(pos)
-      setNewAttempt((prev) => ({
-        ...prev,
-        device_status: pos.status || 'active',
-        acquiring_institution: pos.basic_info?.acquiring_institution || '',
-        checkout_location: pos.basic_info?.checkout_location || ''
-      }))
     } else {
       setExternalLinks([])
     }
@@ -695,30 +1316,13 @@ const POSDetail = () => {
       return
     }
 
-    // 验证必填字段
-    if (!newAttempt.result) {
-      notify.error('请选择尝试结果')
+    if (attemptsCount === 0) {
+      notify.error('请先添加一条尝试记录')
       return
     }
 
     setSubmittingAttempt(true)
     try {
-      console.log('开始提交尝试记录:', {
-        pos_id: id,
-        user_id: user.id,
-        result: newAttempt.result,
-        card_name: newAttempt.card_name.trim() || null,
-        card_network: newAttempt.card_network || null,
-        payment_method: newAttempt.payment_method || null,
-        cvm: newAttempt.cvm || 'unknown',
-        acquiring_mode: newAttempt.acquiring_mode || 'unknown',
-        device_status: newAttempt.device_status || pos?.status || 'active',
-        acquiring_institution: newAttempt.acquiring_institution?.trim() || null,
-        checkout_location: newAttempt.checkout_location || pos?.basic_info?.checkout_location || null,
-        notes: newAttempt.notes.trim() || null,
-        is_conclusive_failure: newAttempt.is_conclusive_failure || false
-      })
-
       // 检查用户认证状态
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !session) {
@@ -745,27 +1349,29 @@ const POSDetail = () => {
       }
       const nextAttemptNumber = latestAttempt?.attempt_number ? latestAttempt.attempt_number + 1 : 1
 
+      const attemptsPayload = attemptsList.map((attempt, index) => ({
+        pos_id: id,
+        user_id: user.id,
+        attempt_number: nextAttemptNumber + index,
+        result: attempt.result,
+        card_name: attempt.card_name?.trim() || null,
+        card_network: attempt.card_network || null,
+        payment_method: attempt.payment_method || null,
+        cvm: attempt.cvm || 'unknown',
+        acquiring_mode: attempt.acquiring_mode || 'unknown',
+        device_status: attempt.device_status || pos?.status || 'active',
+        acquiring_institution: attempt.acquiring_institution?.trim() || null,
+        checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
+        notes: attempt.notes?.trim() || null,
+        attempted_at: attempt.attempted_at || null,
+        is_conclusive_failure: attempt.is_conclusive_failure || false,
+      }))
+
       // 保存尝试记录到Supabase数据库
       const { data, error } = await supabase
         .from('pos_attempts')
-        .insert({
-          pos_id: id,
-          user_id: user.id,
-          attempt_number: nextAttemptNumber,
-          result: newAttempt.result,
-          card_name: newAttempt.card_name.trim() || null,
-          card_network: newAttempt.card_network || null,
-          payment_method: newAttempt.payment_method || null,
-          cvm: newAttempt.cvm || 'unknown',
-          acquiring_mode: newAttempt.acquiring_mode || 'unknown',
-          device_status: newAttempt.device_status || pos?.status || 'active',
-          acquiring_institution: newAttempt.acquiring_institution?.trim() || null,
-          checkout_location: newAttempt.checkout_location || pos?.basic_info?.checkout_location || null,
-          notes: newAttempt.notes.trim() || null,
-          is_conclusive_failure: newAttempt.is_conclusive_failure || false
-        })
+        .insert(attemptsPayload)
         .select()
-        .single()
       
       if (error) {
         console.error('提交尝试记录失败:', {
@@ -784,48 +1390,47 @@ const POSDetail = () => {
         } else if (error.message?.includes('RLS')) {
           notify.error('数据访问权限错误，请重新登录')
         } else {
-          notify.error(`提交失败: ${error.message || '未知错误'}`)
+          const missingColumn = extractMissingColumnFromError(error)
+          if (missingColumn) {
+            // Hard-fail: never drop fields silently when the schema is out of date.
+            notify.critical(`提交失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql，并刷新 PostgREST schema cache。`, {
+              title: '数据库需要升级',
+            })
+          } else {
+            notify.error(`提交失败: ${error.message || '未知错误'}`)
+          }
         }
         return
       }
       
-      // 添加到本地列表
-      const newAttemptData: Attempt = {
-        id: data.id,
-        created_at: data.created_at,
-        result: data.result,
-        card_name: data.card_name,
-        card_network: data.card_network,
-        payment_method: data.payment_method,
-        cvm: data.cvm,
-        acquiring_mode: data.acquiring_mode,
-        device_status: data.device_status,
-        acquiring_institution: data.acquiring_institution,
-        checkout_location: data.checkout_location,
-        notes: data.notes,
-        attempted_at: data.attempted_at,
-        is_conclusive_failure: data.is_conclusive_failure,
-        user_id: data.user_id
+      const insertedAttempts: Attempt[] = (data || []).map((item) => ({
+        id: item.id,
+        created_at: item.created_at || new Date().toISOString(),
+        result: item.result,
+        card_name: item.card_name,
+        card_network: item.card_network,
+        payment_method: item.payment_method,
+        cvm: item.cvm,
+        acquiring_mode: item.acquiring_mode,
+        device_status: item.device_status,
+        acquiring_institution: item.acquiring_institution,
+        checkout_location: item.checkout_location,
+        notes: item.notes,
+        attempted_at: item.attempted_at,
+        is_conclusive_failure: item.is_conclusive_failure,
+        user_id: item.user_id,
+      }))
+
+      if (insertedAttempts.length > 0) {
+        insertedAttempts.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+        setAttempts((prev) => [...insertedAttempts, ...prev])
       }
-      
-      setAttempts(prev => [newAttemptData, ...prev])
       
       notify.success('尝试记录提交成功')
       
-      // 确保状态重置在同一个事件循环中完成
-      setNewAttempt({
-        result: 'success',
-        card_name: '',
-        card_network: '',
-        payment_method: '',
-        cvm: 'unknown',
-        acquiring_mode: 'unknown',
-        device_status: pos?.status || 'active',
-        acquiring_institution: pos?.basic_info?.acquiring_institution || '',
-        checkout_location: pos?.basic_info?.checkout_location || '',
-        notes: '',
-        is_conclusive_failure: false
-      })
+      setDraftAttempts([])
+      setSelectedAlbumCard('')
+      setIsAlbumPickerOpen(false)
       
       // 使用setTimeout确保模态框能正确关闭
       setTimeout(() => {
@@ -1041,7 +1646,9 @@ const POSDetail = () => {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {!showAttemptModal && (
+        <>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <AnimatedCard
           className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft"
           variant="elevated"
@@ -1205,12 +1812,12 @@ const POSDetail = () => {
                 </div>
               </div>
             </div>
-            {(pos.latitude && pos.longitude) || pos.created_at ? (
+            {(pos.address || (pos.latitude && pos.longitude)) || pos.created_at ? (
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  {pos.latitude && pos.longitude && (
+                  {(pos.address || (pos.latitude && pos.longitude)) && (
                     <div>
-                      坐标: {pos.latitude.toFixed(6)}, {pos.longitude.toFixed(6)}
+                      位置: {pos.address || `${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`}
                     </div>
                   )}
                   {pos.created_at && (
@@ -1318,139 +1925,237 @@ const POSDetail = () => {
 
           {activeTab === 'payment' && (
             <>
-              {pos.basic_info && Object.keys(pos.basic_info).length > 0 ? (
+              {hasManualPaymentData || attempts.length > 0 ? (
                 <>
                   <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-3 mb-6">
-                        <CreditCard className="w-5 h-5 text-accent-yellow" />
-                        <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">支持的卡组织</h3>
-                      </div>
-                      {pos.basic_info.supported_card_networks && pos.basic_info.supported_card_networks.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {pos.basic_info.supported_card_networks.map((network) => (
-                            <div
-                              key={network}
-                              className="flex flex-col items-center p-4 rounded-2xl border border-gray-100 bg-gray-50/80"
-                            >
-                              <div className="w-14 h-10 rounded-xl bg-white shadow-soft flex items-center justify-center mb-2">
-                                <CardNetworkIcon network={network} className="w-12 h-8" />
-                              </div>
-                              <span className="text-xs font-semibold text-gray-600 text-center">
-                                {getCardNetworkLabel(network)}
-                              </span>
+                    <CardContent className="p-6 md:p-7 space-y-5">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-2xl bg-accent-yellow/15 text-accent-yellow shadow-soft flex items-center justify-center">
+                              <Shield className="w-5 h-5" />
                             </div>
-                          ))}
+                            <div>
+                              <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">支付能力支持看板</h3>
+                              <p className="text-sm text-gray-500">
+                                按能力维度汇总当前结果，直观看出重点补测项
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-6 text-center text-sm text-gray-500">
-                          暂无卡组织信息
+                        <div className="inline-flex items-center rounded-full border border-white/80 bg-white/80 px-3 py-1 text-xs font-semibold text-gray-600 shadow-soft">
+                          <Clock className="mr-1.5 h-3.5 w-3.5 text-accent-yellow" />
+                          尝试记录 {attempts.length} 条
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                        <div className="rounded-2xl border border-white/70 bg-white/85 px-3 py-3 text-center shadow-soft">
+                          <div className="text-base font-semibold text-soft-black">{supportFusionSummary.total}</div>
+                          <div className="text-[11px] text-gray-500">矩阵项</div>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/90 px-3 py-3 text-center">
+                          <div className="text-base font-semibold text-emerald-700">{supportFusionSummary.supported}</div>
+                          <div className="text-[11px] text-emerald-600/80">支持</div>
+                        </div>
+                        <div className="rounded-2xl border border-rose-100 bg-rose-50/90 px-3 py-3 text-center">
+                          <div className="text-base font-semibold text-rose-700">{supportFusionSummary.unsupported}</div>
+                          <div className="text-[11px] text-rose-600/80">不支持</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-3 py-3 text-center">
+                          <div className="text-base font-semibold text-slate-600">{supportFusionSummary.unknown}</div>
+                          <div className="text-[11px] text-slate-500">未知</div>
+                        </div>
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50/90 px-3 py-3 text-center">
+                          <div className="text-base font-semibold text-amber-700">{supportFusionSummary.conflicts}</div>
+                          <div className="text-[11px] text-amber-600/80">待复核</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          支持
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 font-medium text-rose-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          不支持
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                          未知
+                        </span>
+                      </div>
+
+                      {supportFusionSummary.conflicts > 0 && (
+                        <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-700">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          存在 {supportFusionSummary.conflicts} 项冲突，建议补充备注或新增尝试记录核实。
                         </div>
                       )}
+
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3 text-xs text-gray-500 leading-relaxed">
+                        说明：若存在尝试记录，优先采用尝试结果；若无尝试记录，则采用现有配置。记录互相矛盾时会标记“需复核”。
+                      </div>
                     </CardContent>
                   </AnimatedCard>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                      <CardContent className="p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <Smartphone className="w-5 h-5 text-accent-yellow" />
-                          <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">Contactless 支持</h3>
-                        </div>
-                        <ContactlessDisplay
-                          supports_contactless={pos.basic_info.supports_contactless}
-                          supports_apple_pay={pos.basic_info.supports_apple_pay}
-                          supports_google_pay={pos.basic_info.supports_google_pay}
-                          supports_hce_simulation={pos.basic_info.supports_hce_simulation}
-                        />
-                      </CardContent>
-                    </AnimatedCard>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {supportFusionSections.map((section) => {
+                      const SectionIcon = section.icon
+                      const sectionStyle = supportSectionStyleMap[section.key] || supportSectionStyleMap.default
+                      return (
+                        <AnimatedCard
+                          key={section.key}
+                          className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft"
+                          variant="elevated"
+                          hoverable
+                        >
+                          <CardContent className="p-6">
+                            <div className={`rounded-3xl border p-4 sm:p-5 shadow-soft ${sectionStyle.panelClass}`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-8 w-8 rounded-xl flex items-center justify-center ${sectionStyle.iconClass}`}>
+                                    <SectionIcon className="h-4 w-4" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-soft-black dark:text-gray-100">{section.title}</h4>
+                                    <p className="text-xs text-gray-500">{section.description}</p>
+                                  </div>
+                                </div>
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${sectionStyle.countClass}`}>
+                                  {section.items.length} 项
+                                </span>
+                              </div>
 
-                    <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                      <CardContent className="p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <Shield className="w-5 h-5 text-accent-yellow" />
-                          <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">验证模式详情</h3>
-                        </div>
-                        <div className="grid gap-3 text-sm">
-                          <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-                            <span className="text-gray-600">小额免密</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              pos.verification_modes?.small_amount_no_pin_unsupported
-                                ? 'bg-red-100 text-red-700'
-                                : pos.verification_modes?.small_amount_no_pin_uncertain
-                                ? 'bg-orange-100 text-orange-700'
-                                : pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {pos.verification_modes?.small_amount_no_pin_unsupported
-                                ? '不支持'
-                                : pos.verification_modes?.small_amount_no_pin_uncertain
-                                ? '未确定'
-                                : pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0
-                                ? '支持'
-                                : '未确定'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-                            <span className="text-gray-600">PIN验证</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              pos.verification_modes?.requires_password_unsupported
-                                ? 'bg-red-100 text-red-700'
-                                : pos.verification_modes?.requires_password_uncertain
-                                ? 'bg-orange-100 text-orange-700'
-                                : pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {pos.verification_modes?.requires_password_unsupported
-                                ? '不支持'
-                                : pos.verification_modes?.requires_password_uncertain
-                                ? '未确定'
-                                : pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0
-                                ? '支持'
-                                : '未确定'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-                            <span className="text-gray-600">签名验证</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              pos.verification_modes?.requires_signature_unsupported
-                                ? 'bg-red-100 text-red-700'
-                                : pos.verification_modes?.requires_signature_uncertain
-                                ? 'bg-orange-100 text-orange-700'
-                                : pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {pos.verification_modes?.requires_signature_unsupported
-                                ? '不支持'
-                                : pos.verification_modes?.requires_signature_uncertain
-                                ? '未确定'
-                                : pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0
-                                ? '支持'
-                                : '未确定'}
-                            </span>
-                          </div>
-                        </div>
-                        {((pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0) ||
-                          (pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0) ||
-                          (pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0)) && (
-                          <div className="grid gap-2 text-xs text-gray-500">
-                            {pos.verification_modes?.small_amount_no_pin && pos.verification_modes.small_amount_no_pin.length > 0 && (
-                              <div>小额免密：{pos.verification_modes.small_amount_no_pin.join('、')}</div>
-                            )}
-                            {pos.verification_modes?.requires_password && pos.verification_modes.requires_password.length > 0 && (
-                              <div>PIN：{pos.verification_modes.requires_password.join('、')}</div>
-                            )}
-                            {pos.verification_modes?.requires_signature && pos.verification_modes.requires_signature.length > 0 && (
-                              <div>签名：{pos.verification_modes.requires_signature.join('、')}</div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </AnimatedCard>
+                              {section.items.length > 0 ? (
+                                <div className={sectionStyle.gridClass}>
+                                  {section.items.map((item) => {
+                                    const methodIcon = paymentMethodIconMap[item.key] || CreditCard
+                                    const MethodIcon = methodIcon
+                                    const unifiedNote = getUnifiedSupportNote(item)
+                                    const conflictTag = item.hasConflict ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        需复核
+                                      </span>
+                                    ) : null
+
+                                    if (sectionStyle.layout === 'method') {
+                                      return (
+                                        <div
+                                          key={item.key}
+                                          className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                            item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3">
+                                              <div className="h-9 w-9 rounded-xl bg-white/85 border border-white/90 text-gray-600 flex items-center justify-center">
+                                                <MethodIcon className="h-4 w-4" />
+                                              </div>
+                                              <div>
+                                                <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                              </div>
+                                            </div>
+                                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                              <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                              {supportStateLabelMap[item.resolvedState]}
+                                            </span>
+                                          </div>
+
+                                          {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
+                                          <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                            {unifiedNote}
+                                          </p>
+                                        </div>
+                                      )
+                                    }
+
+                                    if (sectionStyle.layout === 'cvm') {
+                                      return (
+                                        <div
+                                          key={item.key}
+                                          className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                            item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                          }`}
+                                        >
+                                          <div className="flex items-start gap-3">
+                                            <span className={`mt-1 h-8 w-1 shrink-0 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                            <div className="flex-1 space-y-2">
+                                              <div className="flex items-start justify-between gap-3">
+                                                <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                  {supportStateLabelMap[item.resolvedState]}
+                                                </span>
+                                              </div>
+                                              {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
+                                              <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                {unifiedNote}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+
+                                    if (sectionStyle.layout === 'network') {
+                                      return (
+                                        <div
+                                          key={item.key}
+                                          className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                            item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                          }`}
+                                        >
+                                          <div className="flex items-start justify-between gap-3">
+                                            <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                              <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                              {supportStateLabelMap[item.resolvedState]}
+                                            </span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-500 min-h-[2.2rem]">
+                                            {unifiedNote}
+                                          </div>
+                                          {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                        </div>
+                                      )
+                                    }
+
+                                    return (
+                                      <div
+                                        key={item.key}
+                                        className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                          item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                        }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                            {supportStateLabelMap[item.resolvedState]}
+                                          </span>
+                                        </div>
+
+                                        <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.6rem]">
+                                          <p>{unifiedNote}</p>
+                                        </div>
+
+                                        {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
+                                  暂无可展示数据
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </AnimatedCard>
+                      )
+                    })}
                   </div>
 
                   {pos.fees && (
@@ -1515,7 +2220,7 @@ const POSDetail = () => {
               ) : (
                 <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
                   <CardContent className="p-6 text-center text-sm text-gray-500">
-                    暂无支付与验证信息
+                    暂无支付能力数据，请先补充基础配置或新增尝试记录。
                   </CardContent>
                 </AnimatedCard>
               )}
@@ -1531,7 +2236,7 @@ const POSDetail = () => {
                     尝试记录
                   </CardTitle>
                   {permissions.canAdd && (
-                    <AnimatedButton onClick={() => setShowAttemptModal(true)} size="sm">
+                    <AnimatedButton onClick={openAttemptModal} size="sm">
                       <Clock className="w-4 h-4 mr-2" />
                       记录尝试
                     </AnimatedButton>
@@ -1561,87 +2266,6 @@ const POSDetail = () => {
                           </div>
                           <div className="text-xs text-gray-500">成功率</div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-5">
-                      <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
-                        {renderMatrixSection(
-                          '卡组织支持矩阵',
-                          CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
-                          attemptMatrix.cardNetworks,
-                          (key) => {
-                            const hasManualSupported = pos?.basic_info?.supported_card_networks?.includes(key)
-                            return hasManualSupported ? 'supported' : 'unknown'
-                          }
-                        )}
-
-                        {renderMatrixSection(
-                          '支付方式支持矩阵',
-                          PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
-                          attemptMatrix.paymentMethods,
-                          (key) => {
-                            if (!pos?.basic_info) return 'unknown'
-                            if (key === 'tap') {
-                              return normalizeThreeState(pos.basic_info.supports_contactless)
-                            }
-                            if (key === 'apple_pay') {
-                              return normalizeThreeState(pos.basic_info.supports_apple_pay)
-                            }
-                            if (key === 'google_pay') {
-                              return normalizeThreeState(pos.basic_info.supports_google_pay)
-                            }
-                            if (key === 'hce') {
-                              return normalizeThreeState(pos.basic_info.supports_hce_simulation)
-                            }
-                            return 'unknown'
-                          }
-                        )}
-
-                        {renderMatrixSection(
-                          '验证方式 (CVM)',
-                          CVM_OPTIONS.map((cvm) => ({ key: cvm, label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名' })),
-                          attemptMatrix.cvm
-                        )}
-
-                        {renderMatrixSection(
-                          '收单模式',
-                          ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
-                          attemptMatrix.acquiringModes
-                        )}
-                      </div>
-
-                      <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
-                        {renderMatrixSection(
-                          '结账地点',
-                          [
-                            { key: '自助收银', label: '自助收银' },
-                            { key: '人工收银', label: '人工收银' },
-                          ],
-                          attemptMatrix.checkoutLocations
-                        )}
-
-                        {renderMatrixSection(
-                          '设备状态',
-                          [
-                            { key: 'active', label: '正常运行' },
-                            { key: 'inactive', label: '暂时不可用' },
-                            { key: 'maintenance', label: '维修中' },
-                            { key: 'disabled', label: '已停用' },
-                          ],
-                          attemptMatrix.deviceStatus
-                        )}
-
-                        {renderMatrixSection(
-                          '收单机构',
-                          Array.from(attemptMatrix.acquiringInstitutions.keys()).map((key) => ({ key, label: key })),
-                          attemptMatrix.acquiringInstitutions,
-                          (key) => (key === pos?.basic_info?.acquiring_institution ? 'supported' : 'unknown')
-                        )}
-                      </div>
-
-                      <div className="text-xs text-gray-500 bg-gray-50/80 border border-gray-100 rounded-xl p-3">
-                        说明：成功尝试会推导“支持”，明确失败会推导“不支持”。手动设置的支持项优先显示，若与尝试记录冲突请以备注核实。
                       </div>
                     </div>
 
@@ -1888,674 +2512,898 @@ const POSDetail = () => {
             </>
           )}
 
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur pb-safe-bottom">
-            <div className="grid grid-cols-4 gap-2 px-4 py-3">
-              <button
-                type="button"
-                onClick={toggleFavorite}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="收藏"
-              >
-                <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
-                收藏
-              </button>
-              <button
-                type="button"
-                onClick={handleNavigateToMap}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="导航"
-              >
-                <MapPin className="w-5 h-5 text-gray-400" />
-                导航
-              </button>
-              <button
-                type="button"
-                onClick={handleAttemptClick}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="记录尝试"
-              >
-                <Clock className="w-5 h-5 text-gray-400" />
-                尝试
-              </button>
-              <button
-                type="button"
-                onClick={handleReviewClick}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="写评价"
-              >
-                <MessageCircle className="w-5 h-5 text-gray-400" />
-                评价
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 评论模态框 */}
-      <AnimatedModal
-        isOpen={showReviewModal}
-        onClose={() => setShowReviewModal(false)}
-        title="添加评价"
-        size="md"
-      >
-        <div className="space-y-6">
-          <div className="p-4 border rounded-lg">
-            <p className="text-gray-700">
-              为 "{pos?.merchant_name}" 添加您的使用体验
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                评分
-              </label>
-              <div className="flex space-x-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setNewReview({ ...newReview, rating: star })}
-                    className="p-1 hover:scale-110 transition-transform"
-                  >
-                    <Star
-                      className={`w-8 h-8 ${
-                        star <= newReview.rating
-                          ? 'text-yellow-400 fill-current'
-                          : 'text-gray-300'
-                      }`}
-                    />
-                  </button>
-                ))}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur pb-safe-bottom">
+              <div className="grid grid-cols-4 gap-2 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={toggleFavorite}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="收藏"
+                >
+                  <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
+                  收藏
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNavigateToMap}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="导航"
+                >
+                  <MapPin className="w-5 h-5 text-gray-400" />
+                  导航
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAttemptClick}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="记录尝试"
+                >
+                  <Clock className="w-5 h-5 text-gray-400" />
+                  尝试
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReviewClick}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="写评价"
+                >
+                  <MessageCircle className="w-5 h-5 text-gray-400" />
+                  评价
+                </button>
               </div>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                评价内容
-              </label>
-              <textarea
-                value={newReview.comment}
-                onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
-                placeholder="分享您的使用体验..."
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              />
-            </div>
           </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <AnimatedButton
-              onClick={() => setShowReviewModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={submitReview}
-              loading={submittingReview}
-              disabled={!newReview.rating || !newReview.comment.trim()}
-              className="flex-1"
-            >
-              提交评价
-            </AnimatedButton>
           </div>
-        </div>
-      </AnimatedModal>
+        </>
+      )}
 
-      {/* 尝试记录模态框 */}
-      <AnimatedModal
-        isOpen={showAttemptModal}
-        onClose={() => setShowAttemptModal(false)}
-        title="记录尝试信息"
-        size="md"
-      >
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                尝试结果 *
-              </label>
-              <select
-                value={newAttempt.result}
-                onChange={(e) => setNewAttempt({ ...newAttempt, result: e.target.value as 'success' | 'failure' | 'unknown' })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="success">成功</option>
-                <option value="failure">失败</option>
-                <option value="unknown">未知</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                卡片名称
-              </label>
-              <input
-                type="text"
-                value={newAttempt.card_name}
-                onChange={(e) => setNewAttempt({ ...newAttempt, card_name: e.target.value })}
-                placeholder="例如：招商银行信用卡"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">卡组织</label>
-              <select
-                value={newAttempt.card_network}
-                onChange={(e) => setNewAttempt({ ...newAttempt, card_network: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="">请选择卡组织</option>
-                {CARD_NETWORKS.map((scheme) => (
-                  <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                支付方式
-              </label>
-              <select
-                value={newAttempt.payment_method}
-                onChange={(e) => setNewAttempt({ ...newAttempt, payment_method: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="">请选择支付方式</option>
-                <option value="tap">实体卡 Tap</option>
-                <option value="insert">实体卡 Insert</option>
-                <option value="swipe">实体卡 Swipe</option>
-                <option value="apple_pay">Apple Pay</option>
-                <option value="google_pay">Google Pay</option>
-                <option value="hce">HCE</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">验证方式 (CVM)</label>
-              <select
-                value={newAttempt.cvm}
-                onChange={(e) => setNewAttempt({ ...newAttempt, cvm: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="unknown">未知</option>
-                <option value="no_pin">免密</option>
-                <option value="pin">PIN</option>
-                <option value="signature">签名</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">收单模式</label>
-              <select
-                value={newAttempt.acquiring_mode}
-                onChange={(e) => setNewAttempt({ ...newAttempt, acquiring_mode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="unknown">未知</option>
-                <option value="DCC">DCC</option>
-                <option value="EDC">EDC</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">设备状态</label>
-              <SystemSelect
-                dataType="device_status"
-                value={newAttempt.device_status}
-                onChange={(value) => setNewAttempt({ ...newAttempt, device_status: value })}
-                placeholder="请选择设备状态"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">收单机构</label>
-              <SystemSelect
-                dataType="acquiring_institution"
-                value={newAttempt.acquiring_institution}
-                onChange={(value) => setNewAttempt({ ...newAttempt, acquiring_institution: value })}
-                placeholder="请选择收单机构"
-                allowCustom
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">结账地点</label>
-              <SystemSelect
-                dataType="checkout_locations"
-                value={newAttempt.checkout_location}
-                onChange={(value) => setNewAttempt({ ...newAttempt, checkout_location: value })}
-                placeholder="请选择结账地点"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <input
-                id="attempt-conclusive"
-                type="checkbox"
-                checked={Boolean(newAttempt.is_conclusive_failure)}
-                onChange={(e) => setNewAttempt({ ...newAttempt, is_conclusive_failure: e.target.checked })}
-              />
-              <label htmlFor="attempt-conclusive">明确失败（会被计入“不支持”推导）</label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                备注
-              </label>
-              <textarea
-                value={newAttempt.notes}
-                onChange={(e) => setNewAttempt({ ...newAttempt, notes: e.target.value })}
-                placeholder="记录详细的尝试过程或遇到的问题..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px',
-                  WebkitOverflowScrolling: 'touch'
-                }}
-              />
-            </div>
-          </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <AnimatedButton
-              onClick={() => setShowAttemptModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={submitAttempt}
-              loading={submittingAttempt}
-              className="flex-1"
-            >
-              提交记录
-            </AnimatedButton>
-          </div>
-        </div>
-      </AnimatedModal>
-
-      {/* 状态修改模态框 */}
-      <AnimatedModal
-        isOpen={showStatusModal}
-        onClose={() => setShowStatusModal(false)}
-        title="修改POS状态"
-        size="sm"
-      >
-        <div className="space-y-6">
-          <div className="p-4 border rounded-lg">
-            <p className="text-gray-700">
-              修改 "{pos?.merchant_name}" 的设备状态
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                设备状态
-              </label>
-              <select
-                value={newStatus}
-                onChange={(e) => setNewStatus(e.target.value as POSStatus)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="active">正常运行</option>
-                <option value="inactive">暂时不可用</option>
-                <option value="maintenance">维修中</option>
-                <option value="disabled">已停用</option>
-              </select>
-            </div>
-            
-            {successRate !== null && successRate < 0.5 && (
-              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                  <span className="text-sm text-orange-700 font-medium">
-                    注意：当前成功率为 {(successRate * 100).toFixed(1)}%，低于50%
-                  </span>
-                </div>
+      {!showAttemptModal && (
+        <>
+          {/* 评论模态框 */}
+          <AnimatedModal
+            isOpen={showReviewModal}
+            onClose={() => setShowReviewModal(false)}
+            title="添加评价"
+            size="md"
+          >
+            <div className="space-y-6">
+              <div className="p-4 border rounded-lg">
+                <p className="text-gray-700">
+                  为 "{pos?.merchant_name}" 添加您的使用体验
+                </p>
               </div>
-            )}
-          </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <AnimatedButton
-              onClick={() => setShowStatusModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={handleStatusUpdate}
-              loading={updatingStatus}
-              className="flex-1"
-            >
-              确认修改
-            </AnimatedButton>
-          </div>
-        </div>
-      </AnimatedModal>
-
-      {/* 导出模态框 */}
-      <AnimatedModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        title="导出POS记录"
-        size="md"
-        footer={
-          <div className="flex space-x-3">
-            <AnimatedButton
-              onClick={() => setShowExportModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={handleExport}
-              loading={exporting}
-              className="flex-1"
-            >
-              {exporting ? '导出中...' : '开始导出'}
-            </AnimatedButton>
-          </div>
-        }
-      >
-        <div className="space-y-6">
-          <div className="p-4 border rounded-lg bg-gray-50">
-            <p className="text-gray-700 text-sm">
-              导出 "{pos?.merchant_name}" 的完整记录数据
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                导出格式
-              </label>
-              <select
-                value={selectedFormat}
-                onChange={(e) => setSelectedFormat(e.target.value as ExportFormat)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="json">JSON文件（用于导入）</option>
-                <option value="html">HTML卡片</option>
-                <option value="pdf">PDF卡片</option>
-              </select>
-            </div>
-            
-            {(selectedFormat === 'html' || selectedFormat === 'pdf') && (
-              <>
+              
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    卡片风格
+                    评分
                   </label>
-                  <select
-                    value={selectedCardStyle}
-                    onChange={(e) => setSelectedCardStyle(e.target.value as CardStyle)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="minimal">简约风格</option>
-                    <option value="detailed">详细风格</option>
-                    <option value="business">商务风格</option>
-                    <option value="modern">现代风格</option>
-                  </select>
+                  <div className="flex space-x-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setNewReview({ ...newReview, rating: star })}
+                        className="p-1 hover:scale-110 transition-transform"
+                      >
+                        <Star
+                          className={`w-8 h-8 ${
+                            star <= newReview.rating
+                              ? 'text-yellow-400 fill-current'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 
-                {/* 卡片预览 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    预览效果
+                    评价内容
                   </label>
-                  <div className="border rounded-lg p-4 bg-gray-50 max-h-64 overflow-y-auto">
-                    <div className="transform scale-50 origin-top-left w-[200%] h-auto">
-                      <div 
-                        className="bg-white rounded-lg shadow-sm border overflow-hidden"
-                        style={{
-                          width: '400px',
-                          fontSize: '12px'
-                        }}
-                      >
-                        {/* 预览卡片头部 */}
-                        <div 
-                          className="text-white p-4 text-center"
-                          style={{
-                            background: selectedCardStyle === 'minimal' ? '#374151' :
-                                      selectedCardStyle === 'business' ? 'linear-gradient(135deg, #1f2937 0%, #374151 100%)' :
-                                      selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)' :
-                                      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            borderBottom: selectedCardStyle === 'business' ? '3px solid #d97706' : 'none'
-                          }}
+                  <textarea
+                    value={newReview.comment}
+                    onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                    placeholder="分享您的使用体验..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 pt-4 border-t">
+                <AnimatedButton
+                  onClick={() => setShowReviewModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={submitReview}
+                  loading={submittingReview}
+                  disabled={!newReview.rating || !newReview.comment.trim()}
+                  className="flex-1"
+                >
+                  提交评价
+                </AnimatedButton>
+              </div>
+            </div>
+          </AnimatedModal>
+        </>
+      )}
+
+      {/* 添加尝试记录独立页面 */}
+      <AnimatePresence>
+        {showAttemptModal && (
+          <motion.div
+            className="fixed inset-0 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-cream dark:bg-slate-950" />
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute -top-24 right-0 h-72 w-72 rounded-full bg-gradient-to-br from-accent-yellow/20 via-indigo-200/40 to-transparent blur-3xl" />
+              <div className="absolute bottom-0 left-0 h-96 w-96 rounded-full bg-gradient-to-tr from-blue-200/50 via-white/60 to-transparent blur-3xl" />
+            </div>
+
+            <motion.div
+              className="relative flex min-h-screen flex-col"
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="sticky top-0 z-20 border-b border-white/70 dark:border-slate-800 bg-cream/90 dark:bg-slate-950/90 backdrop-blur pt-safe-top">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttemptModal(false)}
+                      className="h-10 w-10 rounded-full bg-white shadow-soft border border-white/70 text-gray-600 hover:text-soft-black hover:bg-gray-50 transition-colors dark:bg-slate-900 dark:border-slate-800 dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-slate-800"
+                      aria-label="返回"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </button>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-gray-400">记录尝试</p>
+                      <h2 className="text-xl font-semibold text-soft-black dark:text-gray-100">添加尝试记录</h2>
+                      <p className="text-sm text-gray-500">
+                        {pos?.merchant_name}
+                        {pos?.address ? ` · ${pos.address}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft dark:bg-slate-900/80 dark:border-slate-800 dark:text-gray-300">
+                      <Clock className="w-3.5 h-3.5 text-accent-yellow" />
+                      已有 {attemptsCount} 条记录
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
+                  <div className="space-y-6 animate-fade-in-up">
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft">
+                          <Clock className="w-3.5 h-3.5 text-accent-yellow" />
+                          已有 {attemptsCount} 条记录
+                        </span>
+                        <button
+                          type="button"
+                          onClick={addAttemptRow}
+                          className="px-4 py-2 rounded-2xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
                         >
-                          <h3 className="font-bold text-sm">{pos?.merchant_name || '商户名称'}</h3>
-                          <p className="text-xs opacity-90">📍 {pos?.address || '商户地址'}</p>
-                        </div>
-                        
-                        {/* 预览卡片内容 */}
-                        <div className="p-3 space-y-2">
-                          <div className="text-xs font-semibold text-gray-600 border-b pb-1">
-                            🏪 基本信息
+                          + 添加记录
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+                      <div className="space-y-8">
+                        {attemptsCount === 0 ? (
+                          <div className="rounded-3xl border border-dashed border-gray-200 bg-white/90 p-6 text-sm text-gray-500">
+                            还没有添加尝试记录，点击“添加记录”开始填写。
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div 
-                              className="p-2 rounded border-l-2"
-                              style={{
-                                background: selectedCardStyle === 'minimal' ? 'white' :
-                                          selectedCardStyle === 'business' ? '#f8fafc' :
-                                          selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
-                                          'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                                borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
-                                               selectedCardStyle === 'business' ? '#d97706' :
-                                               selectedCardStyle === 'modern' ? '#8b5cf6' :
-                                               '#3b82f6',
-                                border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
-                              }}
-                            >
-                              <div className="text-gray-500 text-xs">POS机型号</div>
-                              <div className="font-medium">{pos?.basic_info?.model || '待勘察'}</div>
-                            </div>
-                            <div 
-                              className="p-2 rounded border-l-2"
-                              style={{
-                                background: selectedCardStyle === 'minimal' ? 'white' :
-                                          selectedCardStyle === 'business' ? '#f8fafc' :
-                                          selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
-                                          'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                                borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
-                                               selectedCardStyle === 'business' ? '#d97706' :
-                                               selectedCardStyle === 'modern' ? '#8b5cf6' :
-                                               '#3b82f6',
-                                border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
-                              }}
-                            >
-                              <div className="text-gray-500 text-xs">设备状态</div>
-                              <div className="font-medium">
-                                <span 
-                                  className="px-2 py-1 rounded text-white text-xs"
-                                  style={{
-                                    backgroundColor: pos?.status === 'active' ? '#10b981' :
-                                                   pos?.status === 'inactive' ? '#f59e0b' :
-                                                   pos?.status === 'maintenance' ? '#f97316' : '#ef4444'
-                                  }}
+                        ) : (
+                          attemptsList.map((attempt, index) => (
+                            <div key={`attempt-${index}`} className="space-y-6">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em]">
+                                  尝试 {index + 1}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAttempt(index)}
+                                  className="text-xs font-semibold text-red-500 hover:text-red-600"
                                 >
-                                  {pos?.status === 'active' ? '正常运行' :
-                                   pos?.status === 'inactive' ? '暂时不可用' :
-                                   pos?.status === 'maintenance' ? '维修中' : '已停用'}
-                                </span>
+                                  删除
+                                </button>
                               </div>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试结果</h3>
+                                    <p className="text-sm text-gray-500 mt-1">记录卡片与支付方式的实际表现。</p>
+                                  </div>
+                                  <span className="text-xs text-gray-400">* 为必填</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  {attemptResultOptions.map((option) => {
+                                    const Icon = option.icon
+                                    const isSelected = attempt.result === option.value
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => updateAttempt(index, 'result', option.value)}
+                                        className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                                          isSelected
+                                            ? 'bg-soft-black text-white border-soft-black shadow-lg shadow-blue-900/20'
+                                            : 'bg-white/90 border-gray-200 text-gray-700 hover:border-accent-yellow/40 hover:bg-white'
+                                        }`}
+                                      >
+                                        <Icon className={`w-5 h-5 mt-0.5 ${isSelected ? 'text-white' : option.iconClass}`} />
+                                        <div>
+                                          <div className="text-sm font-semibold">{option.label}</div>
+                                          <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+                                            {option.description}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡片名称</label>
+                                    <input
+                                      type="text"
+                                      value={attempt.card_name || ''}
+                                      onChange={(e) => updateAttempt(index, 'card_name', e.target.value)}
+                                      placeholder="如 Visa Signature"
+                                      className={attemptFieldBase}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">卡组织</label>
+                                    <select
+                                      value={attempt.card_network || ''}
+                                      onChange={(e) => updateAttempt(index, 'card_network', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="">请选择卡组织</option>
+                                      {CARD_NETWORKS.map((scheme) => (
+                                        <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">发生时间</label>
+                                    <input
+                                      type="datetime-local"
+                                      className={attemptFieldBase}
+                                      value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
+                                      onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                                    />
+                                  </div>
+                                </div>
+                              </section>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                                  <CreditCard className="w-4 h-4 text-accent-yellow" />
+                                  支付方式与验证
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">支付方式</label>
+                                    <select
+                                      value={attempt.payment_method || ''}
+                                      onChange={(e) => updateAttempt(index, 'payment_method', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="">请选择支付方式</option>
+                                      <option value="tap">实体卡 Tap</option>
+                                      <option value="insert">实体卡 Insert</option>
+                                      <option value="swipe">实体卡 Swipe</option>
+                                      <option value="apple_pay">Apple Pay</option>
+                                      <option value="google_pay">Google Pay</option>
+                                      <option value="hce">HCE</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">验证方式 (CVM)</label>
+                                    <select
+                                      value={attempt.cvm || 'unknown'}
+                                      onChange={(e) => updateAttempt(index, 'cvm', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="unknown">未知</option>
+                                      <option value="no_pin">免密</option>
+                                      <option value="pin">PIN</option>
+                                      <option value="signature">签名</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单模式</label>
+                                    <select
+                                      value={attempt.acquiring_mode || 'unknown'}
+                                      onChange={(e) => updateAttempt(index, 'acquiring_mode', e.target.value)}
+                                      className={attemptSelectBase}
+                                    >
+                                      <option value="unknown">未知</option>
+                                      <option value="DCC">DCC</option>
+                                      <option value="EDC">EDC</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              </section>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-6">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                                  <Settings className="w-4 h-4 text-accent-yellow" />
+                                  设备与收单信息
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">设备状态</label>
+                                    <SystemSelect
+                                      dataType="device_status"
+                                      value={attempt.device_status || 'active'}
+                                      onChange={(value) => updateAttempt(index, 'device_status', value)}
+                                      placeholder="请选择设备状态"
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">收单机构</label>
+                                    <SystemSelect
+                                      dataType="acquiring_institution"
+                                      value={attempt.acquiring_institution || ''}
+                                      onChange={(value) => updateAttempt(index, 'acquiring_institution', value)}
+                                      placeholder="请选择收单机构"
+                                      allowCustom
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">结账地点</label>
+                                    <SystemSelect
+                                      dataType="checkout_locations"
+                                      value={attempt.checkout_location || ''}
+                                      onChange={(value) => updateAttempt(index, 'checkout_location', value)}
+                                      placeholder="请选择结账地点"
+                                    />
+                                  </div>
+                                </div>
+
+                                <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
+                                  <input
+                                    id={`attempt-conclusive-${index}`}
+                                    type="checkbox"
+                                    checked={Boolean(attempt.is_conclusive_failure)}
+                                    onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
+                                  />
+                                  明确失败（会被计入“不支持”结果）
+                                </label>
+                              </section>
+
+                              <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-4">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-soft-black dark:text-gray-100">
+                                  <FileText className="w-4 h-4 text-accent-yellow" />
+                                  备注
+                                </div>
+                                <textarea
+                                  value={attempt.notes || ''}
+                                  onChange={(e) => updateAttempt(index, 'notes', e.target.value)}
+                                  placeholder="例如：需要签名，或被拒原因"
+                                  rows={4}
+                                  className={attemptTextareaBase}
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveAttemptAsCommonCard(index)}
+                                    className="text-xs font-semibold text-soft-black bg-cream px-4 py-2 rounded-xl hover:bg-accent-yellow/20 transition-colors"
+                                  >
+                                    保存为常用卡
+                                  </button>
+                                  {commonCards.length > 0 && (
+                                    <select
+                                      className="text-xs bg-white/90 border border-gray-200 rounded-xl px-3 py-2"
+                                      defaultValue=""
+                                      onChange={(e) => {
+                                        const selected = parseInt(e.target.value, 10)
+                                        if (!Number.isNaN(selected)) applyCommonCard(index, selected)
+                                      }}
+                                    >
+                                      <option value="">快速填充常用卡</option>
+                                      {commonCards.map((card, cardIndex) => (
+                                        <option key={`${card.name}-${cardIndex}`} value={cardIndex}>
+                                          {card.name}{card.method ? ` · ${card.method}` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
+                              </section>
                             </div>
-                          </div>
-                        </div>
-                        
-                        {/* 预览卡片底部 */}
-                        <div className="bg-gray-50 p-2 text-center border-t">
-                          <p className="text-xs text-gray-500">Payments Maps 导出</p>
-                        </div>
+                          ))
+                        )}
                       </div>
+                      {attemptSidebar}
                     </div>
                   </div>
                 </div>
-              </>
-            )}
-            
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
-                <div className="text-sm text-blue-700">
-                  {selectedFormat === 'json' ? (
-                    <span>JSON格式包含完整的POS机数据，可用于后续导入到其他系统</span>
-                  ) : (
-                    <span>卡片格式适合分享和打印，包含POS机的关键信息和统计数据</span>
-                  )}
+              </div>
+
+              <div className="border-t border-white/70 dark:border-slate-800 bg-cream/90 dark:bg-slate-950/90 backdrop-blur pb-safe-bottom">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowAttemptModal(false)}
+                    className="px-6 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitAttempt}
+                    disabled={submittingAttempt}
+                    className="px-8 py-3 rounded-2xl font-semibold text-white bg-soft-black hover:bg-accent-yellow shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {submittingAttempt ? '提交中...' : '提交记录'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+
+            <AnimatePresence>
+              {isAlbumPickerOpen && (
+                <motion.div
+                  className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsAlbumPickerOpen(false)}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, x: 40 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 40 }}
+                    transition={{ duration: 0.25 }}
+                    className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                      <div className="text-sm font-semibold text-gray-900">选择卡册中的卡片</div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAlbumPickerOpen(false)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="p-6 border-b border-gray-100">
+                      <div className="inline-flex bg-cream rounded-full p-1">
+                        {(['personal', 'public'] as const).map((scope) => (
+                          <button
+                            key={scope}
+                            type="button"
+                            onClick={() => setAlbumScopeFilter(scope)}
+                            className={`px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+                              albumScopeFilter === scope
+                                ? 'bg-soft-black text-white shadow-sm'
+                                : 'text-gray-500 hover:text-soft-black'
+                            }`}
+                          >
+                            {scope === 'personal' ? '个人卡册' : '公共卡册'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-2">请选择要填充到最新尝试记录的卡片。</div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                      {filteredAlbumCards.length === 0 && (
+                        <div className="text-sm text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 p-6 text-center">
+                          暂无{albumScopeFilter === 'personal' ? '个人' : '公共'}卡册卡片
+                        </div>
+                      )}
+                      {filteredAlbumCards.map((card) => {
+                        const label = `${card.title} · ${card.issuer} · ${card.organization}`
+                        const isActive = selectedAlbumCard === card.id
+                        return (
+                          <button
+                            key={card.id}
+                            type="button"
+                            onClick={() => setSelectedAlbumCard(card.id)}
+                            className={`w-full text-left border rounded-2xl px-4 py-3 transition-all ${
+                              isActive
+                                ? 'border-soft-black bg-soft-black/5'
+                                : 'border-gray-100 hover:border-accent-yellow/50 hover:bg-cream/60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-soft-black">{label}</div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  {getAlbumScopeLabel(card.scope)} · BIN {card.bin || '—'} · {card.group || '未分组'}
+                                </div>
+                              </div>
+                              {isActive && (
+                                <span className="text-xs font-semibold text-soft-black bg-accent-yellow/20 px-3 py-1 rounded-full">
+                                  已选择
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="border-t border-gray-100 p-5 bg-white/80">
+                      <button
+                        type="button"
+                        onClick={handleApplyAlbumCard}
+                        className="w-full px-4 py-3 rounded-2xl text-sm font-semibold text-white bg-soft-black hover:bg-accent-yellow transition-colors"
+                      >
+                        填充到最新记录
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!showAttemptModal && (
+        <>
+          {/* 状态修改模态框 */}
+          <AnimatedModal
+            isOpen={showStatusModal}
+            onClose={() => setShowStatusModal(false)}
+            title="修改POS状态"
+            size="sm"
+          >
+            <div className="space-y-6">
+              <div className="p-4 border rounded-lg">
+                <p className="text-gray-700">
+                  修改 "{pos?.merchant_name}" 的设备状态
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    设备状态
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as POSStatus)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
+                    style={{
+                      WebkitAppearance: 'none',
+                      WebkitTapHighlightColor: 'transparent',
+                      touchAction: 'manipulation',
+                      fontSize: '16px'
+                    }}
+                  >
+                    <option value="active">正常运行</option>
+                    <option value="inactive">暂时不可用</option>
+                    <option value="maintenance">维修中</option>
+                    <option value="disabled">已停用</option>
+                  </select>
+                </div>
+                
+                {successRate !== null && successRate < 0.5 && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                      <span className="text-sm text-orange-700 font-medium">
+                        注意：当前成功率为 {(successRate * 100).toFixed(1)}%，低于50%
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex space-x-3 pt-4 border-t">
+                <AnimatedButton
+                  onClick={() => setShowStatusModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={handleStatusUpdate}
+                  loading={updatingStatus}
+                  className="flex-1"
+                >
+                  确认修改
+                </AnimatedButton>
+              </div>
+            </div>
+          </AnimatedModal>
+
+          {/* 导出模态框 */}
+          <AnimatedModal
+            isOpen={showExportModal}
+            onClose={() => setShowExportModal(false)}
+            title="导出POS记录"
+            size="md"
+            footer={
+              <div className="flex space-x-3">
+                <AnimatedButton
+                  onClick={() => setShowExportModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={handleExport}
+                  loading={exporting}
+                  className="flex-1"
+                >
+                  {exporting ? '导出中...' : '开始导出'}
+                </AnimatedButton>
+              </div>
+            }
+          >
+            <div className="space-y-6">
+              <div className="p-4 border rounded-lg bg-gray-50">
+                <p className="text-gray-700 text-sm">
+                  导出 "{pos?.merchant_name}" 的完整记录数据
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    导出格式
+                  </label>
+                  <select
+                    value={selectedFormat}
+                    onChange={(e) => setSelectedFormat(e.target.value as ExportFormat)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="json">JSON文件（用于导入）</option>
+                    <option value="html">HTML卡片</option>
+                    <option value="pdf">PDF卡片</option>
+                  </select>
+                </div>
+                
+                {(selectedFormat === 'html' || selectedFormat === 'pdf') && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        卡片风格
+                      </label>
+                      <select
+                        value={selectedCardStyle}
+                        onChange={(e) => setSelectedCardStyle(e.target.value as CardStyle)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="minimal">简约风格</option>
+                        <option value="detailed">详细风格</option>
+                        <option value="business">商务风格</option>
+                        <option value="modern">现代风格</option>
+                      </select>
+                    </div>
+                    
+                    {/* 卡片预览 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        预览效果
+                      </label>
+                      <div className="border rounded-lg p-4 bg-gray-50 max-h-64 overflow-y-auto">
+                        <div className="transform scale-50 origin-top-left w-[200%] h-auto">
+                          <div 
+                            className="bg-white rounded-lg shadow-sm border overflow-hidden"
+                            style={{
+                              width: '400px',
+                              fontSize: '12px'
+                            }}
+                          >
+                            {/* 预览卡片头部 */}
+                            <div 
+                              className="text-white p-4 text-center"
+                              style={{
+                                background: selectedCardStyle === 'minimal' ? '#374151' :
+                                          selectedCardStyle === 'business' ? 'linear-gradient(135deg, #1f2937 0%, #374151 100%)' :
+                                          selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)' :
+                                          'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                borderBottom: selectedCardStyle === 'business' ? '3px solid #d97706' : 'none'
+                              }}
+                            >
+                              <h3 className="font-bold text-sm">{pos?.merchant_name || '商户名称'}</h3>
+                              <p className="text-xs opacity-90">📍 {pos?.address || '商户地址'}</p>
+                            </div>
+                            
+                            {/* 预览卡片内容 */}
+                            <div className="p-3 space-y-2">
+                              <div className="text-xs font-semibold text-gray-600 border-b pb-1">
+                                🏪 基本信息
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div 
+                                  className="p-2 rounded border-l-2"
+                                  style={{
+                                    background: selectedCardStyle === 'minimal' ? 'white' :
+                                              selectedCardStyle === 'business' ? '#f8fafc' :
+                                              selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
+                                              'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                    borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
+                                                   selectedCardStyle === 'business' ? '#d97706' :
+                                                   selectedCardStyle === 'modern' ? '#8b5cf6' :
+                                                   '#3b82f6',
+                                    border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
+                                  }}
+                                >
+                                  <div className="text-gray-500 text-xs">POS机型号</div>
+                                  <div className="font-medium">{pos?.basic_info?.model || '待勘察'}</div>
+                                </div>
+                                <div 
+                                  className="p-2 rounded border-l-2"
+                                  style={{
+                                    background: selectedCardStyle === 'minimal' ? 'white' :
+                                              selectedCardStyle === 'business' ? '#f8fafc' :
+                                              selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
+                                              'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                    borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
+                                                   selectedCardStyle === 'business' ? '#d97706' :
+                                                   selectedCardStyle === 'modern' ? '#8b5cf6' :
+                                                   '#3b82f6',
+                                    border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
+                                  }}
+                                >
+                                  <div className="text-gray-500 text-xs">设备状态</div>
+                                  <div className="font-medium">
+                                    <span 
+                                      className="px-2 py-1 rounded text-white text-xs"
+                                      style={{
+                                        backgroundColor: pos?.status === 'active' ? '#10b981' :
+                                                       pos?.status === 'inactive' ? '#f59e0b' :
+                                                       pos?.status === 'maintenance' ? '#f97316' : '#ef4444'
+                                      }}
+                                    >
+                                      {pos?.status === 'active' ? '正常运行' :
+                                       pos?.status === 'inactive' ? '暂时不可用' :
+                                       pos?.status === 'maintenance' ? '维修中' : '已停用'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* 预览卡片底部 */}
+                            <div className="bg-gray-50 p-2 text-center border-t">
+                              <p className="text-xs text-gray-500">Payments Maps 导出</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+                
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
+                    <div className="text-sm text-blue-700">
+                      {selectedFormat === 'json' ? (
+                        <span>JSON格式包含完整的POS机数据，可用于后续导入到其他系统</span>
+                      ) : (
+                        <span>卡片格式适合分享和打印，包含POS机的关键信息和统计数据</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </AnimatedModal>
+          </AnimatedModal>
 
-      <AnimatedModal
-        isOpen={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        title="POS机问题申报"
-        size="lg"
-        footer={
-          <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-            <button
-              type="button"
-              onClick={() => setShowReportModal(false)}
-              className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmitReport}
-              className="px-6 py-2 rounded-xl font-semibold text-white bg-soft-black hover:bg-gray-900 transition-colors"
-            >
-              提交申报
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="rounded-xl bg-yellow-50 border border-yellow-100 p-3 text-sm text-yellow-800">
-            请描述 POS 机的问题，管理员会尽快处理。
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">问题类型</label>
-            <input
-              value={reportForm.issueType}
-              onChange={(event) => setReportForm((prev) => ({ ...prev, issueType: event.target.value }))}
-              placeholder="例如 设备不可用 / 成功率异常 / 信息缺失"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
-            <textarea
-              value={reportForm.description}
-              onChange={(event) => setReportForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="补充问题细节，便于管理员排查"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">联系方式（可选）</label>
-            <input
-              value={reportForm.contact}
-              onChange={(event) => setReportForm((prev) => ({ ...prev, contact: event.target.value }))}
-              placeholder="邮箱或手机号，方便回访"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-            />
-          </div>
-        </div>
-      </AnimatedModal>
-
-      {/* 删除确认模态框 */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg overflow-hidden">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
-              <p className="text-gray-600 mb-6">
-                确定要删除这个POS机吗？此操作无法撤销。
-              </p>
-              <div className="flex space-x-3">
+          <AnimatedModal
+            isOpen={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            title="POS机问题申报"
+            size="lg"
+            footer={
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
                 <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
                 >
                   取消
                 </button>
                 <button
-                  onClick={handleDeletePOS}
-                  disabled={deleting}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={handleSubmitReport}
+                  className="px-6 py-2 rounded-xl font-semibold text-white bg-soft-black hover:bg-gray-900 transition-colors"
                 >
-                  {deleting ? '删除中...' : '确认删除'}
+                  提交申报
                 </button>
               </div>
+            }
+          >
+            <div className="space-y-4">
+              <div className="rounded-xl bg-yellow-50 border border-yellow-100 p-3 text-sm text-yellow-800">
+                请描述 POS 机的问题，管理员会尽快处理。
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">问题类型</label>
+                <input
+                  value={reportForm.issueType}
+                  onChange={(event) => setReportForm((prev) => ({ ...prev, issueType: event.target.value }))}
+                  placeholder="例如 设备不可用 / 成功率异常 / 信息缺失"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+                <textarea
+                  value={reportForm.description}
+                  onChange={(event) => setReportForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="补充问题细节，便于管理员排查"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">联系方式（可选）</label>
+                <input
+                  value={reportForm.contact}
+                  onChange={(event) => setReportForm((prev) => ({ ...prev, contact: event.target.value }))}
+                  placeholder="邮箱或手机号，方便回访"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                />
+              </div>
             </div>
-          </div>
-        </div>
+          </AnimatedModal>
+
+          {/* 删除确认模态框 */}
+          {showDeleteModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg overflow-hidden">
+                <div className="text-center">
+                  <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
+                    <Trash2 className="w-6 h-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
+                  <p className="text-gray-600 mb-6">
+                    确定要删除这个POS机吗？此操作无法撤销。
+                  </p>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowDeleteModal(false)}
+                      className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleDeletePOS}
+                      disabled={deleting}
+                      className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deleting ? '删除中...' : '确认删除'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

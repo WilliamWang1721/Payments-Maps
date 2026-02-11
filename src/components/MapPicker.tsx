@@ -151,7 +151,27 @@ const MapPicker = ({
 
     geocoderRef.current.getAddress([lng, lat], (status: string, result: any) => {
       if (status === 'complete' && result.info === 'OK') {
-        const address = result.regeocode.formattedAddress
+        const regeocode = result.regeocode
+        const addressComponent = regeocode?.addressComponent
+        let detailedAddress = ''
+
+        if (addressComponent) {
+          const province = addressComponent.province || ''
+          const city = addressComponent.city || addressComponent.province || ''
+          const district = addressComponent.district || ''
+          const township = addressComponent.township || ''
+          const street = addressComponent.streetNumber?.street || ''
+          const number = addressComponent.streetNumber?.number || ''
+
+          if (province && province !== city) detailedAddress += province
+          if (city) detailedAddress += city
+          if (district) detailedAddress += district
+          if (township) detailedAddress += township
+          if (street) detailedAddress += street
+          if (number) detailedAddress += number
+        }
+
+        const address = detailedAddress || regeocode?.formattedAddress || ''
         setSelectedLocation(prev => ({
           ...prev,
           latitude: lat,
@@ -319,19 +339,13 @@ const MapPicker = ({
           {/* 位置信息 */}
           {selectedLocation.latitude !== 0 && selectedLocation.longitude !== 0 && (
             <div className="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-200">
-              <div className="text-sm space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">坐标：</span>
-                  <span className="font-mono text-gray-700">
-                    {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+              <div className="text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500">地址：</span>
+                  <span className="text-gray-700 flex-1">
+                    {selectedLocation.address || '正在解析地址...'}
                   </span>
                 </div>
-                {selectedLocation.address && (
-                  <div className="flex items-start gap-2">
-                    <span className="text-gray-500">地址：</span>
-                    <span className="text-gray-700 flex-1">{selectedLocation.address}</span>
-                  </div>
-                )}
               </div>
             </div>
           )}
