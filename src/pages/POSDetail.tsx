@@ -22,6 +22,7 @@ import { AnimatedTabBar } from '@/components/AnimatedNavigation'
 import { CARD_NETWORKS, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { getPaymentMethodLabel, getResultLabel } from '@/lib/utils'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
 import { exportToHTML, exportToJSON, exportToPDF, getFormatDisplayName, getStyleDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
 import { feeUtils } from '@/types/fees'
@@ -977,14 +978,22 @@ const POSDetail = () => {
         } else if (error.message?.includes('RLS')) {
           notify.error('数据访问权限错误，请重新登录')
         } else {
-          notify.error(`提交失败: ${error.message || '未知错误'}`)
+          const missingColumn = extractMissingColumnFromError(error)
+          if (missingColumn) {
+            // Hard-fail: never drop fields silently when the schema is out of date.
+            notify.critical(`提交失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql，并刷新 PostgREST schema cache。`, {
+              title: '数据库需要升级',
+            })
+          } else {
+            notify.error(`提交失败: ${error.message || '未知错误'}`)
+          }
         }
         return
       }
       
       const insertedAttempts: Attempt[] = (data || []).map((item) => ({
         id: item.id,
-        created_at: item.created_at,
+        created_at: item.created_at || new Date().toISOString(),
         result: item.result,
         card_name: item.card_name,
         card_network: item.card_network,
@@ -1001,7 +1010,7 @@ const POSDetail = () => {
       }))
 
       if (insertedAttempts.length > 0) {
-        insertedAttempts.sort((a, b) => b.created_at.localeCompare(a.created_at))
+        insertedAttempts.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
         setAttempts((prev) => [...insertedAttempts, ...prev])
       }
       
@@ -1699,7 +1708,97 @@ const POSDetail = () => {
               ) : (
                 <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
                   <CardContent className="p-6 text-center text-sm text-gray-500">
-                    暂无支付与验证信息
+                    {attempts.length > 0 ? '暂无手动填写的支付与验证信息' : '暂无支付与验证信息'}
+                  </CardContent>
+                </AnimatedCard>
+              )}
+
+              {attempts.length > 0 && (
+                <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
+                  <CardContent className="p-6 space-y-5">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-5 h-5 text-accent-yellow" />
+                      <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">尝试推导支持矩阵</h3>
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
+                      {renderMatrixSection(
+                        '卡组织支持矩阵',
+                        CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
+                        attemptMatrix.cardNetworks,
+                        (key) => {
+                          const hasManualSupported = pos?.basic_info?.supported_card_networks?.includes(key)
+                          return hasManualSupported ? 'supported' : 'unknown'
+                        }
+                      )}
+
+                      {renderMatrixSection(
+                        '支付方式支持矩阵',
+                        PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
+                        attemptMatrix.paymentMethods,
+                        (key) => {
+                          if (!pos?.basic_info) return 'unknown'
+                          if (key === 'tap') {
+                            return normalizeThreeState(pos.basic_info.supports_contactless)
+                          }
+                          if (key === 'apple_pay') {
+                            return normalizeThreeState(pos.basic_info.supports_apple_pay)
+                          }
+                          if (key === 'google_pay') {
+                            return normalizeThreeState(pos.basic_info.supports_google_pay)
+                          }
+                          if (key === 'hce') {
+                            return normalizeThreeState(pos.basic_info.supports_hce_simulation)
+                          }
+                          return 'unknown'
+                        }
+                      )}
+
+                      {renderMatrixSection(
+                        '验证方式 (CVM)',
+                        CVM_OPTIONS.map((cvm) => ({ key: cvm, label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名' })),
+                        attemptMatrix.cvm
+                      )}
+
+                      {renderMatrixSection(
+                        '收单模式',
+                        ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
+                        attemptMatrix.acquiringModes
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
+                      {renderMatrixSection(
+                        '结账地点',
+                        [
+                          { key: '自助收银', label: '自助收银' },
+                          { key: '人工收银', label: '人工收银' },
+                        ],
+                        attemptMatrix.checkoutLocations
+                      )}
+
+                      {renderMatrixSection(
+                        '设备状态',
+                        [
+                          { key: 'active', label: '正常运行' },
+                          { key: 'inactive', label: '暂时不可用' },
+                          { key: 'maintenance', label: '维修中' },
+                          { key: 'disabled', label: '已停用' },
+                        ],
+                        attemptMatrix.deviceStatus
+                      )}
+
+                      {renderMatrixSection(
+                        '收单机构',
+                        Array.from(attemptMatrix.acquiringInstitutions.keys()).map((key) => ({ key, label: key })),
+                        attemptMatrix.acquiringInstitutions,
+                        (key) => (key === pos?.basic_info?.acquiring_institution ? 'supported' : 'unknown')
+                      )}
+                    </div>
+
+                    <div className="text-xs text-gray-500 bg-gray-50/80 border border-gray-100 rounded-xl p-3">
+                      说明：成功尝试会推导“支持”，明确失败会推导“不支持”。手动设置的支持项优先显示，若与尝试记录冲突请以备注核实。
+                    </div>
                   </CardContent>
                 </AnimatedCard>
               )}
@@ -1745,87 +1844,6 @@ const POSDetail = () => {
                           </div>
                           <div className="text-xs text-gray-500">成功率</div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-5">
-                      <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
-                        {renderMatrixSection(
-                          '卡组织支持矩阵',
-                          CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
-                          attemptMatrix.cardNetworks,
-                          (key) => {
-                            const hasManualSupported = pos?.basic_info?.supported_card_networks?.includes(key)
-                            return hasManualSupported ? 'supported' : 'unknown'
-                          }
-                        )}
-
-                        {renderMatrixSection(
-                          '支付方式支持矩阵',
-                          PAYMENT_METHOD_OPTIONS.map((method) => ({ key: method, label: getPaymentMethodLabel(method) })),
-                          attemptMatrix.paymentMethods,
-                          (key) => {
-                            if (!pos?.basic_info) return 'unknown'
-                            if (key === 'tap') {
-                              return normalizeThreeState(pos.basic_info.supports_contactless)
-                            }
-                            if (key === 'apple_pay') {
-                              return normalizeThreeState(pos.basic_info.supports_apple_pay)
-                            }
-                            if (key === 'google_pay') {
-                              return normalizeThreeState(pos.basic_info.supports_google_pay)
-                            }
-                            if (key === 'hce') {
-                              return normalizeThreeState(pos.basic_info.supports_hce_simulation)
-                            }
-                            return 'unknown'
-                          }
-                        )}
-
-                        {renderMatrixSection(
-                          '验证方式 (CVM)',
-                          CVM_OPTIONS.map((cvm) => ({ key: cvm, label: cvm === 'no_pin' ? '免密' : cvm === 'pin' ? 'PIN' : '签名' })),
-                          attemptMatrix.cvm
-                        )}
-
-                        {renderMatrixSection(
-                          '收单模式',
-                          ACQUIRING_MODE_OPTIONS.map((mode) => ({ key: mode, label: mode })),
-                          attemptMatrix.acquiringModes
-                        )}
-                      </div>
-
-                      <div className="rounded-2xl border border-gray-100 bg-white/90 p-4 space-y-5">
-                        {renderMatrixSection(
-                          '结账地点',
-                          [
-                            { key: '自助收银', label: '自助收银' },
-                            { key: '人工收银', label: '人工收银' },
-                          ],
-                          attemptMatrix.checkoutLocations
-                        )}
-
-                        {renderMatrixSection(
-                          '设备状态',
-                          [
-                            { key: 'active', label: '正常运行' },
-                            { key: 'inactive', label: '暂时不可用' },
-                            { key: 'maintenance', label: '维修中' },
-                            { key: 'disabled', label: '已停用' },
-                          ],
-                          attemptMatrix.deviceStatus
-                        )}
-
-                        {renderMatrixSection(
-                          '收单机构',
-                          Array.from(attemptMatrix.acquiringInstitutions.keys()).map((key) => ({ key, label: key })),
-                          attemptMatrix.acquiringInstitutions,
-                          (key) => (key === pos?.basic_info?.acquiring_institution ? 'supported' : 'unknown')
-                        )}
-                      </div>
-
-                      <div className="text-xs text-gray-500 bg-gray-50/80 border border-gray-100 rounded-xl p-3">
-                        说明：成功尝试会推导“支持”，明确失败会推导“不支持”。手动设置的支持项优先显示，若与尝试记录冲突请以备注核实。
                       </div>
                     </div>
 

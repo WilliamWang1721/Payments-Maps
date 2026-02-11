@@ -37,6 +37,7 @@ import { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
 import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 
 interface FormData {
   merchant_name: string
@@ -671,8 +672,7 @@ const AddPOS = () => {
           const attemptsInsertDurationMs = Date.now() - attemptsInsertStartedAt
 
           if (attemptsError) {
-            const missingColumnMatch = attemptsError.message?.match(/Could not find the '([^']+)' column/)
-            const missingColumn = missingColumnMatch?.[1] || null
+            const missingColumn = extractMissingColumnFromError(attemptsError)
 
             console.error('[AddPOS] 保存尝试记录失败:', {
               meta: attemptsDebugMeta,
@@ -688,9 +688,20 @@ const AddPOS = () => {
             })
 
             if (missingColumn) {
-              notify.error(`POS 已创建，但尝试记录保存失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql`)
+              // Hard-fail: do not proceed/navigate if any attempt fields can't be persisted.
+              notify.dismiss('saving-pos')
+              notify.critical(`POS 已创建，但尝试记录保存失败：数据库缺少字段 ${missingColumn}。请先执行 supabase/migrations/014_ensure_pos_records_columns.sql，并刷新 PostgREST schema cache。`, {
+                title: '数据库需要升级',
+                details: getErrorDetails(attemptsError),
+              })
+              return
             } else {
-              notify.error(`POS 已创建，但尝试记录保存失败：${attemptsError.message || '未知错误'}`)
+              notify.dismiss('saving-pos')
+              notify.critical(`POS 已创建，但尝试记录保存失败：${attemptsError.message || '未知错误'}`, {
+                title: '尝试记录保存失败',
+                details: getErrorDetails(attemptsError),
+              })
+              return
             }
           } else {
             console.info('[AddPOS] 尝试记录保存成功:', {
