@@ -95,12 +95,19 @@ interface SupportFusionItem {
   evidenceNote?: string
 }
 
+interface SupportFusionGroup {
+  key: string
+  title: string
+  items: SupportFusionItem[]
+}
+
 interface SupportFusionSection {
   key: string
   title: string
   description: string
   icon: typeof CreditCard
   items: SupportFusionItem[]
+  groups?: SupportFusionGroup[]
 }
 
 const PAYMENT_METHOD_OPTIONS = ['tap', 'insert', 'swipe', 'apple_pay', 'google_pay', 'hce'] as const
@@ -664,6 +671,53 @@ const POSDetail = () => {
     new Set([pos?.basic_info?.acquiring_institution, ...Array.from(attemptMatrix.acquiringInstitutions.keys())].filter(Boolean))
   ) as string[]
 
+  const checkoutLocationItems = buildSupportFusionItems(
+    [
+      { key: '自助收银', label: '自助收银' },
+      { key: '人工收银', label: '人工收银' },
+    ],
+    attemptMatrix.checkoutLocations,
+    getManualCheckoutState,
+    getManualCheckoutNote
+  )
+
+  const deviceStatusItems = buildSupportFusionItems(
+    [
+      { key: 'active', label: '正常运行' },
+      { key: 'inactive', label: '暂时不可用' },
+      { key: 'maintenance', label: '维修中' },
+      { key: 'disabled', label: '已停用' },
+    ],
+    attemptMatrix.deviceStatus,
+    getManualDeviceStatusState,
+    getManualDeviceStatusNote
+  )
+
+  const institutionItems = buildSupportFusionItems(
+    acquiringInstitutionKeys.map((key) => ({ key, label: key })),
+    attemptMatrix.acquiringInstitutions,
+    getManualInstitutionState,
+    getManualInstitutionNote
+  )
+
+  const deviceAndAcquiringGroups: SupportFusionGroup[] = [
+    {
+      key: 'checkout-location',
+      title: '结账位置',
+      items: checkoutLocationItems,
+    },
+    {
+      key: 'device-status',
+      title: '设备状态',
+      items: deviceStatusItems,
+    },
+    {
+      key: 'institution',
+      title: '收单机构',
+      items: institutionItems,
+    },
+  ]
+
   const supportFusionSections: SupportFusionSection[] = [
     {
       key: 'network',
@@ -721,48 +775,12 @@ const POSDetail = () => {
       ),
     },
     {
-      key: 'checkout-location',
-      title: '结账位置',
-      description: '自助与人工收银场景',
-      icon: MapPin,
-      items: buildSupportFusionItems(
-        [
-          { key: '自助收银', label: '自助收银' },
-          { key: '人工收银', label: '人工收银' },
-        ],
-        attemptMatrix.checkoutLocations,
-        getManualCheckoutState,
-        getManualCheckoutNote
-      ),
-    },
-    {
-      key: 'device-status',
-      title: '设备状态',
-      description: '运行状态与尝试反馈',
+      key: 'device-acquiring',
+      title: '设备与收单',
+      description: '结账位置 / 设备状态 / 收单机构',
       icon: Settings,
-      items: buildSupportFusionItems(
-        [
-          { key: 'active', label: '正常运行' },
-          { key: 'inactive', label: '暂时不可用' },
-          { key: 'maintenance', label: '维修中' },
-          { key: 'disabled', label: '已停用' },
-        ],
-        attemptMatrix.deviceStatus,
-        getManualDeviceStatusState,
-        getManualDeviceStatusNote
-      ),
-    },
-    {
-      key: 'institution',
-      title: '收单机构',
-      description: '主收单方与尝试反馈',
-      icon: Building,
-      items: buildSupportFusionItems(
-        acquiringInstitutionKeys.map((key) => ({ key, label: key })),
-        attemptMatrix.acquiringInstitutions,
-        getManualInstitutionState,
-        getManualInstitutionNote
-      ),
+      items: deviceAndAcquiringGroups.flatMap((group) => group.items),
+      groups: deviceAndAcquiringGroups,
     },
   ]
 
@@ -813,7 +831,7 @@ const POSDetail = () => {
       iconClass: string
       countClass: string
       gridClass: string
-      layout: 'network' | 'method' | 'cvm' | 'default'
+      layout: 'network' | 'method' | 'cvm' | 'default' | 'device'
     }
   > = {
     network: {
@@ -844,26 +862,12 @@ const POSDetail = () => {
       gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
       layout: 'default',
     },
-    'checkout-location': {
+    'device-acquiring': {
       panelClass: 'border-gray-100 bg-gray-50/80',
       iconClass: 'border border-gray-100 bg-white text-accent-yellow',
       countClass: 'border border-gray-100 bg-white text-gray-500',
-      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
-      layout: 'default',
-    },
-    'device-status': {
-      panelClass: 'border-gray-100 bg-gray-50/80',
-      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
-      countClass: 'border border-gray-100 bg-white text-gray-500',
-      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
-      layout: 'default',
-    },
-    institution: {
-      panelClass: 'border-gray-100 bg-gray-50/80',
-      iconClass: 'border border-gray-100 bg-white text-accent-yellow',
-      countClass: 'border border-gray-100 bg-white text-gray-500',
-      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
-      layout: 'default',
+      gridClass: 'mt-4 space-y-3',
+      layout: 'device',
     },
     default: {
       panelClass: 'border-gray-100 bg-gray-50/80',
@@ -1005,19 +1009,53 @@ const POSDetail = () => {
         console.error('加载评价失败:', error)
         return
       }
+
+      const userIds = Array.from(new Set((reviewsData || [])
+        .map((review) => review.user_id)
+        .filter((userId): userId is string => Boolean(userId))))
+
+      const userMap = new Map<string, { display_name: string; avatar_url?: string }>()
+
+      if (userIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, user_metadata, email')
+          .in('id', userIds)
+
+        if (usersError) {
+          console.error('加载用户信息失败:', usersError)
+        } else {
+          ;(usersData || []).forEach((userRow: any) => {
+            const metadata = userRow?.user_metadata || {}
+            const displayName = metadata.display_name
+              || metadata.name
+              || (userRow?.email ? String(userRow.email).split('@')[0] : undefined)
+              || userRow?.email
+              || '匿名用户'
+            const avatarUrl = metadata.avatar_url || metadata.picture
+            userMap.set(userRow.id, {
+              display_name: displayName,
+              avatar_url: avatarUrl || undefined
+            })
+          })
+        }
+      }
       
       // 转换数据格式
-      const formattedReviews: Review[] = (reviewsData || []).map(review => ({
-        id: review.id,
-        rating: review.rating,
-        comment: review.content,
-        created_at: review.created_at,
-        user_id: review.user_id,
-        users: {
-          display_name: '匿名用户',
-          avatar_url: undefined
+      const formattedReviews: Review[] = (reviewsData || []).map(review => {
+        const userInfo = review.user_id ? userMap.get(review.user_id) : undefined
+        return {
+          id: review.id,
+          rating: review.rating,
+          comment: review.content,
+          created_at: review.created_at,
+          user_id: review.user_id,
+          users: {
+            display_name: userInfo?.display_name || '匿名用户',
+            avatar_url: userInfo?.avatar_url
+          }
         }
-      }))
+      })
       
       setReviews(formattedReviews)
     } catch (error) {
@@ -1247,7 +1285,7 @@ const POSDetail = () => {
         created_at: data.created_at,
         user_id: data.user_id,
         users: {
-          display_name: String(user.user_metadata?.full_name || user.email || '匿名用户'),
+          display_name: String(user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || '匿名用户'),
           avatar_url: user.user_metadata?.avatar_url
         }
       }
@@ -1868,6 +1906,18 @@ const POSDetail = () => {
                           {pos.basic_info?.checkout_location || '待勘察'}
                         </div>
                       </div>
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                        <div className="text-xs font-semibold text-gray-400">设备状态</div>
+                        <div className="text-sm font-semibold text-soft-black dark:text-gray-100 mt-1">
+                          {pos.status === 'active'
+                            ? '正常运行'
+                            : pos.status === 'inactive'
+                            ? '暂时不可用'
+                            : pos.status === 'maintenance'
+                            ? '维修中'
+                            : '已停用'}
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </AnimatedCard>
@@ -1993,81 +2043,142 @@ const POSDetail = () => {
                               </div>
 
                               {section.items.length > 0 ? (
-                                <div className={sectionStyle.gridClass}>
-                                  {section.items.map((item) => {
-                                    const methodIcon = paymentMethodIconMap[item.key] || CreditCard
-                                    const MethodIcon = methodIcon
-                                    const unifiedNote = getUnifiedSupportNote(item)
-                                    const conflictTag = item.hasConflict ? (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                        <AlertTriangle className="h-3 w-3" />
-                                        需复核
-                                      </span>
-                                    ) : null
-
-                                    if (sectionStyle.layout === 'method') {
-                                      return (
-                                        <div
-                                          key={item.key}
-                                          className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
-                                            item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
-                                          }`}
-                                        >
-                                          <div className="flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-3">
-                                              <div className="h-9 w-9 rounded-xl bg-white/85 border border-white/90 text-gray-600 flex items-center justify-center">
-                                                <MethodIcon className="h-4 w-4" />
-                                              </div>
-                                              <div>
-                                                <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
-                                              </div>
-                                            </div>
-                                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
-                                              <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
-                                              {supportStateLabelMap[item.resolvedState]}
-                                            </span>
-                                          </div>
-
-                                          {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
-                                          {unifiedNote && (
-                                            <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
-                                              {unifiedNote}
-                                            </p>
-                                          )}
-                                        </div>
-                                      )
-                                    }
-
-                                    if (sectionStyle.layout === 'cvm') {
-                                      return (
-                                        <div
-                                          key={item.key}
-                                          className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
-                                            item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
-                                          }`}
-                                        >
-                                          <div className="flex items-start gap-3">
-                                            <span className={`mt-1 h-8 w-1 shrink-0 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
-                                            <div className="flex-1 space-y-2">
-                                              <div className="flex items-start justify-between gap-3">
-                                                <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
-                                                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
-                                                  {supportStateLabelMap[item.resolvedState]}
+                                sectionStyle.layout === 'device' ? (
+                                  <div className={sectionStyle.gridClass}>
+                                    {(section.groups || []).map((group) => (
+                                      <div key={group.key} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                                        <div className="text-xs font-semibold text-gray-400">{group.title}</div>
+                                        {group.items.length > 0 && (
+                                          <div className="mt-2 space-y-2">
+                                            {group.items.map((item) => {
+                                              const unifiedNote = getUnifiedSupportNote(item)
+                                              const conflictTag = item.hasConflict ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                                  <AlertTriangle className="h-3 w-3" />
+                                                  需复核
                                                 </span>
+                                              ) : null
+
+                                              return (
+                                                <div
+                                                  key={`${group.key}-${item.key}`}
+                                                  className={`rounded-xl border border-gray-100 bg-white/90 px-3.5 py-3 ${
+                                                    item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                                  }`}
+                                                >
+                                                  <div className="flex items-start justify-between gap-3">
+                                                    <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                      <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                                      {supportStateLabelMap[item.resolvedState]}
+                                                    </span>
+                                                  </div>
+                                                  {unifiedNote && <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">{unifiedNote}</p>}
+                                                  {conflictTag && <div className="mt-2 flex items-center justify-end">{conflictTag}</div>}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className={sectionStyle.gridClass}>
+                                    {section.items.map((item) => {
+                                      const methodIcon = paymentMethodIconMap[item.key] || CreditCard
+                                      const MethodIcon = methodIcon
+                                      const unifiedNote = getUnifiedSupportNote(item)
+                                      const conflictTag = item.hasConflict ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          需复核
+                                        </span>
+                                      ) : null
+
+                                      if (sectionStyle.layout === 'method') {
+                                        return (
+                                          <div
+                                            key={item.key}
+                                            className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                              item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between gap-3">
+                                              <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-xl bg-white/85 border border-white/90 text-gray-600 flex items-center justify-center">
+                                                  <MethodIcon className="h-4 w-4" />
+                                                </div>
+                                                <div>
+                                                  <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                                </div>
                                               </div>
-                                              {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
-                                              {unifiedNote && (
-                                                <p className="text-[11px] text-gray-500 leading-relaxed">
-                                                  {unifiedNote}
-                                                </p>
-                                              )}
+                                              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                                {supportStateLabelMap[item.resolvedState]}
+                                              </span>
+                                            </div>
+
+                                            {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
+                                            {unifiedNote && (
+                                              <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                                {unifiedNote}
+                                              </p>
+                                            )}
+                                          </div>
+                                        )
+                                      }
+
+                                      if (sectionStyle.layout === 'cvm') {
+                                        return (
+                                          <div
+                                            key={item.key}
+                                            className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                              item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-start gap-3">
+                                              <span className={`mt-1 h-8 w-1 shrink-0 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                              <div className="flex-1 space-y-2">
+                                                <div className="flex items-start justify-between gap-3">
+                                                  <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                                  <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                    {supportStateLabelMap[item.resolvedState]}
+                                                  </span>
+                                                </div>
+                                                {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
+                                                {unifiedNote && (
+                                                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                    {unifiedNote}
+                                                  </p>
+                                                )}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      )
-                                    }
+                                        )
+                                      }
 
-                                    if (sectionStyle.layout === 'network') {
+                                      if (sectionStyle.layout === 'network') {
+                                        return (
+                                          <div
+                                            key={item.key}
+                                            className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                              item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                                {supportStateLabelMap[item.resolvedState]}
+                                              </span>
+                                            </div>
+                                            {unifiedNote && <div className="text-[11px] text-gray-500">{unifiedNote}</div>}
+                                            {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                          </div>
+                                        )
+                                      }
+
                                       return (
                                         <div
                                           key={item.key}
@@ -2082,38 +2193,19 @@ const POSDetail = () => {
                                               {supportStateLabelMap[item.resolvedState]}
                                             </span>
                                           </div>
-                                          {unifiedNote && <div className="text-[11px] text-gray-500">{unifiedNote}</div>}
+
+                                          {unifiedNote && (
+                                            <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed">
+                                              <p>{unifiedNote}</p>
+                                            </div>
+                                          )}
+
                                           {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
                                         </div>
                                       )
-                                    }
-
-                                    return (
-                                      <div
-                                        key={item.key}
-                                        className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
-                                          item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
-                                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
-                                            <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
-                                            {supportStateLabelMap[item.resolvedState]}
-                                          </span>
-                                        </div>
-
-                                        {unifiedNote && (
-                                          <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed">
-                                            <p>{unifiedNote}</p>
-                                          </div>
-                                        )}
-
-                                        {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
+                                    })}
+                                  </div>
+                                )
                               ) : (
                                 <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
                                   暂无可展示数据
