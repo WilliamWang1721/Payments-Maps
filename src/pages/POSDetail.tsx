@@ -565,25 +565,29 @@ const POSDetail = () => {
   }
 
   const getManualVerificationNote = (key: string) => {
+    const isCardNetworkCodeList = (values: string[]) => {
+      const knownCardNetworks = new Set([...CARD_NETWORKS.map((network) => network.value), 'maestro'])
+      return values.length > 0 && values.every((value) => knownCardNetworks.has(value))
+    }
+
+    const formatVerificationNote = (values: string[]) => {
+      if (!values.length || isCardNetworkCodeList(values)) return undefined
+      return `配置记录：${values.join('、')}`
+    }
+
     const modes = pos?.verification_modes
     if (!modes) return undefined
 
     if (key === 'no_pin') {
-      if (modes.small_amount_no_pin && modes.small_amount_no_pin.length > 0) {
-        return `配置记录：${modes.small_amount_no_pin.join('、')}`
-      }
+      if (modes.small_amount_no_pin) return formatVerificationNote(modes.small_amount_no_pin)
       if (modes.small_amount_no_pin_uncertain) return '配置记录：待确认'
     }
     if (key === 'pin') {
-      if (modes.requires_password && modes.requires_password.length > 0) {
-        return `配置记录：${modes.requires_password.join('、')}`
-      }
+      if (modes.requires_password) return formatVerificationNote(modes.requires_password)
       if (modes.requires_password_uncertain) return '配置记录：待确认'
     }
     if (key === 'signature') {
-      if (modes.requires_signature && modes.requires_signature.length > 0) {
-        return `配置记录：${modes.requires_signature.join('、')}`
-      }
+      if (modes.requires_signature) return formatVerificationNote(modes.requires_signature)
       if (modes.requires_signature_uncertain) return '配置记录：待确认'
     }
     return undefined
@@ -616,9 +620,8 @@ const POSDetail = () => {
     return pos.basic_info.checkout_location === key ? 'supported' : 'unknown'
   }
 
-  const getManualCheckoutNote = (key: string) => {
-    if (pos?.basic_info?.checkout_location !== key) return undefined
-    return '配置记录：当前结账位置'
+  const getManualCheckoutNote = () => {
+    return undefined
   }
 
   const getManualDeviceStatusState = (key: string): ThreeStateValue => {
@@ -626,9 +629,8 @@ const POSDetail = () => {
     return pos.status === key ? 'supported' : 'unknown'
   }
 
-  const getManualDeviceStatusNote = (key: string) => {
-    if (pos?.status !== key) return undefined
-    return '配置记录：当前设备状态'
+  const getManualDeviceStatusNote = () => {
+    return undefined
   }
 
   const getManualInstitutionState = (key: string): ThreeStateValue => {
@@ -636,9 +638,8 @@ const POSDetail = () => {
     return pos.basic_info.acquiring_institution === key ? 'supported' : 'unknown'
   }
 
-  const getManualInstitutionNote = (key: string) => {
-    if (pos?.basic_info?.acquiring_institution !== key) return undefined
-    return '配置记录：当前主收单机构'
+  const getManualInstitutionNote = () => {
+    return undefined
   }
 
   const buildSupportFusionItems = (
@@ -726,8 +727,7 @@ const POSDetail = () => {
       items: buildSupportFusionItems(
         CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
         attemptMatrix.cardNetworks,
-        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? 'supported' : 'unknown'),
-        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? '配置记录：列入支持卡组织' : undefined)
+        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? 'supported' : 'unknown')
       ),
     },
     {
@@ -888,9 +888,7 @@ const POSDetail = () => {
   }
 
   const getUnifiedSupportNote = (item: SupportFusionItem) => {
-    if (item.evidenceNote) return item.evidenceNote
-    if (item.manualNote) return item.manualNote
-    return '暂无相关记录'
+    return item.evidenceNote || item.manualNote
   }
 
   const isMobileActionsDisabled = !pos?.id
@@ -2075,7 +2073,7 @@ const POSDetail = () => {
                                                       {supportStateLabelMap[item.resolvedState]}
                                                     </span>
                                                   </div>
-                                                  <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">{unifiedNote}</p>
+                                                  {unifiedNote && <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">{unifiedNote}</p>}
                                                   {conflictTag && <div className="mt-2 flex items-center justify-end">{conflictTag}</div>}
                                                 </div>
                                               )
@@ -2124,9 +2122,11 @@ const POSDetail = () => {
                                             </div>
 
                                             {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
-                                            <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
-                                              {unifiedNote}
-                                            </p>
+                                            {unifiedNote && (
+                                              <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                                {unifiedNote}
+                                              </p>
+                                            )}
                                           </div>
                                         )
                                       }
@@ -2149,9 +2149,11 @@ const POSDetail = () => {
                                                   </span>
                                                 </div>
                                                 {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
-                                                <p className="text-[11px] text-gray-500 leading-relaxed">
-                                                  {unifiedNote}
-                                                </p>
+                                                {unifiedNote && (
+                                                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                    {unifiedNote}
+                                                  </p>
+                                                )}
                                               </div>
                                             </div>
                                           </div>
@@ -2173,9 +2175,7 @@ const POSDetail = () => {
                                                 {supportStateLabelMap[item.resolvedState]}
                                               </span>
                                             </div>
-                                            <div className="text-[11px] text-gray-500 min-h-[2.2rem]">
-                                              {unifiedNote}
-                                            </div>
+                                            {unifiedNote && <div className="text-[11px] text-gray-500">{unifiedNote}</div>}
                                             {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
                                           </div>
                                         )
@@ -2196,9 +2196,11 @@ const POSDetail = () => {
                                             </span>
                                           </div>
 
-                                          <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.6rem]">
-                                            <p>{unifiedNote}</p>
-                                          </div>
+                                          {unifiedNote && (
+                                            <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed">
+                                              <p>{unifiedNote}</p>
+                                            </div>
+                                          )}
 
                                           {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
                                         </div>
@@ -2424,7 +2426,7 @@ const POSDetail = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-soft-black dark:text-gray-100">
                     <MessageCircle className="w-5 h-5 text-accent-yellow" />
-                    用户评论
+                    用户评价
                   </CardTitle>
                   {permissions.canAdd && (
                     <AnimatedButton onClick={() => setShowReviewModal(true)} size="sm">
