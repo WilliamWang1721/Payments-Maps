@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Filter, MapPin, Star, Plus, Navigation, Calendar, MoreHorizontal, ArrowRight, Trash2, CheckSquare, Square } from 'lucide-react'
+import { Filter, MapPin, Star, Plus, Navigation, Calendar, MoreHorizontal, ArrowRight, Trash2, CheckSquare, Square, RefreshCcw } from 'lucide-react'
 import { useMapStore } from '@/stores/useMapStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import usePermissions from '@/hooks/usePermissions'
@@ -12,6 +12,7 @@ import { supabase, type POSMachine } from '@/lib/supabase'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import { HighlightText } from '../components/HighlightText'
 import { notify } from '@/lib/notify'
+import { locationUtils } from '@/lib/amap'
 
 interface POSMachineWithStats extends POSMachine {
   distance?: number
@@ -120,7 +121,9 @@ const List = () => {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedPOSIds, setSelectedPOSIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkRefreshingAddress, setBulkRefreshingAddress] = useState(false)
   const canBulkDelete = !permissions.isLoading && (permissions.canDelete || permissions.canDeleteAll)
+  const canBulkRefreshAddress = !permissions.isLoading && permissions.isAdmin
   const selectedCount = selectedPOSIds.size
   const toggleSelectionMode = () => {
     setSelectionMode((prev) => {
@@ -270,6 +273,82 @@ const List = () => {
       notify.error('删除失败，请重试')
     } finally {
       setBulkDeleting(false)
+    }
+  }
+
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  const handleBulkRefreshAddress = async () => {
+    if (!selectionMode || selectedCount === 0) return
+    if (!canBulkRefreshAddress) {
+      notify.error('仅管理员可以批量刷新地址')
+      return
+    }
+
+    const targets = sortedPOSMachines
+      .filter((pos) => selectedPOSIds.has(pos.id))
+      .filter((pos) => Number.isFinite(pos.latitude) && Number.isFinite(pos.longitude) && pos.latitude !== 0 && pos.longitude !== 0)
+
+    if (targets.length === 0) {
+      notify.error('没有可刷新的POS机')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `确定要刷新选中的 ${targets.length} 台POS机地址吗？将使用经纬度重新解析，并覆盖当前地址字段。`
+    )
+    if (!confirmed) return
+
+    if (!navigator.onLine) {
+      notify.error('网络连接已断开，请检查网络后重试')
+      return
+    }
+
+    setBulkRefreshingAddress(true)
+    const toastId = notify.loading(`正在刷新地址... (0/${targets.length})`)
+    let successCount = 0
+    let failureCount = 0
+
+    try {
+      for (let index = 0; index < targets.length; index += 1) {
+        const pos = targets[index]
+        try {
+          const resolved = await locationUtils.getAddress(pos.longitude, pos.latitude)
+          if (!resolved || resolved.trim() === '') {
+            throw new Error('解析结果为空')
+          }
+
+          const { error } = await supabase
+            .from('pos_machines')
+            .update({ address: resolved })
+            .eq('id', pos.id)
+
+          if (error) throw error
+          successCount += 1
+        } catch (error) {
+          failureCount += 1
+          console.warn('[List] 刷新地址失败:', pos.id, error)
+        } finally {
+          notify.loading(`正在刷新地址... (${index + 1}/${targets.length})`, { id: toastId })
+          // 避免触发频控，稍作间隔
+          await delay(150)
+        }
+      }
+
+      if (failureCount === 0) {
+        notify.success(`地址刷新完成：${successCount} 条`, { id: toastId })
+      } else {
+        notify.error(`地址刷新完成：成功 ${successCount}，失败 ${failureCount}（详情见控制台）`, { id: toastId })
+      }
+
+      setSelectedPOSIds(new Set())
+      setSelectionMode(false)
+      await loadPOSMachines()
+    } catch (error) {
+      console.error('批量刷新地址失败:', error)
+      notify.error('批量刷新地址失败，请重试', { id: toastId })
+    } finally {
+      setBulkRefreshingAddress(false)
     }
   }
 
@@ -446,7 +525,7 @@ const List = () => {
                       ) : (
                         <Square className="w-4 h-4" />
                       )}
-                      {isAllSelected ? '取消全选' : '全选可删除'}
+                      {isAllSelected ? '取消全选' : canBulkRefreshAddress ? '全选当前列表' : '全选可删除'}
                       {hasSelectableItems && (
                         <span className="text-[10px] text-gray-500">({allSelectableCount})</span>
                       )}
@@ -456,6 +535,20 @@ const List = () => {
                         <span className="text-xs font-medium text-gray-600">
                           已选择 {selectedCount} 台
                         </span>
+                        {canBulkRefreshAddress && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleBulkRefreshAddress}
+                            disabled={!selectedCount || bulkRefreshingAddress || bulkDeleting}
+                            loading={bulkRefreshingAddress}
+                            className="shadow-none"
+                          >
+                            <RefreshCcw className="w-4 h-4 mr-2" />
+                            刷新地址
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="danger"
@@ -478,7 +571,9 @@ const List = () => {
             {canBulkDelete && (
               <p className="text-xs text-gray-500">
                 {selectionMode
-                  ? '只有你创建或拥有删除权限的POS机可以被选中。删除操作不可恢复，请谨慎操作。'
+                  ? canBulkRefreshAddress
+                    ? '管理员可使用多选刷新地址（基于经纬度重新解析并覆盖地址）。删除操作不可恢复，请谨慎操作。'
+                    : '只有你创建或拥有删除权限的POS机可以被选中。删除操作不可恢复，请谨慎操作。'
                   : '需要批量删除时请开启多选模式。'}
               </p>
             )}
@@ -808,8 +903,8 @@ const List = () => {
                             </div>
                           )}
                           {pos.remarks && (
-                            <div className="text-xs text-gray-500 bg-cream px-3 py-1.5 rounded-2xl inline-flex items-center border border-transparent">
-                              <span className="truncate">{pos.remarks}</span>
+                            <div className="text-xs text-gray-500 bg-cream px-3 py-1.5 rounded-2xl inline-flex items-start border border-transparent max-w-full">
+                              <span className="line-clamp-2 break-words whitespace-normal">{pos.remarks}</span>
                             </div>
                           )}
                           {tags.length > 0 && (
