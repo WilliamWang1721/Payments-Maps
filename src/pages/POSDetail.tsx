@@ -1009,53 +1009,19 @@ const POSDetail = () => {
         console.error('加载评价失败:', error)
         return
       }
-
-      const userIds = Array.from(new Set((reviewsData || [])
-        .map((review) => review.user_id)
-        .filter((userId): userId is string => Boolean(userId))))
-
-      const userMap = new Map<string, { display_name: string; avatar_url?: string }>()
-
-      if (userIds.length > 0) {
-        const { data: usersData, error: usersError } = await supabase
-          .from('users')
-          .select('id, user_metadata, email')
-          .in('id', userIds)
-
-        if (usersError) {
-          console.error('加载用户信息失败:', usersError)
-        } else {
-          ;(usersData || []).forEach((userRow: any) => {
-            const metadata = userRow?.user_metadata || {}
-            const displayName = metadata.display_name
-              || metadata.name
-              || (userRow?.email ? String(userRow.email).split('@')[0] : undefined)
-              || userRow?.email
-              || '匿名用户'
-            const avatarUrl = metadata.avatar_url || metadata.picture
-            userMap.set(userRow.id, {
-              display_name: displayName,
-              avatar_url: avatarUrl || undefined
-            })
-          })
-        }
-      }
       
       // 转换数据格式
-      const formattedReviews: Review[] = (reviewsData || []).map(review => {
-        const userInfo = review.user_id ? userMap.get(review.user_id) : undefined
-        return {
-          id: review.id,
-          rating: review.rating,
-          comment: review.content,
-          created_at: review.created_at,
-          user_id: review.user_id,
-          users: {
-            display_name: userInfo?.display_name || '匿名用户',
-            avatar_url: userInfo?.avatar_url
-          }
+      const formattedReviews: Review[] = (reviewsData || []).map(review => ({
+        id: review.id,
+        rating: review.rating,
+        comment: review.content,
+        created_at: review.created_at,
+        user_id: review.user_id,
+        users: {
+          display_name: '匿名用户',
+          avatar_url: undefined
         }
-      })
+      }))
       
       setReviews(formattedReviews)
     } catch (error) {
@@ -1285,7 +1251,7 @@ const POSDetail = () => {
         created_at: data.created_at,
         user_id: data.user_id,
         users: {
-          display_name: String(user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || '匿名用户'),
+          display_name: String(user.user_metadata?.full_name || user.email || '匿名用户'),
           avatar_url: user.user_metadata?.avatar_url
         }
       }
@@ -2048,7 +2014,7 @@ const POSDetail = () => {
                                     {(section.groups || []).map((group) => (
                                       <div key={group.key} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
                                         <div className="text-xs font-semibold text-gray-400">{group.title}</div>
-                                        {group.items.length > 0 && (
+                                        {group.items.length > 0 ? (
                                           <div className="mt-2 space-y-2">
                                             {group.items.map((item) => {
                                               const unifiedNote = getUnifiedSupportNote(item)
@@ -2073,12 +2039,14 @@ const POSDetail = () => {
                                                       {supportStateLabelMap[item.resolvedState]}
                                                     </span>
                                                   </div>
-                                                  {unifiedNote && <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">{unifiedNote}</p>}
+                                                  <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">{unifiedNote}</p>
                                                   {conflictTag && <div className="mt-2 flex items-center justify-end">{conflictTag}</div>}
                                                 </div>
                                               )
                                             })}
                                           </div>
+                                        ) : (
+                                          <div className="mt-2 text-xs text-gray-500">暂无相关记录</div>
                                         )}
                                       </div>
                                     ))}
@@ -2118,13 +2086,32 @@ const POSDetail = () => {
                                                 {supportStateLabelMap[item.resolvedState]}
                                               </span>
                                             </div>
+<<<<<<< ours
+<<<<<<< ours
+                                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                              <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                              {supportStateLabelMap[item.resolvedState]}
+                                            </span>
+                                          </div>
+
+                                          {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
+                                          {unifiedNote && (
+                                            <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                              {unifiedNote}
+                                            </p>
+                                          )}
+                                        </div>
+                                      )
+                                    }
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 
                                             {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
-                                            {unifiedNote && (
-                                              <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
-                                                {unifiedNote}
-                                              </p>
-                                            )}
+                                            <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                              {unifiedNote}
+                                            </p>
                                           </div>
                                         )
                                       }
@@ -2147,12 +2134,25 @@ const POSDetail = () => {
                                                   </span>
                                                 </div>
                                                 {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
-                                                {unifiedNote && (
-                                                  <p className="text-[11px] text-gray-500 leading-relaxed">
-                                                    {unifiedNote}
-                                                  </p>
-                                                )}
+                                                <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                  {unifiedNote}
+                                                </p>
                                               </div>
+<<<<<<< ours
+<<<<<<< ours
+                                              {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
+                                              {unifiedNote && (
+                                                <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                  {unifiedNote}
+                                                </p>
+                                              )}
+<<<<<<< ours
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
                                             </div>
                                           </div>
                                         )
@@ -2173,7 +2173,9 @@ const POSDetail = () => {
                                                 {supportStateLabelMap[item.resolvedState]}
                                               </span>
                                             </div>
-                                            {unifiedNote && <div className="text-[11px] text-gray-500">{unifiedNote}</div>}
+                                            <div className="text-[11px] text-gray-500 min-h-[2.2rem]">
+                                              {unifiedNote}
+                                            </div>
                                             {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
                                           </div>
                                         )
@@ -2193,12 +2195,48 @@ const POSDetail = () => {
                                               {supportStateLabelMap[item.resolvedState]}
                                             </span>
                                           </div>
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+=======
+>>>>>>> theirs
+                                          {unifiedNote && <div className="text-[11px] text-gray-500">{unifiedNote}</div>}
+                                          {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                        </div>
+                                      )
+                                    }
 
-                                          {unifiedNote && (
-                                            <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed">
-                                              <p>{unifiedNote}</p>
-                                            </div>
-                                          )}
+                                    return (
+                                      <div
+                                        key={item.key}
+                                        className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                          item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                        }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                            {supportStateLabelMap[item.resolvedState]}
+                                          </span>
+                                        </div>
+
+                                        {unifiedNote && (
+                                          <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed">
+                                            <p>{unifiedNote}</p>
+                                          </div>
+                                        )}
+
+                                        {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+=======
+
+                                          <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.6rem]">
+                                            <p>{unifiedNote}</p>
+                                          </div>
 
                                           {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
                                         </div>
@@ -2206,6 +2244,20 @@ const POSDetail = () => {
                                     })}
                                   </div>
                                 )
+>>>>>>> theirs
+=======
+
+                                          <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.6rem]">
+                                            <p>{unifiedNote}</p>
+                                          </div>
+
+                                          {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+>>>>>>> theirs
                               ) : (
                                 <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
                                   暂无可展示数据
