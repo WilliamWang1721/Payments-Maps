@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X, MapPin, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
@@ -265,9 +266,23 @@ const MapPicker = ({
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
-  return (
+  const pickerContent = (
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -370,6 +385,12 @@ const MapPicker = ({
       </motion.div>
     </AnimatePresence>
   )
+
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(pickerContent, document.body)
 }
 
 export default MapPicker

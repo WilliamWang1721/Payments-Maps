@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { Building2, CalendarClock, CreditCard, Filter, GaugeCircle, RefreshCw, Settings, Shield, SlidersHorizontal, X } from 'lucide-react'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import Button from '@/components/ui/Button'
@@ -32,6 +33,20 @@ const FilterPanel = ({
   onReset,
   variant = 'modal',
 }: FilterPanelProps) => {
+  useEffect(() => {
+    if (typeof document === 'undefined' || variant !== 'map' || !isOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isOpen, variant])
+
   const appliedCount = useMemo(() => {
     return Object.entries(filters).filter(([_, val]) => val !== undefined && val !== '' && val !== false).length
   }, [filters])
@@ -405,7 +420,7 @@ const FilterPanel = ({
   )
 
   if (variant === 'map') {
-    return (
+    const mapDrawer = (
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -447,6 +462,12 @@ const FilterPanel = ({
         )}
       </AnimatePresence>
     )
+
+    if (typeof document === 'undefined') {
+      return null
+    }
+
+    return createPortal(mapDrawer, document.body)
   }
 
   return (

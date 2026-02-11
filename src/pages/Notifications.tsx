@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Bell, Check, CheckCircle, Clock, ExternalLink, Loader2, MessageSquare, Tag, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -97,6 +98,20 @@ const Notifications = () => {
     targetUserEmail: '',
     linkUrl: ''
   })
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !selectedNotification) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [selectedNotification])
 
   const formatTimeAgo = (value: string) => {
     const date = new Date(value)
@@ -681,81 +696,84 @@ const Notifications = () => {
         </section>
       </div>
 
-      {selectedNotification && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-6 relative">
-            <button
-              type="button"
-              onClick={() => setSelectedNotification(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-soft-black"
-              aria-label={t('notificationsPage.close', 'Close')}
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-start gap-4">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${getColorByType(selectedNotification.type)} shadow-lg`}>
-                {getIconByType(selectedNotification.type)}
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  {getTypeLabel(selectedNotification.type)}
-                </p>
-                <h3 className="text-xl font-bold text-soft-black">{selectedNotification.title}</h3>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-2">
-                  <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
-                    <Clock className="w-3 h-3" />
-                    {formatTimeAgo(selectedNotification.created_at)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
-                    {getAudienceLabel(selectedNotification)}
-                  </span>
-                  {selectedNotification.sender && (
-                    <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
-                      {t('notificationsPage.sentBy', 'Sent by')} {selectedNotification.sender.email}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 mt-4 whitespace-pre-line leading-relaxed">
-              {selectedNotification.content}
-            </p>
-
-            {selectedNotification.link_url && (
-              <a
-                href={selectedNotification.link_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent-yellow hover:text-accent-purple"
-              >
-                <ExternalLink className="w-4 h-4" />
-                {t('notificationsPage.openLink', 'Open related link')}
-              </a>
-            )}
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              {!selectedNotification.isRead && (
-                <button
-                  type="button"
-                  onClick={() => markAsRead(selectedNotification.id)}
-                  className="px-4 py-2 rounded-xl bg-blue-50 text-accent-yellow hover:text-accent-purple text-sm font-semibold"
-                >
-                  {t('notificationsPage.markAsRead', 'Mark as read')}
-                </button>
-              )}
+      {selectedNotification &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-6 relative">
               <button
                 type="button"
                 onClick={() => setSelectedNotification(null)}
-                className="px-4 py-2 rounded-xl bg-soft-black text-white text-sm font-semibold hover:bg-accent-yellow"
+                className="absolute top-4 right-4 text-gray-400 hover:text-soft-black"
+                aria-label={t('notificationsPage.close', 'Close')}
               >
-                {t('notificationsPage.close', 'Close')}
+                <X className="w-5 h-5" />
               </button>
+
+              <div className="flex items-start gap-4">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${getColorByType(selectedNotification.type)} shadow-lg`}>
+                  {getIconByType(selectedNotification.type)}
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    {getTypeLabel(selectedNotification.type)}
+                  </p>
+                  <h3 className="text-xl font-bold text-soft-black">{selectedNotification.title}</h3>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-2">
+                    <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
+                      <Clock className="w-3 h-3" />
+                      {formatTimeAgo(selectedNotification.created_at)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
+                      {getAudienceLabel(selectedNotification)}
+                    </span>
+                    {selectedNotification.sender && (
+                      <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
+                        {t('notificationsPage.sentBy', 'Sent by')} {selectedNotification.sender.email}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 mt-4 whitespace-pre-line leading-relaxed">
+                {selectedNotification.content}
+              </p>
+
+              {selectedNotification.link_url && (
+                <a
+                  href={selectedNotification.link_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent-yellow hover:text-accent-purple"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {t('notificationsPage.openLink', 'Open related link')}
+                </a>
+              )}
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                {!selectedNotification.isRead && (
+                  <button
+                    type="button"
+                    onClick={() => markAsRead(selectedNotification.id)}
+                    className="px-4 py-2 rounded-xl bg-blue-50 text-accent-yellow hover:text-accent-purple text-sm font-semibold"
+                  >
+                    {t('notificationsPage.markAsRead', 'Mark as read')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotification(null)}
+                  className="px-4 py-2 rounded-xl bg-soft-black text-white text-sm font-semibold hover:bg-accent-yellow"
+                >
+                  {t('notificationsPage.close', 'Close')}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

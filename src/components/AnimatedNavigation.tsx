@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { LucideIcon } from 'lucide-react'
 
 interface AnimatedTabProps {
@@ -287,7 +288,21 @@ export const AnimatedSidebar: React.FC<AnimatedSidebarProps> = ({
   className = '',
   side = 'left'
 }) => {
-  return (
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isOpen])
+
+  const sidebarContent = (
     <AnimatePresence>
       {isOpen && (
         <>
@@ -314,4 +329,10 @@ export const AnimatedSidebar: React.FC<AnimatedSidebarProps> = ({
       )}
     </AnimatePresence>
   )
+
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(sidebarContent, document.body)
 }

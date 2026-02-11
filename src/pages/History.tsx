@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Clock, MapPin, Sparkles, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -39,6 +40,20 @@ const History: React.FC = () => {
       navigate('/login')
     }
   }, [user, navigate])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showClearModal) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [showClearModal])
 
   const loadHistory = async () => {
     if (!user) return
@@ -385,37 +400,40 @@ const History: React.FC = () => {
         </div>
       </div>
 
-      {showClearModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-soft border border-white/60 space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-                <Trash2 className="w-5 h-5" />
+      {showClearModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-soft border border-white/60 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-soft-black">确认清空历史</h3>
+                  <p className="text-sm text-gray-500 mt-1">此操作无法撤销，将删除你的所有浏览足迹。</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-soft-black">确认清空历史</h3>
-                <p className="text-sm text-gray-500 mt-1">此操作无法撤销，将删除你的所有浏览足迹。</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearModal(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                  disabled={clearing}
+                >
+                  保留记录
+                </button>
+                <button
+                  onClick={clearAllHistory}
+                  disabled={clearing}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors shadow-soft disabled:opacity-60 text-sm font-semibold"
+                >
+                  {clearing ? '清空中...' : '确认清空'}
+                </button>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowClearModal(false)}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
-                disabled={clearing}
-              >
-                保留记录
-              </button>
-              <button
-                onClick={clearAllHistory}
-                disabled={clearing}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors shadow-soft disabled:opacity-60 text-sm font-semibold"
-              >
-                {clearing ? '清空中...' : '确认清空'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
