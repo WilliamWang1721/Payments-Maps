@@ -164,24 +164,23 @@ const POSDetail = () => {
   const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
   const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
 
+  const createAttemptDraft = (): AttemptDraft => ({
+    result: 'success',
+    attempted_at: new Date().toISOString(),
+    card_network: '',
+    payment_method: 'tap',
+    cvm: 'unknown',
+    acquiring_mode: 'unknown',
+    device_status: pos?.status || 'active',
+    acquiring_institution: pos?.basic_info?.acquiring_institution || '',
+    checkout_location: pos?.basic_info?.checkout_location,
+    card_name: '',
+    notes: '',
+    is_conclusive_failure: false,
+  })
+
   const addAttemptRow = () => {
-    setDraftAttempts((prev) => ([
-      ...prev,
-      {
-        result: 'success',
-        attempted_at: new Date().toISOString(),
-        card_network: '',
-        payment_method: 'tap',
-        cvm: 'unknown',
-        acquiring_mode: 'unknown',
-        device_status: pos?.status || 'active',
-        acquiring_institution: pos?.basic_info?.acquiring_institution || '',
-        checkout_location: pos?.basic_info?.checkout_location,
-        card_name: '',
-        notes: '',
-        is_conclusive_failure: false,
-      },
-    ]))
+    setDraftAttempts((prev) => [...prev, createAttemptDraft()])
   }
 
   const getAttemptMethodLabel = (method: NonNullable<AttemptDraft['payment_method']>) => {
@@ -517,9 +516,14 @@ const POSDetail = () => {
   }
 
   const isMobileActionsDisabled = !pos?.id
-  const handleAttemptClick = () => {
+  const openAttemptModal = () => {
     if (!pos) return
+    setDraftAttempts((prev) => (prev.length > 0 ? prev : [createAttemptDraft()]))
     setShowAttemptModal(true)
+  }
+
+  const handleAttemptClick = () => {
+    openAttemptModal()
   }
   const handleReviewClick = () => {
     if (!pos) return
@@ -1234,7 +1238,9 @@ const POSDetail = () => {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {!showAttemptModal && (
+        <>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <AnimatedCard
           className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft"
           variant="elevated"
@@ -1814,7 +1820,7 @@ const POSDetail = () => {
                     尝试记录
                   </CardTitle>
                   {permissions.canAdd && (
-                    <AnimatedButton onClick={() => setShowAttemptModal(true)} size="sm">
+                    <AnimatedButton onClick={openAttemptModal} size="sm">
                       <Clock className="w-4 h-4 mr-2" />
                       记录尝试
                     </AnimatedButton>
@@ -2090,127 +2096,133 @@ const POSDetail = () => {
             </>
           )}
 
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur pb-safe-bottom">
-            <div className="grid grid-cols-4 gap-2 px-4 py-3">
-              <button
-                type="button"
-                onClick={toggleFavorite}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="收藏"
-              >
-                <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
-                收藏
-              </button>
-              <button
-                type="button"
-                onClick={handleNavigateToMap}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="导航"
-              >
-                <MapPin className="w-5 h-5 text-gray-400" />
-                导航
-              </button>
-              <button
-                type="button"
-                onClick={handleAttemptClick}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="记录尝试"
-              >
-                <Clock className="w-5 h-5 text-gray-400" />
-                尝试
-              </button>
-              <button
-                type="button"
-                onClick={handleReviewClick}
-                disabled={isMobileActionsDisabled}
-                className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="写评价"
-              >
-                <MessageCircle className="w-5 h-5 text-gray-400" />
-                评价
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 评论模态框 */}
-      <AnimatedModal
-        isOpen={showReviewModal}
-        onClose={() => setShowReviewModal(false)}
-        title="添加评价"
-        size="md"
-      >
-        <div className="space-y-6">
-          <div className="p-4 border rounded-lg">
-            <p className="text-gray-700">
-              为 "{pos?.merchant_name}" 添加您的使用体验
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                评分
-              </label>
-              <div className="flex space-x-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setNewReview({ ...newReview, rating: star })}
-                    className="p-1 hover:scale-110 transition-transform"
-                  >
-                    <Star
-                      className={`w-8 h-8 ${
-                        star <= newReview.rating
-                          ? 'text-yellow-400 fill-current'
-                          : 'text-gray-300'
-                      }`}
-                    />
-                  </button>
-                ))}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur pb-safe-bottom">
+              <div className="grid grid-cols-4 gap-2 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={toggleFavorite}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="收藏"
+                >
+                  <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} />
+                  收藏
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNavigateToMap}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="导航"
+                >
+                  <MapPin className="w-5 h-5 text-gray-400" />
+                  导航
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAttemptClick}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="记录尝试"
+                >
+                  <Clock className="w-5 h-5 text-gray-400" />
+                  尝试
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReviewClick}
+                  disabled={isMobileActionsDisabled}
+                  className="flex flex-col items-center justify-center gap-1 text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="写评价"
+                >
+                  <MessageCircle className="w-5 h-5 text-gray-400" />
+                  评价
+                </button>
               </div>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                评价内容
-              </label>
-              <textarea
-                value={newReview.comment}
-                onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
-                placeholder="分享您的使用体验..."
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              />
-            </div>
           </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <AnimatedButton
-              onClick={() => setShowReviewModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={submitReview}
-              loading={submittingReview}
-              disabled={!newReview.rating || !newReview.comment.trim()}
-              className="flex-1"
-            >
-              提交评价
-            </AnimatedButton>
           </div>
-        </div>
-      </AnimatedModal>
+        </>
+      )}
 
-      {/* 尝试记录全屏页面 */}
+      {!showAttemptModal && (
+        <>
+          {/* 评论模态框 */}
+          <AnimatedModal
+            isOpen={showReviewModal}
+            onClose={() => setShowReviewModal(false)}
+            title="添加评价"
+            size="md"
+          >
+            <div className="space-y-6">
+              <div className="p-4 border rounded-lg">
+                <p className="text-gray-700">
+                  为 "{pos?.merchant_name}" 添加您的使用体验
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    评分
+                  </label>
+                  <div className="flex space-x-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setNewReview({ ...newReview, rating: star })}
+                        className="p-1 hover:scale-110 transition-transform"
+                      >
+                        <Star
+                          className={`w-8 h-8 ${
+                            star <= newReview.rating
+                              ? 'text-yellow-400 fill-current'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    评价内容
+                  </label>
+                  <textarea
+                    value={newReview.comment}
+                    onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                    placeholder="分享您的使用体验..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 pt-4 border-t">
+                <AnimatedButton
+                  onClick={() => setShowReviewModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={submitReview}
+                  loading={submittingReview}
+                  disabled={!newReview.rating || !newReview.comment.trim()}
+                  className="flex-1"
+                >
+                  提交评价
+                </AnimatedButton>
+              </div>
+            </div>
+          </AnimatedModal>
+        </>
+      )}
+
+      {/* 添加尝试记录独立页面 */}
       <AnimatePresence>
         {showAttemptModal && (
           <motion.div
@@ -2264,13 +2276,7 @@ const POSDetail = () => {
               <div className="flex-1 overflow-y-auto">
                 <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
                   <div className="space-y-6 animate-fade-in-up">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400">尝试记录</p>
-                        <h3 className="text-base font-semibold text-soft-black dark:text-gray-100">添加尝试记录</h3>
-                        <p className="text-xs text-gray-500 mt-1">填写成功/失败的支付尝试，系统会据此推导支持情况。</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-end gap-3">
                         <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft">
                           <Clock className="w-3.5 h-3.5 text-accent-yellow" />
                           已有 {attemptsCount} 条记录
@@ -2282,7 +2288,6 @@ const POSDetail = () => {
                         >
                           + 添加记录
                         </button>
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
@@ -2645,340 +2650,344 @@ const POSDetail = () => {
         )}
       </AnimatePresence>
 
-      {/* 状态修改模态框 */}
-      <AnimatedModal
-        isOpen={showStatusModal}
-        onClose={() => setShowStatusModal(false)}
-        title="修改POS状态"
-        size="sm"
-      >
-        <div className="space-y-6">
-          <div className="p-4 border rounded-lg">
-            <p className="text-gray-700">
-              修改 "{pos?.merchant_name}" 的设备状态
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                设备状态
-              </label>
-              <select
-                value={newStatus}
-                onChange={(e) => setNewStatus(e.target.value as POSStatus)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
-                style={{
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'manipulation',
-                  fontSize: '16px'
-                }}
-              >
-                <option value="active">正常运行</option>
-                <option value="inactive">暂时不可用</option>
-                <option value="maintenance">维修中</option>
-                <option value="disabled">已停用</option>
-              </select>
-            </div>
-            
-            {successRate !== null && successRate < 0.5 && (
-              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                  <span className="text-sm text-orange-700 font-medium">
-                    注意：当前成功率为 {(successRate * 100).toFixed(1)}%，低于50%
-                  </span>
-                </div>
+      {!showAttemptModal && (
+        <>
+          {/* 状态修改模态框 */}
+          <AnimatedModal
+            isOpen={showStatusModal}
+            onClose={() => setShowStatusModal(false)}
+            title="修改POS状态"
+            size="sm"
+          >
+            <div className="space-y-6">
+              <div className="p-4 border rounded-lg">
+                <p className="text-gray-700">
+                  修改 "{pos?.merchant_name}" 的设备状态
+                </p>
               </div>
-            )}
-          </div>
-          
-          <div className="flex space-x-3 pt-4 border-t">
-            <AnimatedButton
-              onClick={() => setShowStatusModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={handleStatusUpdate}
-              loading={updatingStatus}
-              className="flex-1"
-            >
-              确认修改
-            </AnimatedButton>
-          </div>
-        </div>
-      </AnimatedModal>
-
-      {/* 导出模态框 */}
-      <AnimatedModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        title="导出POS记录"
-        size="md"
-        footer={
-          <div className="flex space-x-3">
-            <AnimatedButton
-              onClick={() => setShowExportModal(false)}
-              variant="outline"
-              className="flex-1"
-            >
-              取消
-            </AnimatedButton>
-            <AnimatedButton
-              onClick={handleExport}
-              loading={exporting}
-              className="flex-1"
-            >
-              {exporting ? '导出中...' : '开始导出'}
-            </AnimatedButton>
-          </div>
-        }
-      >
-        <div className="space-y-6">
-          <div className="p-4 border rounded-lg bg-gray-50">
-            <p className="text-gray-700 text-sm">
-              导出 "{pos?.merchant_name}" 的完整记录数据
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                导出格式
-              </label>
-              <select
-                value={selectedFormat}
-                onChange={(e) => setSelectedFormat(e.target.value as ExportFormat)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="json">JSON文件（用于导入）</option>
-                <option value="html">HTML卡片</option>
-                <option value="pdf">PDF卡片</option>
-              </select>
-            </div>
-            
-            {(selectedFormat === 'html' || selectedFormat === 'pdf') && (
-              <>
+              
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    卡片风格
+                    设备状态
                   </label>
                   <select
-                    value={selectedCardStyle}
-                    onChange={(e) => setSelectedCardStyle(e.target.value as CardStyle)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as POSStatus)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none"
+                    style={{
+                      WebkitAppearance: 'none',
+                      WebkitTapHighlightColor: 'transparent',
+                      touchAction: 'manipulation',
+                      fontSize: '16px'
+                    }}
                   >
-                    <option value="minimal">简约风格</option>
-                    <option value="detailed">详细风格</option>
-                    <option value="business">商务风格</option>
-                    <option value="modern">现代风格</option>
+                    <option value="active">正常运行</option>
+                    <option value="inactive">暂时不可用</option>
+                    <option value="maintenance">维修中</option>
+                    <option value="disabled">已停用</option>
                   </select>
                 </div>
                 
-                {/* 卡片预览 */}
+                {successRate !== null && successRate < 0.5 && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                      <span className="text-sm text-orange-700 font-medium">
+                        注意：当前成功率为 {(successRate * 100).toFixed(1)}%，低于50%
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex space-x-3 pt-4 border-t">
+                <AnimatedButton
+                  onClick={() => setShowStatusModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={handleStatusUpdate}
+                  loading={updatingStatus}
+                  className="flex-1"
+                >
+                  确认修改
+                </AnimatedButton>
+              </div>
+            </div>
+          </AnimatedModal>
+
+          {/* 导出模态框 */}
+          <AnimatedModal
+            isOpen={showExportModal}
+            onClose={() => setShowExportModal(false)}
+            title="导出POS记录"
+            size="md"
+            footer={
+              <div className="flex space-x-3">
+                <AnimatedButton
+                  onClick={() => setShowExportModal(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={handleExport}
+                  loading={exporting}
+                  className="flex-1"
+                >
+                  {exporting ? '导出中...' : '开始导出'}
+                </AnimatedButton>
+              </div>
+            }
+          >
+            <div className="space-y-6">
+              <div className="p-4 border rounded-lg bg-gray-50">
+                <p className="text-gray-700 text-sm">
+                  导出 "{pos?.merchant_name}" 的完整记录数据
+                </p>
+              </div>
+              
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    预览效果
+                    导出格式
                   </label>
-                  <div className="border rounded-lg p-4 bg-gray-50 max-h-64 overflow-y-auto">
-                    <div className="transform scale-50 origin-top-left w-[200%] h-auto">
-                      <div 
-                        className="bg-white rounded-lg shadow-sm border overflow-hidden"
-                        style={{
-                          width: '400px',
-                          fontSize: '12px'
-                        }}
+                  <select
+                    value={selectedFormat}
+                    onChange={(e) => setSelectedFormat(e.target.value as ExportFormat)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="json">JSON文件（用于导入）</option>
+                    <option value="html">HTML卡片</option>
+                    <option value="pdf">PDF卡片</option>
+                  </select>
+                </div>
+                
+                {(selectedFormat === 'html' || selectedFormat === 'pdf') && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        卡片风格
+                      </label>
+                      <select
+                        value={selectedCardStyle}
+                        onChange={(e) => setSelectedCardStyle(e.target.value as CardStyle)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        {/* 预览卡片头部 */}
-                        <div 
-                          className="text-white p-4 text-center"
-                          style={{
-                            background: selectedCardStyle === 'minimal' ? '#374151' :
-                                      selectedCardStyle === 'business' ? 'linear-gradient(135deg, #1f2937 0%, #374151 100%)' :
-                                      selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)' :
-                                      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            borderBottom: selectedCardStyle === 'business' ? '3px solid #d97706' : 'none'
-                          }}
-                        >
-                          <h3 className="font-bold text-sm">{pos?.merchant_name || '商户名称'}</h3>
-                          <p className="text-xs opacity-90">📍 {pos?.address || '商户地址'}</p>
-                        </div>
-                        
-                        {/* 预览卡片内容 */}
-                        <div className="p-3 space-y-2">
-                          <div className="text-xs font-semibold text-gray-600 border-b pb-1">
-                            🏪 基本信息
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
+                        <option value="minimal">简约风格</option>
+                        <option value="detailed">详细风格</option>
+                        <option value="business">商务风格</option>
+                        <option value="modern">现代风格</option>
+                      </select>
+                    </div>
+                    
+                    {/* 卡片预览 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        预览效果
+                      </label>
+                      <div className="border rounded-lg p-4 bg-gray-50 max-h-64 overflow-y-auto">
+                        <div className="transform scale-50 origin-top-left w-[200%] h-auto">
+                          <div 
+                            className="bg-white rounded-lg shadow-sm border overflow-hidden"
+                            style={{
+                              width: '400px',
+                              fontSize: '12px'
+                            }}
+                          >
+                            {/* 预览卡片头部 */}
                             <div 
-                              className="p-2 rounded border-l-2"
+                              className="text-white p-4 text-center"
                               style={{
-                                background: selectedCardStyle === 'minimal' ? 'white' :
-                                          selectedCardStyle === 'business' ? '#f8fafc' :
-                                          selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
-                                          'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                                borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
-                                               selectedCardStyle === 'business' ? '#d97706' :
-                                               selectedCardStyle === 'modern' ? '#8b5cf6' :
-                                               '#3b82f6',
-                                border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
+                                background: selectedCardStyle === 'minimal' ? '#374151' :
+                                          selectedCardStyle === 'business' ? 'linear-gradient(135deg, #1f2937 0%, #374151 100%)' :
+                                          selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)' :
+                                          'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                borderBottom: selectedCardStyle === 'business' ? '3px solid #d97706' : 'none'
                               }}
                             >
-                              <div className="text-gray-500 text-xs">POS机型号</div>
-                              <div className="font-medium">{pos?.basic_info?.model || '待勘察'}</div>
+                              <h3 className="font-bold text-sm">{pos?.merchant_name || '商户名称'}</h3>
+                              <p className="text-xs opacity-90">📍 {pos?.address || '商户地址'}</p>
                             </div>
-                            <div 
-                              className="p-2 rounded border-l-2"
-                              style={{
-                                background: selectedCardStyle === 'minimal' ? 'white' :
-                                          selectedCardStyle === 'business' ? '#f8fafc' :
-                                          selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
-                                          'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                                borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
-                                               selectedCardStyle === 'business' ? '#d97706' :
-                                               selectedCardStyle === 'modern' ? '#8b5cf6' :
-                                               '#3b82f6',
-                                border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
-                              }}
-                            >
-                              <div className="text-gray-500 text-xs">设备状态</div>
-                              <div className="font-medium">
-                                <span 
-                                  className="px-2 py-1 rounded text-white text-xs"
+                            
+                            {/* 预览卡片内容 */}
+                            <div className="p-3 space-y-2">
+                              <div className="text-xs font-semibold text-gray-600 border-b pb-1">
+                                🏪 基本信息
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div 
+                                  className="p-2 rounded border-l-2"
                                   style={{
-                                    backgroundColor: pos?.status === 'active' ? '#10b981' :
-                                                   pos?.status === 'inactive' ? '#f59e0b' :
-                                                   pos?.status === 'maintenance' ? '#f97316' : '#ef4444'
+                                    background: selectedCardStyle === 'minimal' ? 'white' :
+                                              selectedCardStyle === 'business' ? '#f8fafc' :
+                                              selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
+                                              'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                    borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
+                                                   selectedCardStyle === 'business' ? '#d97706' :
+                                                   selectedCardStyle === 'modern' ? '#8b5cf6' :
+                                                   '#3b82f6',
+                                    border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
                                   }}
                                 >
-                                  {pos?.status === 'active' ? '正常运行' :
-                                   pos?.status === 'inactive' ? '暂时不可用' :
-                                   pos?.status === 'maintenance' ? '维修中' : '已停用'}
-                                </span>
+                                  <div className="text-gray-500 text-xs">POS机型号</div>
+                                  <div className="font-medium">{pos?.basic_info?.model || '待勘察'}</div>
+                                </div>
+                                <div 
+                                  className="p-2 rounded border-l-2"
+                                  style={{
+                                    background: selectedCardStyle === 'minimal' ? 'white' :
+                                              selectedCardStyle === 'business' ? '#f8fafc' :
+                                              selectedCardStyle === 'modern' ? 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' :
+                                              'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                    borderLeftColor: selectedCardStyle === 'minimal' ? '#6b7280' :
+                                                   selectedCardStyle === 'business' ? '#d97706' :
+                                                   selectedCardStyle === 'modern' ? '#8b5cf6' :
+                                                   '#3b82f6',
+                                    border: selectedCardStyle === 'minimal' ? '1px solid #e5e7eb' : 'none'
+                                  }}
+                                >
+                                  <div className="text-gray-500 text-xs">设备状态</div>
+                                  <div className="font-medium">
+                                    <span 
+                                      className="px-2 py-1 rounded text-white text-xs"
+                                      style={{
+                                        backgroundColor: pos?.status === 'active' ? '#10b981' :
+                                                       pos?.status === 'inactive' ? '#f59e0b' :
+                                                       pos?.status === 'maintenance' ? '#f97316' : '#ef4444'
+                                      }}
+                                    >
+                                      {pos?.status === 'active' ? '正常运行' :
+                                       pos?.status === 'inactive' ? '暂时不可用' :
+                                       pos?.status === 'maintenance' ? '维修中' : '已停用'}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
+                            
+                            {/* 预览卡片底部 */}
+                            <div className="bg-gray-50 p-2 text-center border-t">
+                              <p className="text-xs text-gray-500">Payments Maps 导出</p>
+                            </div>
                           </div>
-                        </div>
-                        
-                        {/* 预览卡片底部 */}
-                        <div className="bg-gray-50 p-2 text-center border-t">
-                          <p className="text-xs text-gray-500">Payments Maps 导出</p>
                         </div>
                       </div>
                     </div>
+                  </>
+                )}
+                
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
+                    <div className="text-sm text-blue-700">
+                      {selectedFormat === 'json' ? (
+                        <span>JSON格式包含完整的POS机数据，可用于后续导入到其他系统</span>
+                      ) : (
+                        <span>卡片格式适合分享和打印，包含POS机的关键信息和统计数据</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-            
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
-                <div className="text-sm text-blue-700">
-                  {selectedFormat === 'json' ? (
-                    <span>JSON格式包含完整的POS机数据，可用于后续导入到其他系统</span>
-                  ) : (
-                    <span>卡片格式适合分享和打印，包含POS机的关键信息和统计数据</span>
-                  )}
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </AnimatedModal>
+          </AnimatedModal>
 
-      <AnimatedModal
-        isOpen={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        title="POS机问题申报"
-        size="lg"
-        footer={
-          <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-            <button
-              type="button"
-              onClick={() => setShowReportModal(false)}
-              className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmitReport}
-              className="px-6 py-2 rounded-xl font-semibold text-white bg-soft-black hover:bg-gray-900 transition-colors"
-            >
-              提交申报
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="rounded-xl bg-yellow-50 border border-yellow-100 p-3 text-sm text-yellow-800">
-            请描述 POS 机的问题，管理员会尽快处理。
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">问题类型</label>
-            <input
-              value={reportForm.issueType}
-              onChange={(event) => setReportForm((prev) => ({ ...prev, issueType: event.target.value }))}
-              placeholder="例如 设备不可用 / 成功率异常 / 信息缺失"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
-            <textarea
-              value={reportForm.description}
-              onChange={(event) => setReportForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="补充问题细节，便于管理员排查"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">联系方式（可选）</label>
-            <input
-              value={reportForm.contact}
-              onChange={(event) => setReportForm((prev) => ({ ...prev, contact: event.target.value }))}
-              placeholder="邮箱或手机号，方便回访"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
-            />
-          </div>
-        </div>
-      </AnimatedModal>
-
-      {/* 删除确认模态框 */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg overflow-hidden">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
-              <p className="text-gray-600 mb-6">
-                确定要删除这个POS机吗？此操作无法撤销。
-              </p>
-              <div className="flex space-x-3">
+          <AnimatedModal
+            isOpen={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            title="POS机问题申报"
+            size="lg"
+            footer={
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
                 <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="px-6 py-2 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
                 >
                   取消
                 </button>
                 <button
-                  onClick={handleDeletePOS}
-                  disabled={deleting}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={handleSubmitReport}
+                  className="px-6 py-2 rounded-xl font-semibold text-white bg-soft-black hover:bg-gray-900 transition-colors"
                 >
-                  {deleting ? '删除中...' : '确认删除'}
+                  提交申报
                 </button>
               </div>
+            }
+          >
+            <div className="space-y-4">
+              <div className="rounded-xl bg-yellow-50 border border-yellow-100 p-3 text-sm text-yellow-800">
+                请描述 POS 机的问题，管理员会尽快处理。
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">问题类型</label>
+                <input
+                  value={reportForm.issueType}
+                  onChange={(event) => setReportForm((prev) => ({ ...prev, issueType: event.target.value }))}
+                  placeholder="例如 设备不可用 / 成功率异常 / 信息缺失"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+                <textarea
+                  value={reportForm.description}
+                  onChange={(event) => setReportForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="补充问题细节，便于管理员排查"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">联系方式（可选）</label>
+                <input
+                  value={reportForm.contact}
+                  onChange={(event) => setReportForm((prev) => ({ ...prev, contact: event.target.value }))}
+                  placeholder="邮箱或手机号，方便回访"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                />
+              </div>
             </div>
-          </div>
-        </div>
+          </AnimatedModal>
+
+          {/* 删除确认模态框 */}
+          {showDeleteModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg overflow-hidden">
+                <div className="text-center">
+                  <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
+                    <Trash2 className="w-6 h-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
+                  <p className="text-gray-600 mb-6">
+                    确定要删除这个POS机吗？此操作无法撤销。
+                  </p>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowDeleteModal(false)}
+                      className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleDeletePOS}
+                      disabled={deleting}
+                      className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deleting ? '删除中...' : '确认删除'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
