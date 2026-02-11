@@ -84,15 +84,12 @@ interface SupportEvidenceItem {
   attempt: Attempt
 }
 
-type SupportResolutionSource = 'manual' | 'inferred' | 'both' | 'conflict' | 'none'
 interface SupportFusionItem {
   key: string
   label: string
   manualState: ThreeStateValue
   inferredState: ThreeStateValue
   resolvedState: ThreeStateValue
-  source: SupportResolutionSource
-  sourceLabel: string
   hasConflict: boolean
   manualNote?: string
   evidenceNote?: string
@@ -473,37 +470,21 @@ const POSDetail = () => {
     manualState: ThreeStateValue,
     inferredState: ThreeStateValue,
     inferredConflict: boolean
-  ): { state: ThreeStateValue; source: SupportResolutionSource; hasConflict: boolean } => {
+  ): { state: ThreeStateValue; hasConflict: boolean } => {
     if (inferredConflict) {
-      if (manualState === 'supported' || manualState === 'unsupported') {
-        return { state: manualState, source: 'manual', hasConflict: true }
-      }
-      return { state: 'unknown', source: 'conflict', hasConflict: true }
+      return { state: 'unknown', hasConflict: true }
     }
 
-    if (manualState === 'unknown' && inferredState === 'unknown') {
-      return { state: 'unknown', source: 'none', hasConflict: false }
+    if (inferredState !== 'unknown') {
+      const hasConflict = manualState !== 'unknown' && manualState !== inferredState
+      return { state: inferredState, hasConflict }
     }
-    if (manualState === 'unknown') {
-      return { state: inferredState, source: 'inferred', hasConflict: false }
-    }
-    if (inferredState === 'unknown') {
-      return { state: manualState, source: 'manual', hasConflict: false }
-    }
-    if (manualState === inferredState) {
-      return { state: manualState, source: 'both', hasConflict: false }
-    }
-    return { state: 'unknown', source: 'conflict', hasConflict: true }
-  }
 
-  const getSourceLabel = (source: SupportResolutionSource, hasConflict: boolean) => {
-    if (source === 'manual') {
-      return hasConflict ? '手动录入（推导证据冲突）' : '手动录入'
+    if (manualState !== 'unknown') {
+      return { state: manualState, hasConflict: false }
     }
-    if (source === 'inferred') return '尝试推导'
-    if (source === 'both') return '手动 + 推导一致'
-    if (source === 'conflict') return '手动与推导冲突'
-    return '待补充数据'
+
+    return { state: 'unknown', hasConflict: false }
   }
 
   const formatEvidenceLabel = (items: SupportEvidenceItem[]) => {
@@ -537,8 +518,8 @@ const POSDetail = () => {
       return parts.join('；')
     }
 
-    if (inferredState === 'supported' && supportedLabel) return `推导支持：${supportedLabel}`
-    if (inferredState === 'unsupported' && unsupportedLabel) return `推导不支持：${unsupportedLabel}`
+    if (inferredState === 'supported' && supportedLabel) return `尝试记录：${supportedLabel}`
+    if (inferredState === 'unsupported' && unsupportedLabel) return `失败记录：${unsupportedLabel}`
     return ''
   }
 
@@ -582,21 +563,21 @@ const POSDetail = () => {
 
     if (key === 'no_pin') {
       if (modes.small_amount_no_pin && modes.small_amount_no_pin.length > 0) {
-        return `手动信息：${modes.small_amount_no_pin.join('、')}`
+        return `配置记录：${modes.small_amount_no_pin.join('、')}`
       }
-      if (modes.small_amount_no_pin_uncertain) return '手动信息：待确认'
+      if (modes.small_amount_no_pin_uncertain) return '配置记录：待确认'
     }
     if (key === 'pin') {
       if (modes.requires_password && modes.requires_password.length > 0) {
-        return `手动信息：${modes.requires_password.join('、')}`
+        return `配置记录：${modes.requires_password.join('、')}`
       }
-      if (modes.requires_password_uncertain) return '手动信息：待确认'
+      if (modes.requires_password_uncertain) return '配置记录：待确认'
     }
     if (key === 'signature') {
       if (modes.requires_signature && modes.requires_signature.length > 0) {
-        return `手动信息：${modes.requires_signature.join('、')}`
+        return `配置记录：${modes.requires_signature.join('、')}`
       }
-      if (modes.requires_signature_uncertain) return '手动信息：待确认'
+      if (modes.requires_signature_uncertain) return '配置记录：待确认'
     }
     return undefined
   }
@@ -620,7 +601,7 @@ const POSDetail = () => {
 
   const getManualAcquiringModeNote = (key: string) => {
     if (!pos?.basic_info?.acquiring_modes?.includes(key)) return undefined
-    return '手动信息：收单模式配置包含该项'
+    return '配置记录：收单模式包含该项'
   }
 
   const getManualCheckoutState = (key: string): ThreeStateValue => {
@@ -630,7 +611,7 @@ const POSDetail = () => {
 
   const getManualCheckoutNote = (key: string) => {
     if (pos?.basic_info?.checkout_location !== key) return undefined
-    return '手动信息：当前记录的结账位置'
+    return '配置记录：当前结账位置'
   }
 
   const getManualDeviceStatusState = (key: string): ThreeStateValue => {
@@ -640,7 +621,7 @@ const POSDetail = () => {
 
   const getManualDeviceStatusNote = (key: string) => {
     if (pos?.status !== key) return undefined
-    return '手动信息：当前设备状态'
+    return '配置记录：当前设备状态'
   }
 
   const getManualInstitutionState = (key: string): ThreeStateValue => {
@@ -650,7 +631,7 @@ const POSDetail = () => {
 
   const getManualInstitutionNote = (key: string) => {
     if (pos?.basic_info?.acquiring_institution !== key) return undefined
-    return '手动信息：当前主收单机构'
+    return '配置记录：当前主收单机构'
   }
 
   const buildSupportFusionItems = (
@@ -671,8 +652,6 @@ const POSDetail = () => {
         manualState,
         inferredState,
         resolvedState: resolved.state,
-        source: resolved.source,
-        sourceLabel: getSourceLabel(resolved.source, resolved.hasConflict),
         hasConflict: resolved.hasConflict,
         manualNote: resolveManualNote?.(item.key),
         evidenceNote: formatEvidenceSummary(evidence, inferredState, inferredConflict),
@@ -688,13 +667,13 @@ const POSDetail = () => {
     {
       key: 'network',
       title: '卡组织支持',
-      description: '手动配置与尝试推导融合',
+      description: '配置与尝试记录综合结果',
       icon: CreditCard,
       items: buildSupportFusionItems(
         CARD_NETWORKS.map((network) => ({ key: network.value, label: network.label })),
         attemptMatrix.cardNetworks,
         (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? 'supported' : 'unknown'),
-        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? '手动信息：列入支持卡组织' : undefined)
+        (key) => (pos?.basic_info?.supported_card_networks?.includes(key) ? '配置记录：列入支持卡组织' : undefined)
       ),
     },
     {
@@ -708,7 +687,7 @@ const POSDetail = () => {
         getManualPaymentMethodState,
         (key) => {
           if (key === 'tap' && pos?.basic_info?.min_amount_no_pin) {
-            return `手动信息：免密金额上限 ¥${pos.basic_info.min_amount_no_pin}`
+            return `配置记录：免密金额上限 ¥${pos.basic_info.min_amount_no_pin}`
           }
           return undefined
         }
@@ -823,6 +802,89 @@ const POSDetail = () => {
     supported: 'bg-emerald-500',
     unsupported: 'bg-rose-500',
     unknown: 'bg-slate-400',
+  }
+
+  const supportSectionStyleMap: Record<
+    string,
+    {
+      panelClass: string
+      iconClass: string
+      countClass: string
+      gridClass: string
+      layout: 'network' | 'method' | 'cvm' | 'default'
+    }
+  > = {
+    network: {
+      panelClass: 'border-sky-100 bg-gradient-to-b from-sky-50/90 to-white',
+      iconClass: 'bg-sky-100 text-sky-700',
+      countClass: 'bg-sky-100 text-sky-700',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'network',
+    },
+    'payment-method': {
+      panelClass: 'border-emerald-100 bg-gradient-to-b from-emerald-50/90 to-white',
+      iconClass: 'bg-emerald-100 text-emerald-700',
+      countClass: 'bg-emerald-100 text-emerald-700',
+      gridClass: 'mt-4 space-y-2.5',
+      layout: 'method',
+    },
+    cvm: {
+      panelClass: 'border-amber-100 bg-gradient-to-b from-amber-50/90 to-white',
+      iconClass: 'bg-amber-100 text-amber-700',
+      countClass: 'bg-amber-100 text-amber-700',
+      gridClass: 'mt-4 space-y-2.5',
+      layout: 'cvm',
+    },
+    'acquiring-mode': {
+      panelClass: 'border-indigo-100 bg-gradient-to-b from-indigo-50/90 to-white',
+      iconClass: 'bg-indigo-100 text-indigo-700',
+      countClass: 'bg-indigo-100 text-indigo-700',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    'checkout-location': {
+      panelClass: 'border-cyan-100 bg-gradient-to-b from-cyan-50/90 to-white',
+      iconClass: 'bg-cyan-100 text-cyan-700',
+      countClass: 'bg-cyan-100 text-cyan-700',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    'device-status': {
+      panelClass: 'border-slate-200 bg-gradient-to-b from-slate-50/90 to-white',
+      iconClass: 'bg-slate-200 text-slate-700',
+      countClass: 'bg-slate-200 text-slate-700',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    institution: {
+      panelClass: 'border-orange-100 bg-gradient-to-b from-orange-50/90 to-white',
+      iconClass: 'bg-orange-100 text-orange-700',
+      countClass: 'bg-orange-100 text-orange-700',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+    default: {
+      panelClass: 'border-white/80 bg-white/90',
+      iconClass: 'bg-accent-yellow/10 text-accent-yellow',
+      countClass: 'bg-gray-100 text-gray-500',
+      gridClass: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3',
+      layout: 'default',
+    },
+  }
+
+  const paymentMethodIconMap: Record<string, typeof CreditCard> = {
+    tap: Smartphone,
+    insert: CreditCard,
+    swipe: CreditCard,
+    apple_pay: Smartphone,
+    google_pay: Smartphone,
+    hce: Shield,
+  }
+
+  const getUnifiedSupportNote = (item: SupportFusionItem) => {
+    if (item.evidenceNote) return item.evidenceNote
+    if (item.manualNote) return item.manualNote
+    return '暂无相关记录'
   }
 
   const isMobileActionsDisabled = !pos?.id
@@ -1831,10 +1893,8 @@ const POSDetail = () => {
                 <>
                   <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
                     <CardContent className="p-0 overflow-hidden">
-                      <div className="relative overflow-hidden rounded-t-[28px] border-b border-gray-100 bg-gradient-to-br from-slate-50 via-white to-blue-50/80 p-6 md:p-7">
-                        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-yellow/10 blur-3xl" />
-                        <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-emerald-200/30 blur-3xl" />
-                        <div className="relative space-y-5">
+                      <div className="overflow-hidden rounded-t-[28px] border-b border-gray-100 bg-white/95 p-6 md:p-7 dark:bg-slate-900/95 dark:border-slate-800">
+                        <div className="space-y-5">
                           <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                               <div className="flex items-center gap-3">
@@ -1842,9 +1902,9 @@ const POSDetail = () => {
                                   <Shield className="w-5 h-5" />
                                 </div>
                                 <div>
-                                  <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">支付能力融合矩阵</h3>
+                                  <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">支付能力支持看板</h3>
                                   <p className="text-sm text-gray-500">
-                                    手动录入 + 尝试推导，统一展示三态：支持 / 不支持 / 未知
+                                    按能力维度汇总当前结果，直观看出重点补测项
                                   </p>
                                 </div>
                               </div>
@@ -1906,11 +1966,12 @@ const POSDetail = () => {
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                           {supportFusionSections.map((section) => {
                             const SectionIcon = section.icon
+                            const sectionStyle = supportSectionStyleMap[section.key] || supportSectionStyleMap.default
                             return (
-                              <div key={section.key} className="rounded-3xl border border-white/80 bg-white/90 p-4 sm:p-5 shadow-soft">
+                              <div key={section.key} className={`rounded-3xl border p-4 sm:p-5 shadow-soft ${sectionStyle.panelClass}`}>
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex items-center gap-2">
-                                    <div className="h-8 w-8 rounded-xl bg-accent-yellow/10 text-accent-yellow flex items-center justify-center">
+                                    <div className={`h-8 w-8 rounded-xl flex items-center justify-center ${sectionStyle.iconClass}`}>
                                       <SectionIcon className="h-4 w-4" />
                                     </div>
                                     <div>
@@ -1918,58 +1979,132 @@ const POSDetail = () => {
                                       <p className="text-xs text-gray-500">{section.description}</p>
                                     </div>
                                   </div>
-                                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${sectionStyle.countClass}`}>
                                     {section.items.length} 项
                                   </span>
                                 </div>
 
                                 {section.items.length > 0 ? (
-                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {section.items.map((item) => (
-                                      <div
-                                        key={item.key}
-                                        className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
-                                          item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
-                                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
-                                            <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
-                                            {supportStateLabelMap[item.resolvedState]}
-                                          </span>
-                                        </div>
+                                  <div className={sectionStyle.gridClass}>
+                                    {section.items.map((item) => {
+                                      const methodIcon = paymentMethodIconMap[item.key] || CreditCard
+                                      const MethodIcon = methodIcon
+                                      const unifiedNote = getUnifiedSupportNote(item)
+                                      const conflictTag = item.hasConflict ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          需复核
+                                        </span>
+                                      ) : null
 
-                                        <div className="flex flex-wrap gap-2 text-[11px]">
-                                          <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-0.5 text-gray-500 border border-white/70">
-                                            手动：{supportStateLabelMap[item.manualState]}
-                                          </span>
-                                          <span className="inline-flex items-center rounded-full bg-white/80 px-2 py-0.5 text-gray-500 border border-white/70">
-                                            推导：{supportStateLabelMap[item.inferredState]}
-                                          </span>
-                                        </div>
+                                      if (sectionStyle.layout === 'method') {
+                                        return (
+                                          <div
+                                            key={item.key}
+                                            className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                              item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between gap-3">
+                                              <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-xl bg-white/85 border border-white/90 text-gray-600 flex items-center justify-center">
+                                                  <MethodIcon className="h-4 w-4" />
+                                                </div>
+                                                <div>
+                                                  <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                                </div>
+                                              </div>
+                                              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                                {supportStateLabelMap[item.resolvedState]}
+                                              </span>
+                                            </div>
 
-                                        <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.8rem]">
-                                          {item.manualNote && <p>{item.manualNote}</p>}
-                                          {item.evidenceNote && <p>{item.evidenceNote}</p>}
-                                          {!item.manualNote && !item.evidenceNote && <p>暂无手动信息与尝试证据</p>}
-                                        </div>
+                                            {conflictTag && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">{conflictTag}</div>}
+                                            <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                              {unifiedNote}
+                                            </p>
+                                          </div>
+                                        )
+                                      }
 
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-[11px] text-gray-500">{item.sourceLabel}</span>
-                                          {item.hasConflict && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                              <AlertTriangle className="h-3 w-3" />
-                                              需复核
+                                      if (sectionStyle.layout === 'cvm') {
+                                        return (
+                                          <div
+                                            key={item.key}
+                                            className={`rounded-2xl border px-3.5 py-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                              item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-start gap-3">
+                                              <span className={`mt-1 h-8 w-1 shrink-0 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                              <div className="flex-1 space-y-2">
+                                                <div className="flex items-start justify-between gap-3">
+                                                  <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                                  <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                    {supportStateLabelMap[item.resolvedState]}
+                                                  </span>
+                                                </div>
+                                                {conflictTag && <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">{conflictTag}</div>}
+                                                <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                  {unifiedNote}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      }
+
+                                      if (sectionStyle.layout === 'network') {
+                                        return (
+                                          <div
+                                            key={item.key}
+                                            className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                              item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                                {supportStateLabelMap[item.resolvedState]}
+                                              </span>
+                                            </div>
+                                            <div className="text-[11px] text-gray-500 min-h-[2.2rem]">
+                                              {unifiedNote}
+                                            </div>
+                                            {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
+                                          </div>
+                                        )
+                                      }
+
+                                      return (
+                                        <div
+                                          key={item.key}
+                                          className={`rounded-2xl border px-3.5 py-3 space-y-3 transition-colors ${supportStateCardClassMap[item.resolvedState]} ${
+                                            item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                                          }`}
+                                        >
+                                          <div className="flex items-start justify-between gap-3">
+                                            <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                              <span className={`h-1.5 w-1.5 rounded-full ${supportStateDotClassMap[item.resolvedState]}`} />
+                                              {supportStateLabelMap[item.resolvedState]}
                                             </span>
-                                          )}
+                                          </div>
+
+                                          <div className="space-y-1 text-[11px] text-gray-500 leading-relaxed min-h-[2.6rem]">
+                                            <p>{unifiedNote}</p>
+                                          </div>
+
+                                          {conflictTag && <div className="flex items-center justify-end gap-2">{conflictTag}</div>}
                                         </div>
-                                      </div>
-                                    ))}
+                                      )
+                                    })}
                                   </div>
                                 ) : (
                                   <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
-                                    暂无可融合数据
+                                    暂无可展示数据
                                   </div>
                                 )}
                               </div>
@@ -1978,7 +2113,7 @@ const POSDetail = () => {
                         </div>
 
                         <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3 text-xs text-gray-500 leading-relaxed">
-                          说明：成功尝试会推导为“支持”，明确失败会推导为“不支持”；若手动与推导相冲突，则会显示“需复核”，并保持三态结果为“未知”或标记冲突来源。
+                          说明：若存在尝试记录，优先采用尝试结果；若无尝试记录，则采用现有配置。记录互相矛盾时会标记“需复核”。
                         </div>
                       </div>
                     </CardContent>
@@ -2046,7 +2181,7 @@ const POSDetail = () => {
               ) : (
                 <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
                   <CardContent className="p-6 text-center text-sm text-gray-500">
-                    暂无支付能力数据，请先补充手动信息或新增尝试记录。
+                    暂无支付能力数据，请先补充基础配置或新增尝试记录。
                   </CardContent>
                 </AnimatedCard>
               )}
@@ -2718,7 +2853,7 @@ const POSDetail = () => {
                                     onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
                                     className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
                                   />
-                                  明确失败（会被计入“不支持”推导）
+                                  明确失败（会被计入“不支持”结果）
                                 </label>
                               </section>
 
