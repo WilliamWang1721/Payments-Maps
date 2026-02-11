@@ -49,6 +49,25 @@ const EditPOS = () => {
   const [attempts, setAttempts] = useState<any[]>([])
   const [touchedFields, setTouchedFields] = useState({ merchant_name: false })
 
+  const getAttemptPaymentMethodLabel = (method?: string | null) => {
+    switch (method) {
+      case 'tap':
+        return '实体卡 Tap'
+      case 'insert':
+        return '实体卡 Insert'
+      case 'swipe':
+        return '实体卡 Swipe'
+      case 'apple_pay':
+        return 'Apple Pay'
+      case 'google_pay':
+        return 'Google Pay'
+      case 'hce':
+        return 'HCE'
+      default:
+        return method || ''
+    }
+  }
+
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {}
     if (!formData?.merchant_name?.trim()) {
@@ -909,7 +928,7 @@ const EditPOS = () => {
                           <div className="text-xs text-gray-500 mt-1">
                             {attempt.card_name && `卡片: ${attempt.card_name}`}
                             {attempt.card_name && attempt.payment_method && ' | '}
-                            {attempt.payment_method && `支付方式: ${attempt.payment_method}`}
+                            {attempt.payment_method && `支付方式: ${getAttemptPaymentMethodLabel(attempt.payment_method)}`}
                           </div>
                         )}
                         {attempt.notes && (
@@ -1192,12 +1211,13 @@ const EditPOS = () => {
                     onChange={(value) => setCardInfo(prev => ({ ...prev, payment_method: value }))}
                     placeholder="请选择支付方式"
                     options={[
-                      { value: "Apple Pay", label: "Apple Pay" },
-                      { value: "Google Pay", label: "Google Pay" },
-                      { value: "HCE", label: "HCE" },
-                      { value: "实体卡 Tap", label: "实体卡 Tap" },
-                      { value: "实体卡 Insert", label: "实体卡 Insert" },
-                      { value: "实体卡 Swipe", label: "实体卡 Swipe" }
+                      // NOTE: Values must match `pos_attempts.payment_method` CHECK constraint.
+                      { value: "apple_pay", label: "Apple Pay" },
+                      { value: "google_pay", label: "Google Pay" },
+                      { value: "hce", label: "HCE" },
+                      { value: "tap", label: "实体卡 Tap" },
+                      { value: "insert", label: "实体卡 Insert" },
+                      { value: "swipe", label: "实体卡 Swipe" }
                     ]}
                   />
                 </div>

@@ -671,6 +671,9 @@ const AddPOS = () => {
           const attemptsInsertDurationMs = Date.now() - attemptsInsertStartedAt
 
           if (attemptsError) {
+            const missingColumnMatch = attemptsError.message?.match(/Could not find the '([^']+)' column/)
+            const missingColumn = missingColumnMatch?.[1] || null
+
             console.error('[AddPOS] 保存尝试记录失败:', {
               meta: attemptsDebugMeta,
               status: attemptsStatus,
@@ -680,9 +683,15 @@ const AddPOS = () => {
               errorMessage: attemptsError.message,
               errorDetails: attemptsError.details,
               errorHint: attemptsError.hint,
+              missingColumn,
               attemptsPayload,
             })
-            notify.error(`POS 已创建，但尝试记录保存失败：${attemptsError.message || '未知错误'}`)
+
+            if (missingColumn) {
+              notify.error(`POS 已创建，但尝试记录保存失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql`)
+            } else {
+              notify.error(`POS 已创建，但尝试记录保存失败：${attemptsError.message || '未知错误'}`)
+            }
           } else {
             console.info('[AddPOS] 尝试记录保存成功:', {
               meta: attemptsDebugMeta,
