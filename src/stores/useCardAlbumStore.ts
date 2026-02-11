@@ -18,6 +18,11 @@ export type CardAlbumItem = {
   organization: string
   group: string
   description: string
+  isCoBranded?: boolean
+  hasPointsProgram?: boolean
+  pointsProgramName?: string
+  hasClubPoints?: boolean
+  clubPointsProgram?: string
   scope: AlbumScope
   updatedAt: string
 }
@@ -31,6 +36,11 @@ const defaultCards: CardAlbumItem[] = [
     organization: 'UnionPay',
     group: '高端卡组',
     description: '适合公共展示的高端权益卡片。',
+    isCoBranded: false,
+    hasPointsProgram: true,
+    pointsProgramName: '银联尊享积分',
+    hasClubPoints: false,
+    clubPointsProgram: '',
     scope: 'public',
     updatedAt: '2025-02-12',
   },
@@ -42,6 +52,11 @@ const defaultCards: CardAlbumItem[] = [
     organization: 'Visa',
     group: '白金卡组',
     description: '公共卡册中的旅行主题卡片模板。',
+    isCoBranded: true,
+    hasPointsProgram: true,
+    pointsProgramName: 'Travel Rewards',
+    hasClubPoints: true,
+    clubPointsProgram: '航司里程计划',
     scope: 'public',
     updatedAt: '2025-02-10',
   },
@@ -53,6 +68,11 @@ const defaultCards: CardAlbumItem[] = [
     organization: 'Mastercard',
     group: '经典卡组',
     description: '个人卡册中常用的银行卡片。',
+    isCoBranded: false,
+    hasPointsProgram: false,
+    pointsProgramName: '',
+    hasClubPoints: false,
+    clubPointsProgram: '',
     scope: 'personal',
     updatedAt: '2025-02-08',
   },
