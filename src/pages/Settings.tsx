@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -81,6 +82,20 @@ const Settings = () => {
       navigate('/login')
     }
   }, [user, navigate])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showDeleteModal) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [showDeleteModal])
 
   const loadSettings = async () => {
     if (!user) return
@@ -450,32 +465,35 @@ const Settings = () => {
         </div>
       </div>
 
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-soft-black">确定删除账户？</h3>
-            <p className="mt-2 text-sm text-gray-500">
-              删除账户后，您添加的 POS、收藏、历史记录等所有数据都将被清空，此操作不可恢复。
-            </p>
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1 rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-soft-black"
-                disabled={deleting}
-              >
-                取消
-              </button>
-              <button
-                onClick={deleteAccount}
-                disabled={deleting}
-                className="flex-1 rounded-2xl bg-red-500 px-4 py-3 text-sm font-semibold text-white shadow hover:bg-red-600 disabled:opacity-50"
-              >
-                {deleting ? '删除中...' : '确认删除'}
-              </button>
+      {showDeleteModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-soft-black">确定删除账户？</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                删除账户后，您添加的 POS、收藏、历史记录等所有数据都将被清空，此操作不可恢复。
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-soft-black"
+                  disabled={deleting}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={deleteAccount}
+                  disabled={deleting}
+                  className="flex-1 rounded-2xl bg-red-500 px-4 py-3 text-sm font-semibold text-white shadow hover:bg-red-600 disabled:opacity-50"
+                >
+                  {deleting ? '删除中...' : '确认删除'}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Upload, Globe, Store } from 'lucide-react';
 import { BrandCategory, BrandBusinessType, CreateBrandFormData } from '../types/brands';
 import { supabase } from '../lib/supabase';
@@ -23,6 +24,20 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
     iconUrl: '',
     website: ''
   });
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isOpen) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +112,9 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
 
   if (!isOpen) return null;
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         {/* Header */}
@@ -285,7 +302,8 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

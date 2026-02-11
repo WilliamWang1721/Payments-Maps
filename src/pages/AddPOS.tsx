@@ -21,6 +21,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -441,6 +442,20 @@ const AddPOS = () => {
       return next
     })
   }, [formData.basic_info.supported_card_networks])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isAlbumPickerOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isAlbumPickerOpen])
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {}
@@ -1931,23 +1946,25 @@ const AddPOS = () => {
           initialLng={formData.longitude || 116.4074}
         />
 
-        <AnimatePresence>
-          {isAlbumPickerOpen && (
-            <motion.div
-              className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAlbumPickerOpen(false)}
-            >
-              <motion.div
-                initial={{ opacity: 0, x: 40 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 40 }}
-                transition={{ duration: 0.25 }}
-                className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
-                onClick={(event) => event.stopPropagation()}
-              >
+        {typeof document !== 'undefined' &&
+          createPortal(
+            <AnimatePresence>
+              {isAlbumPickerOpen && (
+                <motion.div
+                  className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsAlbumPickerOpen(false)}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, x: 40 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 40 }}
+                    transition={{ duration: 0.25 }}
+                    className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                   <div className="text-sm font-semibold text-gray-900">选择卡册中的卡片</div>
                   <button
@@ -2023,10 +2040,12 @@ const AddPOS = () => {
                     填充到最新记录
                   </button>
                 </div>
-              </motion.div>
-            </motion.div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
           )}
-        </AnimatePresence>
       </div>
   )
 }

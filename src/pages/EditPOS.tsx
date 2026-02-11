@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, CreditCard, Smartphone, Settings, FileText, Link, Plus, Building } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -97,6 +98,20 @@ const EditPOS = () => {
       navigate('/login')
     }
   }, [user, navigate])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showCardInfoModal) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [showCardInfoModal])
 
   useEffect(() => {
     if (!id) return
@@ -1155,10 +1170,12 @@ const EditPOS = () => {
       </div>
 
       {/* 卡信息输入模态框 */}
-      {showCardInfoModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-200/50">
-            <div className="p-6">
+      {showCardInfoModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-200/50">
+              <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -1321,10 +1338,11 @@ const EditPOS = () => {
                   确认记录
                 </AnimatedButton>
               </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       <AnimatedModal
         isOpen={showDeleteModal}

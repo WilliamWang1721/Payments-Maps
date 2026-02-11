@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Globe, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -49,6 +50,20 @@ const LanguageSelector = ({ onClose, isFirstVisit = false }: LanguageSelectorPro
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isFirstVisit) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isFirstVisit])
+
   // Apple 风格的语言选项
   const languageOptions = Object.entries(supportedLanguages).map(([code, name]) => ({
     code,
@@ -60,12 +75,14 @@ const LanguageSelector = ({ onClose, isFirstVisit = false }: LanguageSelectorPro
     <>
       {/* 首次访问时的全屏语言选择 */}
       {isFirstVisit ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center"
-        >
+        typeof document !== 'undefined' &&
+        createPortal(
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center"
+          >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -156,8 +173,10 @@ const LanguageSelector = ({ onClose, isFirstVisit = false }: LanguageSelectorPro
                 继续
               </button>
             </motion.div>
-          </motion.div>
-        </motion.div>
+            </motion.div>
+          </motion.div>,
+          document.body
+        )
       ) : (
         /* 普通的语言选择器（导航栏中使用） */
         <div className="relative" ref={dropdownRef}>

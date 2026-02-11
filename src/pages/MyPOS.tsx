@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Star, Clock, Edit, Trash2, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -21,6 +22,20 @@ const MyPOS: React.FC = () => {
       navigate('/login')
     }
   }, [user, navigate])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showDeleteModal) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [showDeleteModal])
 
   const loadMyPOSMachines = async () => {
     if (!user) return
@@ -240,35 +255,39 @@ const MyPOS: React.FC = () => {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedPOS && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">确认删除</h3>
-            <p className="text-gray-600 mb-6">
-              确定要删除 "{selectedPOS.merchant_name}" 这台POS机吗？此操作无法撤销。
-            </p>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false)
-                  setSelectedPOS(null)
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                disabled={deleting}
-              >
-                取消
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {deleting ? '删除中...' : '确认删除'}
-              </button>
+      {showDeleteModal &&
+        selectedPOS &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">确认删除</h3>
+              <p className="text-gray-600 mb-6">
+                确定要删除 "{selectedPOS.merchant_name}" 这台POS机吗？此操作无法撤销。
+              </p>
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setSelectedPOS(null)
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={deleting}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? '删除中...' : '确认删除'}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

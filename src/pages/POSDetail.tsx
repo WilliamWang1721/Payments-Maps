@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { POSMachine } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -960,6 +961,34 @@ const POSDetail = () => {
       document.documentElement.style.overflow = prevHtmlOverflow
     }
   }, [supportDetailTarget])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isAlbumPickerOpen) return
+
+    const prevBodyOverflow = document.body.style.overflow
+    const prevHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow
+      document.documentElement.style.overflow = prevHtmlOverflow
+    }
+  }, [isAlbumPickerOpen])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showDeleteModal) return
+
+    const prevBodyOverflow = document.body.style.overflow
+    const prevHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow
+      document.documentElement.style.overflow = prevHtmlOverflow
+    }
+  }, [showDeleteModal])
 
   const loadPOSDetail = async () => {
     try {
@@ -2494,23 +2523,25 @@ const POSDetail = () => {
         </>
       )}
 
-      <AnimatePresence>
-        {!showAttemptModal && supportDetailTarget && (
-          <motion.div
-            className="fixed inset-0 z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-white/20 backdrop-blur-sm" onClick={closeSupportDetailDrawer} />
-            <motion.div
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              transition={{ duration: 0.25 }}
-              className="absolute right-6 top-6 bottom-6 w-[min(48%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
-              onClick={(event) => event.stopPropagation()}
-            >
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {!showAttemptModal && supportDetailTarget && (
+              <motion.div
+                className="fixed inset-0 z-[60]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <div className="absolute inset-0 bg-white/20 backdrop-blur-sm" onClick={closeSupportDetailDrawer} />
+                <motion.div
+                  initial={{ opacity: 0, x: 40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 40 }}
+                  transition={{ duration: 0.25 }}
+                  className="absolute right-6 top-6 bottom-6 w-[min(48%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                  onClick={(event) => event.stopPropagation()}
+                >
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                   <SupportDetailIcon className="w-4 h-4 text-accent-yellow" />
@@ -2605,10 +2636,12 @@ const POSDetail = () => {
                   关闭
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
 
       {!showAttemptModal && (
         <>
@@ -3015,23 +3048,25 @@ const POSDetail = () => {
               </div>
             </motion.div>
 
-            <AnimatePresence>
-              {isAlbumPickerOpen && (
-                <motion.div
-                  className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsAlbumPickerOpen(false)}
-                >
-                  <motion.div
-                    initial={{ opacity: 0, x: 40 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 40 }}
-                    transition={{ duration: 0.25 }}
-                    className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
-                    onClick={(event) => event.stopPropagation()}
-                  >
+            {typeof document !== 'undefined' &&
+              createPortal(
+                <AnimatePresence>
+                  {isAlbumPickerOpen && (
+                    <motion.div
+                      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setIsAlbumPickerOpen(false)}
+                    >
+                      <motion.div
+                        initial={{ opacity: 0, x: 40 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 40 }}
+                        transition={{ duration: 0.25 }}
+                        className="absolute right-6 top-6 bottom-6 w-[min(46%,720px)] bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl border border-white/60 flex flex-col overflow-hidden"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                     <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                       <div className="text-sm font-semibold text-gray-900">选择卡册中的卡片</div>
                       <button
@@ -3107,10 +3142,12 @@ const POSDetail = () => {
                         填充到最新记录
                       </button>
                     </div>
-                  </motion.div>
-                </motion.div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>,
+                document.body
               )}
-            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
@@ -3422,36 +3459,39 @@ const POSDetail = () => {
           </AnimatedModal>
 
           {/* 删除确认模态框 */}
-          {showDeleteModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg overflow-hidden">
-                <div className="text-center">
-                  <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
-                    <Trash2 className="w-6 h-6 text-red-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
-                  <p className="text-gray-600 mb-6">
-                    确定要删除这个POS机吗？此操作无法撤销。
-                  </p>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => setShowDeleteModal(false)}
-                      className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleDeletePOS}
-                      disabled={deleting}
-                      className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {deleting ? '删除中...' : '确认删除'}
-                    </button>
+          {showDeleteModal &&
+            typeof document !== 'undefined' &&
+            createPortal(
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg overflow-hidden">
+                  <div className="text-center">
+                    <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
+                      <Trash2 className="w-6 h-6 text-red-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
+                    <p className="text-gray-600 mb-6">
+                      确定要删除这个POS机吗？此操作无法撤销。
+                    </p>
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => setShowDeleteModal(false)}
+                        className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={handleDeletePOS}
+                        disabled={deleting}
+                        className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {deleting ? '删除中...' : '确认删除'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              </div>,
+              document.body
+            )}
         </>
       )}
     </div>

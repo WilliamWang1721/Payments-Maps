@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import AnimatedButton from './AnimatedButton'
 
@@ -22,6 +23,20 @@ const AnimatedSidebar: React.FC<AnimatedSidebarProps> = ({
   width = 'w-80',
   className = ''
 }) => {
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isOpen])
+
   const backdropVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1 }
@@ -44,7 +59,7 @@ const AnimatedSidebar: React.FC<AnimatedSidebarProps> = ({
     }
   }
 
-  return (
+  const sidebarContent = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -96,6 +111,12 @@ const AnimatedSidebar: React.FC<AnimatedSidebarProps> = ({
       )}
     </AnimatePresence>
   )
+
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(sidebarContent, document.body)
 }
 
 export default AnimatedSidebar

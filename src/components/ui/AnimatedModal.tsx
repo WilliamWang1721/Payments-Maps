@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import AnimatedButton from './AnimatedButton'
 
@@ -24,6 +25,20 @@ const AnimatedModal: React.FC<AnimatedModalProps> = ({
   className = '',
   footer
 }) => {
+  useEffect(() => {
+    if (typeof document === 'undefined' || !isOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [isOpen])
+
   const sizeClasses = {
     sm: 'max-w-sm',
     md: 'max-w-md',
@@ -69,7 +84,7 @@ const AnimatedModal: React.FC<AnimatedModalProps> = ({
     }
   }
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -133,6 +148,12 @@ const AnimatedModal: React.FC<AnimatedModalProps> = ({
       )}
     </AnimatePresence>
   )
+
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(modalContent, document.body)
 }
 
 export default AnimatedModal
