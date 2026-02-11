@@ -2774,7 +2774,7 @@ const POSDetail = () => {
               <div className="flex-1 overflow-y-auto">
                 <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
                   <div className="space-y-6 animate-fade-in-up">
-                    <div className="flex flex-wrap items-center justify-end gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft">
                           <Clock className="w-3.5 h-3.5 text-accent-yellow" />
                           已有 {attemptsCount} 条记录
