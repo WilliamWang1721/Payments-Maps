@@ -16,7 +16,9 @@ export type CardAlbumItem = {
   title: string
   bin: string
   organization: string
-  group: string
+  level: string
+  // 兼容旧数据，迁移后可删除
+  group?: string
   description: string
   isCoBranded?: boolean
   hasPointsProgram?: boolean
@@ -34,7 +36,7 @@ const defaultCards: CardAlbumItem[] = [
     title: '银联高端卡',
     bin: '622848',
     organization: 'UnionPay',
-    group: '高端卡组',
+    level: '白金卡',
     description: '适合公共展示的高端权益卡片。',
     isCoBranded: false,
     hasPointsProgram: true,
@@ -50,7 +52,7 @@ const defaultCards: CardAlbumItem[] = [
     title: '旅行白金卡',
     bin: '436742',
     organization: 'Visa',
-    group: '白金卡组',
+    level: 'Infinite',
     description: '公共卡册中的旅行主题卡片模板。',
     isCoBranded: true,
     hasPointsProgram: true,
@@ -66,7 +68,7 @@ const defaultCards: CardAlbumItem[] = [
     title: '环球通卡',
     bin: '621226',
     organization: 'Mastercard',
-    group: '经典卡组',
+    level: 'World',
     description: '个人卡册中常用的银行卡片。',
     isCoBranded: false,
     hasPointsProgram: false,
@@ -123,7 +125,25 @@ export const useCardAlbumStore = create<CardAlbumState>()(
     }),
     {
       name: CARD_ALBUM_STORAGE_KEY,
-      version: 1,
+      version: 2,
+      migrate: (persistedState: unknown) => {
+        if (!persistedState || typeof persistedState !== 'object') {
+          return persistedState as CardAlbumState
+        }
+
+        const state = persistedState as { cards?: Array<CardAlbumItem & { group?: string }> }
+        if (!Array.isArray(state.cards)) {
+          return persistedState as CardAlbumState
+        }
+
+        return {
+          ...state,
+          cards: state.cards.map((card) => ({
+            ...card,
+            level: card.level || card.group || '未知等级',
+          })),
+        } as CardAlbumState
+      },
     }
   )
 )
