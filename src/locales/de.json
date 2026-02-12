@@ -1704,5 +1704,35 @@
     "nav": {
       "getStarted": "Loslegen"
     }
+  },
+  "attemptRecord": {
+    "unknown": "Unbekannt",
+    "result": {
+      "success": "Erfolgreich",
+      "failure": "Fehlgeschlagen",
+      "unknown": "Unbekannt"
+    },
+    "cvm": {
+      "no_pin": "Ohne PIN",
+      "pin": "PIN",
+      "signature": "Unterschrift"
+    },
+    "acquiringMode": {
+      "dcc": "DCC",
+      "edc": "EDC"
+    },
+    "deviceStatus": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "maintenance": "Wartung",
+      "disabled": "Deaktiviert"
+    },
+    "checkout": {
+      "self": "Selbstbedienungskasse",
+      "manual": "Bediente Kasse"
+    },
+    "user": {
+      "anonymous": "Anonymer Benutzer"
+    }
   }
 }
