@@ -1598,5 +1598,35 @@
     "loading": "Analyzing your preferences...",
     "error": "Unable to load personalized content",
     "retry": "Retry"
+  },
+  "attemptRecord": {
+    "unknown": "Unknown",
+    "result": {
+      "success": "Success",
+      "failure": "Failure",
+      "unknown": "Unknown"
+    },
+    "cvm": {
+      "no_pin": "No PIN",
+      "pin": "PIN",
+      "signature": "Signature"
+    },
+    "acquiringMode": {
+      "dcc": "DCC",
+      "edc": "EDC"
+    },
+    "deviceStatus": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "maintenance": "Maintenance",
+      "disabled": "Disabled"
+    },
+    "checkout": {
+      "self": "Self-checkout",
+      "manual": "Cashier checkout"
+    },
+    "user": {
+      "anonymous": "Anonymous User"
+    }
   }
 }

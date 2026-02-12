@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '@/lib/supabase'
 import { POSMachine } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -20,7 +21,7 @@ import { SkeletonCard } from '@/components/AnimatedLoading'
 import { AnimatedTabBar } from '@/components/AnimatedNavigation'
 import { CARD_NETWORKS, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { getCardNetworkValue } from '@/lib/cardMetadata'
-import { getPaymentMethodLabel, getResultLabel } from '@/lib/utils'
+import { getPaymentMethodLabel } from '@/lib/utils'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
@@ -64,6 +65,16 @@ interface Attempt {
   attempted_at?: string
   is_conclusive_failure?: boolean
   user_id?: string
+}
+
+interface AttemptUserRecord {
+  id: string
+  email?: string | null
+  user_metadata?: {
+    display_name?: string
+    full_name?: string
+    name?: string
+  } | null
 }
 
 type AttemptDraft = {
@@ -148,6 +159,7 @@ const getAlbumCardNetworkValues = (card: Pick<CardAlbumItem, 'organization' | 's
 }
 
 const POSDetail = () => {
+  const { t, i18n } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -192,6 +204,7 @@ const POSDetail = () => {
   })
   const [activeTab, setActiveTab] = useState('overview')
   const [supportDetailTarget, setSupportDetailTarget] = useState<SupportDetailTarget | null>(null)
+  const [attemptUserNames, setAttemptUserNames] = useState<Record<string, string>>({})
 
   const attemptResultOptions = [
     {
@@ -222,6 +235,28 @@ const POSDetail = () => {
 
   const attemptSelectBase = `${attemptFieldBase} pr-10 appearance-none`
   const attemptTextareaBase = `${attemptFieldBase} min-h-[110px] resize-none`
+  const localeTag = useMemo(() => {
+    const lang = (i18n.resolvedLanguage || i18n.language || 'zh').toLowerCase()
+    if (lang.startsWith('en')) return 'en-US'
+    if (lang.startsWith('de')) return 'de-DE'
+    if (lang.startsWith('ru')) return 'ru-RU'
+    return 'zh-CN'
+  }, [i18n.language, i18n.resolvedLanguage])
+  const unknownLabel = t('attemptRecord.unknown', { defaultValue: '未知' })
+  const anonymousUserLabel = t('attemptRecord.user.anonymous', { defaultValue: '匿名用户' })
+  const getFirstText = (...values: unknown[]) => {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) return value
+    }
+    return ''
+  }
+  const currentUserLabel =
+    getFirstText(
+      user?.user_metadata?.display_name,
+      user?.user_metadata?.full_name,
+      user?.user_metadata?.name,
+      user?.email?.split('@')[0]
+    ) || anonymousUserLabel
 
   const createAttemptDraft = (): AttemptDraft => ({
     result: 'success',
@@ -274,7 +309,15 @@ const POSDetail = () => {
         return rest
       })
     }
-    setDraftAttempts((prev) => prev.map((attempt, i) => (i === index ? { ...attempt, [field]: value } : attempt)))
+    setDraftAttempts((prev) =>
+      prev.map((attempt, i) => {
+        if (i !== index) return attempt
+        if (field === 'result' && value !== 'failure') {
+          return { ...attempt, [field]: value, is_conclusive_failure: false }
+        }
+        return { ...attempt, [field]: value }
+      })
+    )
   }
 
   const removeAttempt = (index: number) => {
@@ -421,10 +464,6 @@ const POSDetail = () => {
     }
     const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
     const networkValues = getAlbumCardNetworkValues(selectedCard)
-    const organizationLabel = getAlbumCardOrganizationLabels(selectedCard).join(' / ')
-    const methodLabel = [organizationLabel, selectedCard.bin, selectedCard.level || selectedCard.group]
-      .filter(Boolean)
-      .join(' · ')
     updateAttempt(targetIndex, 'card_name', cardLabel)
     if (networkValues.length === 1) {
       updateAttempt(targetIndex, 'card_network', networkValues[0])
@@ -443,7 +482,6 @@ const POSDetail = () => {
         },
       }))
     }
-    updateAttempt(targetIndex, 'notes', methodLabel)
     notify.success('已填充卡片信息')
     setIsAlbumPickerOpen(false)
   }
@@ -525,6 +563,55 @@ const POSDetail = () => {
       )}
     </aside>
   )
+
+  const getAttemptResultText = (result?: string) => {
+    if (result === 'success') return t('attemptRecord.result.success', { defaultValue: '成功' })
+    if (result === 'failure') return t('attemptRecord.result.failure', { defaultValue: '失败' })
+    return t('attemptRecord.result.unknown', { defaultValue: '未知' })
+  }
+
+  const getAttemptCvmLabel = (value?: string | null) => {
+    if (!value || value === 'unknown') return unknownLabel
+    if (value === 'no_pin') return t('attemptRecord.cvm.no_pin', { defaultValue: '免密' })
+    if (value === 'pin') return t('attemptRecord.cvm.pin', { defaultValue: 'PIN' })
+    if (value === 'signature') return t('attemptRecord.cvm.signature', { defaultValue: '签名' })
+    return value
+  }
+
+  const getAttemptAcquiringModeLabel = (value?: string | null) => {
+    if (!value || value === 'unknown') return unknownLabel
+    if (value === 'DCC') return t('attemptRecord.acquiringMode.dcc', { defaultValue: 'DCC' })
+    if (value === 'EDC') return t('attemptRecord.acquiringMode.edc', { defaultValue: 'EDC' })
+    return value
+  }
+
+  const getAttemptDeviceStatusLabel = (value?: string | null) => {
+    if (!value) return unknownLabel
+    if (value === 'active') return t('attemptRecord.deviceStatus.active', { defaultValue: '正常运行' })
+    if (value === 'inactive') return t('attemptRecord.deviceStatus.inactive', { defaultValue: '暂时不可用' })
+    if (value === 'maintenance') return t('attemptRecord.deviceStatus.maintenance', { defaultValue: '维修中' })
+    if (value === 'disabled') return t('attemptRecord.deviceStatus.disabled', { defaultValue: '已停用' })
+    return value
+  }
+
+  const getAttemptCheckoutLocationLabel = (value?: string | null) => {
+    if (!value) return unknownLabel
+    if (value === '自助收银') return t('attemptRecord.checkout.self', { defaultValue: '自助收银' })
+    if (value === '人工收银') return t('attemptRecord.checkout.manual', { defaultValue: '人工收银' })
+    return value
+  }
+
+  const getAttemptUserLabel = (attempt: Attempt) => {
+    const fallback = anonymousUserLabel
+    const attemptUserId = attempt.user_id
+    if (!attemptUserId) return fallback
+    const fromMap = attemptUserNames[attemptUserId]
+    if (fromMap) return fromMap
+    if (user?.id === attemptUserId) {
+      return currentUserLabel
+    }
+    return fallback
+  }
 
   const normalizeThreeState = (value?: boolean | ThreeStateValue): ThreeStateValue => {
     if (typeof value === 'boolean') {
@@ -906,8 +993,12 @@ const POSDetail = () => {
     return Number.isNaN(timestamp) ? 0 : timestamp
   }
 
+  const formatAttemptDate = (attempt: Attempt) => {
+    return new Date(attempt.attempted_at || attempt.created_at).toLocaleDateString(localeTag)
+  }
+
   const formatAttemptDateTime = (attempt: Attempt) => {
-    return new Date(attempt.attempted_at || attempt.created_at).toLocaleString('zh-CN')
+    return new Date(attempt.attempted_at || attempt.created_at).toLocaleString(localeTag)
   }
 
   const getRelatedAttemptsForSupportItem = (sectionKey: string, itemKey: string) => {
@@ -1171,6 +1262,41 @@ const POSDetail = () => {
     }
   }
 
+  const loadAttemptUserNames = async (attemptRows: Attempt[]) => {
+    const userIds = Array.from(new Set(attemptRows.map((attempt) => attempt.user_id).filter(Boolean) as string[]))
+    if (userIds.length === 0) return
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, user_metadata')
+        .in('id', userIds)
+
+      if (error) {
+        console.error('加载尝试记录用户信息失败:', error)
+        return
+      }
+
+      const fallback = anonymousUserLabel
+      const nameMap: Record<string, string> = {}
+      ;(data as AttemptUserRecord[] | null)?.forEach((item) => {
+        const displayName =
+          item.user_metadata?.display_name ||
+          item.user_metadata?.full_name ||
+          item.user_metadata?.name ||
+          item.email?.split('@')[0] ||
+          fallback
+        nameMap[item.id] = displayName
+      })
+
+      if (Object.keys(nameMap).length > 0) {
+        setAttemptUserNames((prev) => ({ ...prev, ...nameMap }))
+      }
+    } catch (error) {
+      console.error('加载尝试记录用户信息失败:', error)
+    }
+  }
+
   const loadAttempts = async () => {
     if (!id) return
     
@@ -1186,7 +1312,9 @@ const POSDetail = () => {
         return
       }
       
-      setAttempts(attemptsData || [])
+      const nextAttempts = (attemptsData || []) as Attempt[]
+      setAttempts(nextAttempts)
+      void loadAttemptUserNames(nextAttempts)
     } catch (error) {
       console.error('加载尝试记录失败:', error)
     }
@@ -1432,7 +1560,7 @@ const POSDetail = () => {
         checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
         notes: attempt.notes?.trim() || null,
         attempted_at: attempt.attempted_at || null,
-        is_conclusive_failure: attempt.is_conclusive_failure || false,
+        is_conclusive_failure: attempt.result === 'failure' && Boolean(attempt.is_conclusive_failure),
       }))
 
       // 保存尝试记录到Supabase数据库
@@ -1492,6 +1620,7 @@ const POSDetail = () => {
       if (insertedAttempts.length > 0) {
         insertedAttempts.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
         setAttempts((prev) => [...insertedAttempts, ...prev])
+        setAttemptUserNames((prev) => ({ ...prev, [user.id]: currentUserLabel }))
       }
       
       notify.success('尝试记录提交成功')
@@ -2269,85 +2398,87 @@ const POSDetail = () => {
                     </div>
 
                     <div className="space-y-4">
-                      {attempts.map((attempt) => (
-                        <div key={attempt.id} className="rounded-2xl border border-gray-100 bg-white/90 p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-xs text-gray-500">
-                              {new Date(attempt.created_at).toLocaleDateString('zh-CN')}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                attempt.result === 'success'
-                                  ? 'bg-green-100 text-green-700'
-                                  : attempt.result === 'failure'
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-gray-100 text-gray-600'
-                              }`}>
-                                {getResultLabel(attempt.result)}
-                              </span>
-                              {attempt.is_conclusive_failure && (
-                                <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600">明确失败</span>
-                              )}
-                              {user && attempt.user_id === user.id && (
-                                <AnimatedButton
-                                  onClick={() => deleteAttempt(attempt.id)}
-                                  variant="ghost"
-                                  size="sm"
-                                  className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  title="删除记录"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </AnimatedButton>
-                              )}
+                      {attempts.map((attempt) => {
+                        const resultLabel = getAttemptResultText(attempt.result)
+                        const resultBadgeClass =
+                          attempt.result === 'success'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : attempt.result === 'failure'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        const title = `${formatAttemptDate(attempt)} · ${getAttemptUserLabel(attempt)} · ${resultLabel}`
+                        return (
+                          <div key={attempt.id} className="rounded-2xl border border-gray-100 bg-white/90 p-4">
+                            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                              <h4 className="text-base sm:text-lg font-semibold text-soft-black dark:text-gray-100">{title}</h4>
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold ${resultBadgeClass}`}>
+                                  {resultLabel}
+                                </span>
+                                {attempt.result === 'failure' && attempt.is_conclusive_failure && (
+                                  <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600">明确失败</span>
+                                )}
+                                {user && attempt.user_id === user.id && (
+                                  <AnimatedButton
+                                    onClick={() => deleteAttempt(attempt.id)}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    title="删除记录"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </AnimatedButton>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <span className="text-gray-500">卡片名称：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.card_name || '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">卡组织：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.card_network ? getCardNetworkLabel(attempt.card_network) : '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">支付方式：</span>
-                              <span className="text-soft-black dark:text-gray-100">{getPaymentMethodLabel(attempt.payment_method) || '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">CVM：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.cvm || '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">收单模式：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.acquiring_mode || '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">设备状态：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.device_status || '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">收单机构：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.acquiring_institution || '未记录'}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">结账地点：</span>
-                              <span className="text-soft-black dark:text-gray-100">{attempt.checkout_location || '未记录'}</span>
-                            </div>
-                            {attempt.attempted_at && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                               <div>
-                                <span className="text-gray-500">发生时间：</span>
-                                <span className="text-soft-black dark:text-gray-100">{new Date(attempt.attempted_at).toLocaleString('zh-CN')}</span>
+                                <span className="text-gray-500">卡片名称：</span>
+                                <span className="text-soft-black dark:text-gray-100">{attempt.card_name || '未记录'}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">卡组织：</span>
+                                <span className="text-soft-black dark:text-gray-100">{attempt.card_network ? getCardNetworkLabel(attempt.card_network) : '未记录'}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">支付方式：</span>
+                                <span className="text-soft-black dark:text-gray-100">{getPaymentMethodLabel(attempt.payment_method) || '未记录'}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">CVM：</span>
+                                <span className="text-soft-black dark:text-gray-100">{getAttemptCvmLabel(attempt.cvm)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">收单模式：</span>
+                                <span className="text-soft-black dark:text-gray-100">{getAttemptAcquiringModeLabel(attempt.acquiring_mode)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">设备状态：</span>
+                                <span className="text-soft-black dark:text-gray-100">{getAttemptDeviceStatusLabel(attempt.device_status)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">收单机构：</span>
+                                <span className="text-soft-black dark:text-gray-100">{attempt.acquiring_institution?.trim() || unknownLabel}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">结账地点：</span>
+                                <span className="text-soft-black dark:text-gray-100">{getAttemptCheckoutLocationLabel(attempt.checkout_location)}</span>
+                              </div>
+                              {attempt.attempted_at && (
+                                <div>
+                                  <span className="text-gray-500">发生时间：</span>
+                                  <span className="text-soft-black dark:text-gray-100">{new Date(attempt.attempted_at).toLocaleString(localeTag)}</span>
+                                </div>
+                              )}
+                            </div>
+                            {attempt.notes && (
+                              <div className="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-500">
+                                备注：{attempt.notes}
                               </div>
                             )}
                           </div>
-                          {attempt.notes && (
-                            <div className="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-500">
-                              备注：{attempt.notes}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 ) : (
@@ -2620,7 +2751,7 @@ const POSDetail = () => {
                               ? 'bg-red-100 text-red-700'
                               : 'bg-gray-100 text-gray-600'
                           }`}>
-                            {getResultLabel(attempt.result)}
+                            {getAttemptResultText(attempt.result)}
                           </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
@@ -2634,15 +2765,15 @@ const POSDetail = () => {
                           </div>
                           <div>
                             <span className="text-gray-500">验证方式：</span>
-                            <span className="text-soft-black">{attempt.cvm || '未记录'}</span>
+                            <span className="text-soft-black">{getAttemptCvmLabel(attempt.cvm)}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">收单模式：</span>
-                            <span className="text-soft-black">{attempt.acquiring_mode || '未记录'}</span>
+                            <span className="text-soft-black">{getAttemptAcquiringModeLabel(attempt.acquiring_mode)}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">收单机构：</span>
-                            <span className="text-soft-black">{attempt.acquiring_institution || '未记录'}</span>
+                            <span className="text-soft-black">{attempt.acquiring_institution?.trim() || unknownLabel}</span>
                           </div>
                         </div>
                         {attempt.notes && (
@@ -2841,8 +2972,13 @@ const POSDetail = () => {
                             return (
                             <div key={`attempt-${index}`} className="space-y-6">
                               <div className="flex items-center justify-between">
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em]">
-                                  尝试 {index + 1}
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em]">
+                                    尝试 {index + 1}
+                                  </div>
+                                  <div className="mt-1 text-base font-semibold text-soft-black dark:text-gray-100">
+                                    {(attempt.attempted_at ? new Date(attempt.attempted_at) : new Date()).toLocaleDateString(localeTag)} · {currentUserLabel} · {getAttemptResultText(attempt.result)}
+                                  </div>
                                 </div>
                                 <button
                                   type="button"
@@ -3012,16 +3148,22 @@ const POSDetail = () => {
                                   </div>
                                 </div>
 
-                                <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
-                                  <input
-                                    id={`attempt-conclusive-${index}`}
-                                    type="checkbox"
-                                    checked={Boolean(attempt.is_conclusive_failure)}
-                                    onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
-                                  />
-                                  明确失败（会被计入“不支持”结果）
-                                </label>
+                                {attempt.result === 'failure' ? (
+                                  <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
+                                    <input
+                                      id={`attempt-conclusive-${index}`}
+                                      type="checkbox"
+                                      checked={Boolean(attempt.is_conclusive_failure)}
+                                      onChange={(e) => updateAttempt(index, 'is_conclusive_failure', e.target.checked)}
+                                      className="h-4 w-4 rounded border-gray-300 text-accent-yellow focus:ring-accent-yellow/40"
+                                    />
+                                    明确失败（会被计入“不支持”结果）
+                                  </label>
+                                ) : (
+                                  <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 px-4 py-3 text-sm text-gray-500">
+                                    仅“失败”结果可标记为明确失败。
+                                  </div>
+                                )}
                               </section>
 
                               <section className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[32px] shadow-soft p-6 sm:p-8 space-y-4">

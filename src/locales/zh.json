@@ -1867,5 +1867,35 @@
     "nav": {
       "getStarted": "开始使用"
     }
+  },
+  "attemptRecord": {
+    "unknown": "未知",
+    "result": {
+      "success": "成功",
+      "failure": "失败",
+      "unknown": "未知"
+    },
+    "cvm": {
+      "no_pin": "免密",
+      "pin": "PIN",
+      "signature": "签名"
+    },
+    "acquiringMode": {
+      "dcc": "DCC",
+      "edc": "EDC"
+    },
+    "deviceStatus": {
+      "active": "正常运行",
+      "inactive": "暂时不可用",
+      "maintenance": "维修中",
+      "disabled": "已停用"
+    },
+    "checkout": {
+      "self": "自助收银",
+      "manual": "人工收银"
+    },
+    "user": {
+      "anonymous": "匿名用户"
+    }
   }
 }

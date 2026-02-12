@@ -1677,5 +1677,35 @@
     "nav": {
       "getStarted": "Начать"
     }
+  },
+  "attemptRecord": {
+    "unknown": "Неизвестно",
+    "result": {
+      "success": "Успех",
+      "failure": "Неудача",
+      "unknown": "Неизвестно"
+    },
+    "cvm": {
+      "no_pin": "Без PIN",
+      "pin": "PIN",
+      "signature": "Подпись"
+    },
+    "acquiringMode": {
+      "dcc": "DCC",
+      "edc": "EDC"
+    },
+    "deviceStatus": {
+      "active": "Активно",
+      "inactive": "Неактивно",
+      "maintenance": "Обслуживание",
+      "disabled": "Отключено"
+    },
+    "checkout": {
+      "self": "Самообслуживание",
+      "manual": "Касса с оператором"
+    },
+    "user": {
+      "anonymous": "Анонимный пользователь"
+    }
   }
 }
