@@ -1874,7 +1874,7 @@ const AddPOS = () => {
       return
     }
     const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
-    const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.group]
+    const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.level || selectedCard.group]
       .filter(Boolean)
       .join(' · ')
     updateAttempt(targetIndex, 'card_name', cardLabel)
@@ -2018,7 +2018,7 @@ const AddPOS = () => {
                           <div>
                             <div className="text-sm font-semibold text-soft-black">{label}</div>
                             <div className="text-xs text-gray-400 mt-1">
-                              {getAlbumScopeLabel(card.scope)} · BIN {card.bin || '—'} · {card.group || '未分组'}
+                              {getAlbumScopeLabel(card.scope)} · BIN {card.bin || '—'} · {card.level || card.group || '未知等级'}
                             </div>
                           </div>
                           {isActive && (

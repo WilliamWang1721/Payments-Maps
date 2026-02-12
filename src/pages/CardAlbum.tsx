@@ -10,7 +10,7 @@ import AnimatedModal from '@/components/ui/AnimatedModal'
 import SystemSelect from '@/components/ui/SystemSelect'
 import { usePermissions } from '@/hooks/usePermissions'
 import { notify } from '@/lib/notify'
-import { CARD_NETWORKS } from '@/lib/cardNetworks'
+import { CARD_NETWORKS, getCardLevelOptionsByOrganization } from '@/lib/cardMetadata'
 import {
   type AlbumScope,
   type CardAlbumItem,
@@ -113,7 +113,7 @@ const CardAlbum = () => {
     title: '',
     bin: '',
     organization: '',
-    group: '',
+    level: '',
     description: '',
     isCoBranded: false,
     hasPointsProgram: false,
@@ -216,7 +216,7 @@ const CardAlbum = () => {
     const keyword = searchKeyword.trim().toLowerCase()
     return baseCards.filter((card) => {
       const matchesKeyword = keyword
-        ? [card.title, card.issuer, card.organization, card.group, card.bin]
+        ? [card.title, card.issuer, card.organization, card.level, card.group, card.bin]
             .some((value) => value.toLowerCase().includes(keyword))
         : true
       const matchesIssuer = filters.issuer === 'all' || card.issuer === filters.issuer
@@ -235,6 +235,10 @@ const CardAlbum = () => {
     () => FOREIGN_ISSUER_GROUPS.find((group) => group.key === foreignIssuerCategory) ?? FOREIGN_ISSUER_GROUPS[0],
     [foreignIssuerCategory]
   )
+  const cardLevelOptions = useMemo(
+    () => getCardLevelOptionsByOrganization(formData.organization),
+    [formData.organization]
+  )
 
   const handleOpenAddPage = () => {
     setFormData({
@@ -242,7 +246,7 @@ const CardAlbum = () => {
       title: '',
       bin: '',
       organization: '',
-      group: '',
+      level: '',
       description: '',
       isCoBranded: false,
       hasPointsProgram: false,
@@ -287,7 +291,7 @@ const CardAlbum = () => {
         title: formData.title.trim(),
         bin: formData.bin.trim(),
         organization: formData.organization.trim() || '未知卡组织',
-        group: formData.group.trim() || '未分类卡组',
+        level: formData.level.trim() || '未知等级',
         description: formData.description.trim() || '暂无描述',
         isCoBranded: formData.isCoBranded,
         hasPointsProgram: formData.hasPointsProgram,
@@ -310,7 +314,7 @@ const CardAlbum = () => {
       title: formData.title.trim(),
       bin: formData.bin.trim(),
       organization: formData.organization.trim() || '未知卡组织',
-      group: formData.group.trim() || '未分类卡组',
+      level: formData.level.trim() || '未知等级',
       description: formData.description.trim() || '暂无描述',
       isCoBranded: formData.isCoBranded,
       hasPointsProgram: formData.hasPointsProgram,
@@ -339,7 +343,7 @@ const CardAlbum = () => {
       title: card.title,
       bin: card.bin,
       organization: card.organization,
-      group: card.group,
+      level: card.level || card.group || '',
       description: card.description,
       isCoBranded: Boolean(card.isCoBranded),
       hasPointsProgram: Boolean(card.hasPointsProgram),
@@ -502,12 +506,14 @@ const CardAlbum = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">卡组</label>
-                  <input
-                    value={formData.group}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, group: event.target.value }))}
-                    placeholder="例如 白金卡组"
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-yellow/40"
+                  <label className="block text-sm font-medium text-gray-700 mb-2">卡等级</label>
+                  <SystemSelect
+                    value={formData.level}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, level: value }))}
+                    options={cardLevelOptions}
+                    allowCustom
+                    customPlaceholder="自定义卡等级"
+                    placeholder={formData.organization ? '请选择卡等级' : '请先选择卡组织'}
                   />
                 </div>
               </div>
@@ -881,8 +887,8 @@ const CardAlbum = () => {
                       <span className="font-semibold text-soft-black dark:text-white">{card.organization}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>卡组</span>
-                      <span className="font-semibold text-soft-black dark:text-white">{card.group}</span>
+                      <span>卡等级</span>
+                      <span className="font-semibold text-soft-black dark:text-white">{card.level || card.group || '未知等级'}</span>
                     </div>
                   </div>
 
@@ -1085,8 +1091,8 @@ const CardAlbum = () => {
                   <span className="font-medium text-gray-900">{selectedCard.organization}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
-                  <span className="text-gray-500">卡组</span>
-                  <span className="font-medium text-gray-900">{selectedCard.group}</span>
+                  <span className="text-gray-500">卡等级</span>
+                  <span className="font-medium text-gray-900">{selectedCard.level || selectedCard.group || '未知等级'}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
                   <span className="text-gray-500">联名卡</span>
