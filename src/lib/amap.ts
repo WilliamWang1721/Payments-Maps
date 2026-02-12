@@ -1,3 +1,5 @@
+import { FALLBACK_DEFAULT_LOCATION } from '@/lib/defaultLocation'
+
 // 高德地图配置和工具函数
 
 // 检测开发环境
@@ -48,7 +50,10 @@ export const MAP_STYLES = {
 // 默认地图配置
 export const DEFAULT_MAP_CONFIG = {
   zoom: 15,
-  center: [116.397428, 39.90923] as [number, number], // 北京天安门
+  center: [
+    FALLBACK_DEFAULT_LOCATION.longitude,
+    FALLBACK_DEFAULT_LOCATION.latitude,
+  ] as [number, number], // 广州（可按用户默认地点覆盖）
   mapStyle: MAP_STYLES.normal,
   showIndoorMap: false,
   resizeEnable: true,
@@ -64,8 +69,12 @@ export const locationUtils = {
   getCurrentPosition: (maxRetries: number = 3): Promise<{ longitude: number; latitude: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        console.error('Browser does not support geolocation / 浏览器不支持地理位置获取')
-        reject(new Error('当前设备不支持定位，请在右上角搜索框输入地址进行手动定位'))
+        console.error('Browser does not support geolocation, using default location / 浏览器不支持地理位置获取，使用默认位置')
+        // 使用默认地点作为兜底位置 / Use configured default location as fallback
+        resolve({
+          longitude: FALLBACK_DEFAULT_LOCATION.longitude,
+          latitude: FALLBACK_DEFAULT_LOCATION.latitude
+        })
         return
       }
 
@@ -103,8 +112,12 @@ export const locationUtils = {
                 attemptGetLocation()
               }, 1000)
             } else {
-              console.error('All retries failed / 所有重试均失败')
-              reject(new Error('无法获取当前位置，请在右上角搜索框输入当前地址进行手动定位'))
+              console.error('All retries failed, using default location / 所有重试均失败，使用默认位置')
+              // 提供默认位置而不是拒绝 / Provide default location instead of rejecting
+              resolve({
+                longitude: FALLBACK_DEFAULT_LOCATION.longitude,
+                latitude: FALLBACK_DEFAULT_LOCATION.latitude
+              })
             }
           },
           {

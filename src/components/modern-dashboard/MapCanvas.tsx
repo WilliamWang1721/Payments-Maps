@@ -118,11 +118,11 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
   const mapInstance = useMapStore((state) => state.mapInstance)
   const setMapInstance = useMapStore((state) => state.setMapInstance)
+  const currentLocation = useMapStore((state) => state.currentLocation)
   const posMachines = useMapStore((state) => state.posMachines)
   const loadPOSMachines = useMapStore((state) => state.loadPOSMachines)
   const selectPOSMachine = useMapStore((state) => state.selectPOSMachine)
   const selectedPOSMachine = useMapStore((state) => state.selectedPOSMachine)
-  const getCurrentLocation = useMapStore((state) => state.getCurrentLocation)
 
   useEffect(() => {
     let destroyed = false
@@ -175,12 +175,6 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
         setMapInstance(localMap)
         setMapReady(true)
-
-        try {
-          await getCurrentLocation()
-        } catch (error) {
-          console.warn('获取当前位置失败:', error)
-        }
       } catch (error) {
         console.error('初始化高德地图失败:', error)
         setMapReady(true)
@@ -205,6 +199,16 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!mapInstance || !currentLocation) return
+
+    try {
+      mapInstance.setCenter([currentLocation.longitude, currentLocation.latitude])
+    } catch (error) {
+      console.warn('[MapCanvas] 应用默认地点失败:', error)
+    }
+  }, [mapInstance, currentLocation])
 
   useEffect(() => {
     if (!mapInstance) return

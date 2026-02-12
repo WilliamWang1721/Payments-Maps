@@ -26,6 +26,7 @@ import { BetaActivationModal } from '@/components/BetaActivationModal'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 import { listDrafts } from '@/lib/drafts'
 import { getErrorDetails, notify } from '@/lib/notify'
+import AdminMainMenu from '@/components/profile/AdminMainMenu'
 
 interface UserStats {
   posCount: number
@@ -365,6 +366,7 @@ const Profile = () => {
 
   const roleInfo = getRoleInfo(permissions.role)
   const RoleIcon = roleInfo.icon
+  const isAdminUser = !permissions.isLoading && (permissions.role === 'admin' || permissions.role === 'super_admin')
 
   const collectionCards = [
     {
@@ -499,7 +501,7 @@ const Profile = () => {
                   className="hidden sm:inline-flex"
                   onClick={() => navigate('/app/favorites')}
                 >
-                  管理收藏
+                  {isAdminUser ? '查看收藏' : '管理收藏'}
                 </Button>
               </div>
 
@@ -583,6 +585,10 @@ const Profile = () => {
           </div>
 
           <div className="space-y-8 xl:col-span-2 flex flex-col">
+            {isAdminUser && (
+              <AdminMainMenu role={permissions.role} onNavigate={navigate} />
+            )}
+
             <section className="bg-white rounded-[32px] border border-white shadow-soft p-6 sm:p-8">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -632,7 +638,7 @@ const Profile = () => {
                   <p className="text-sm text-gray-500">最近提交的 POS 机审核进度</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => navigate('/app/my-pos')}>
-                  管理 POS 机
+                  {isAdminUser ? '查看全部' : '管理 POS 机'}
                 </Button>
               </div>
 

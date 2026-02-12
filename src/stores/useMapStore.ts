@@ -222,6 +222,10 @@ export interface MapState {
   
   // Actions
   setMapInstance: (map: AMap.Map | null) => void
+  setCurrentLocation: (
+    location: { longitude: number; latitude: number } | null,
+    options?: { centerMap?: boolean }
+  ) => void
   getCurrentLocation: () => Promise<void>
   loadPOSMachines: (bounds?: { northeast: [number, number]; southwest: [number, number] }) => Promise<void>
   selectPOSMachine: (posMachine: POSMachine | null) => void
@@ -253,17 +257,22 @@ export const useMapStore = create<MapState>((set, get) => ({
     set({ mapInstance: map })
   },
 
+  setCurrentLocation: (location, options = {}) => {
+    set({ currentLocation: location })
+
+    if (!location || options.centerMap === false) return
+
+    const { mapInstance } = get()
+    if (mapInstance) {
+      mapInstance.setCenter([location.longitude, location.latitude])
+    }
+  },
+
   getCurrentLocation: async () => {
     try {
       set({ locationLoading: true })
       const location = await locationUtils.getCurrentPosition()
-      set({ currentLocation: location })
-      
-      // 如果地图实例存在，移动到当前位置
-      const { mapInstance } = get()
-      if (mapInstance) {
-        mapInstance.setCenter([location.longitude, location.latitude])
-      }
+      get().setCurrentLocation(location)
     } catch (error) {
       console.error('获取位置失败:', error)
       throw error

@@ -6,9 +6,11 @@ import ModernSidebar from '@/components/modern-dashboard/Sidebar'
 import ModernHeader from '@/components/modern-dashboard/Header'
 import MobileNav from '@/components/modern-dashboard/MobileNav'
 import { useMapStore } from '@/stores/useMapStore'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { parseSearchInput } from '@/utils/searchParser'
 import { notify } from '@/lib/notify'
 import { locationUtils } from '@/lib/amap'
+import { getUserDefaultLocation } from '@/lib/defaultLocation'
 
 export type LayoutOutletContext = {
   showLabels: boolean
@@ -17,10 +19,12 @@ export type LayoutOutletContext = {
 const Layout = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const user = useAuthStore((state) => state.user)
   const searchKeyword = useMapStore((state) => state.searchKeyword)
   const setSearchQuery = useMapStore((state) => state.setSearchQuery)
   const setSearchKeyword = useMapStore((state) => state.setSearchKeyword)
   const loadPOSMachines = useMapStore((state) => state.loadPOSMachines)
+  const setCurrentLocation = useMapStore((state) => state.setCurrentLocation)
   const getCurrentLocation = useMapStore((state) => state.getCurrentLocation)
   const locationLoading = useMapStore((state) => state.locationLoading)
   const mapInstance = useMapStore((state) => state.mapInstance)
@@ -38,6 +42,11 @@ const Layout = () => {
   useEffect(() => {
     setSearchValue(searchKeyword)
   }, [searchKeyword])
+
+  useEffect(() => {
+    const defaultLocation = getUserDefaultLocation(user?.id)
+    setCurrentLocation(defaultLocation)
+  }, [setCurrentLocation, user?.id])
 
   const handleSearchChange = (value: string) => {
     setSearchValue(value)
