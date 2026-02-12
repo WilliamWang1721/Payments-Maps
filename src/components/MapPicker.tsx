@@ -55,6 +55,8 @@ const MapPicker = ({
       if (mapInstanceRef.current) {
         try {
           mapInstanceRef.current.destroy()
+          markerRef.current = null
+          geocoderRef.current = null
         } catch (e) {
           console.error('[MapPicker] Error destroying old map:', e)
         }
@@ -69,17 +71,30 @@ const MapPicker = ({
 
       mapInstanceRef.current = map
 
-      // 添加控件
-      map.addControl(new AMap.Scale())
-      map.addControl(new AMap.ToolBar({
-        position: 'RT'
-      }))
+      // 添加控件（插件在极端网络场景下可能尚未注入，避免传入 undefined）
+      if (typeof AMap.Scale === 'function') {
+        const scaleControl = new AMap.Scale()
+        if (scaleControl) {
+          map.addControl(scaleControl)
+        }
+      }
+      if (typeof AMap.ToolBar === 'function') {
+        const toolbarControl = new AMap.ToolBar({
+          position: 'RT'
+        })
+        if (toolbarControl) {
+          map.addControl(toolbarControl)
+        }
+      }
 
       // 初始化地理编码器
-      geocoderRef.current = new AMap.Geocoder({
-        city: '全国',
-        radius: 1000
-      })
+      geocoderRef.current =
+        typeof AMap.Geocoder === 'function'
+          ? new AMap.Geocoder({
+              city: '全国',
+              radius: 1000
+            })
+          : null
 
       // 添加点击事件
       map.on('click', (e: any) => {
@@ -111,10 +126,15 @@ const MapPicker = ({
     const AMap = (window as any).AMap
     if (!AMap) return
 
-    // 移除旧标记
-    if (markerRef.current) {
-      mapInstanceRef.current.remove(markerRef.current)
+    // 移除旧标记（避免 map.remove(undefined) 触发 getOptions 异常）
+    if (markerRef.current && typeof markerRef.current.setMap === 'function') {
+      try {
+        markerRef.current.setMap(null)
+      } catch (error) {
+        console.warn('[MapPicker] Error detaching old marker:', error)
+      }
     }
+    markerRef.current = null
 
     // 创建新标记
     const marker = new AMap.Marker({
