@@ -896,7 +896,7 @@ const EditPOS = () => {
                   <div className="text-2xl font-bold text-blue-600">
                     {attempts.length > 0 
                       ? `${Math.round((attempts.filter(a => a.result === 'success').length / attempts.length) * 100)}%`
-                      : '0%'
+                      : '无数据'
                     }
                   </div>
                   <div className="text-sm text-blue-700 mt-1">成功率</div>

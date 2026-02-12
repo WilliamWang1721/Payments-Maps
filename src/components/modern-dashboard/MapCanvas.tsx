@@ -4,6 +4,9 @@ import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 import { useMapStore } from '@/stores/useMapStore'
 import { useNavigate } from 'react-router-dom'
 
+const DETAIL_VIEW_ZOOM = 15
+const CLUSTER_GRID_SIZE = 72
+
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'active':
@@ -76,6 +79,31 @@ const createMarkerContent = (color: string, label: string, showLabel: boolean) =
   `
 }
 
+const createClusterContent = (count: number) => {
+  const safeCount = count > 999 ? '999+' : String(count)
+  return `
+    <div style="display:flex;align-items:center;justify-content:center;">
+      <div style="
+        width:54px;
+        height:54px;
+        border-radius:999px;
+        background:radial-gradient(circle at 30% 30%, #60A5FA 0%, #2563EB 56%, #1D4ED8 100%);
+        box-shadow:0 12px 30px rgba(29, 78, 216, 0.38);
+        border:3px solid rgba(255,255,255,0.85);
+        color:#fff;
+        font-weight:700;
+        font-size:16px;
+        line-height:1;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      ">
+        ${safeCount}
+      </div>
+    </div>
+  `
+}
+
 type MapCanvasProps = {
   showLabels: boolean
 }
@@ -86,6 +114,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
   const markersRef = useRef<AMap.Marker[]>([])
   const doubleClickHandlerRef = useRef<((e: any) => void) | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [markerMode, setMarkerMode] = useState<'cluster' | 'detail'>('cluster')
 
   const mapInstance = useMapStore((state) => state.mapInstance)
   const setMapInstance = useMapStore((state) => state.setMapInstance)
@@ -186,44 +215,137 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
     const AMap = (window as any).AMap
     if (!mapInstance || !AMap) return
 
-    markersRef.current.forEach((marker) => marker.setMap(null))
-    markersRef.current = []
-
-    const markers: AMap.Marker[] = []
-    posMachines.forEach((pos) => {
-      if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
-
-      const statusColor = getStatusColor(pos.status || 'active')
-      const marker = new AMap.Marker({
-        position: [pos.longitude, pos.latitude],
-        title: pos.merchant_name,
-        anchor: 'bottom-center',
-        offset: new AMap.Pixel(0, -8),
-        content: createMarkerContent(statusColor, pos.merchant_name, showLabels),
-      })
-
-      marker.on('click', () => {
-        selectPOSMachine(pos)
-        navigate(`/app/pos/${pos.id}`)
-      })
-
-      markers.push(marker)
-    })
-
-    const overlays = markers.filter(Boolean)
-    markersRef.current = overlays
-
-    if (!mapInstance || typeof mapInstance.add !== 'function') {
-      console.warn('Map instance is unavailable or invalid, skip rendering markers')
-      return
+    const clearMarkers = () => {
+      markersRef.current.forEach((marker) => marker.setMap(null))
+      markersRef.current = []
     }
 
-    if (overlays.length > 0) {
+    const createDetailMarkers = () => {
+      const markers: AMap.Marker[] = []
+
+      posMachines.forEach((pos) => {
+        if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
+
+        const statusColor = getStatusColor(pos.status || 'active')
+        const marker = new AMap.Marker({
+          position: [pos.longitude, pos.latitude],
+          title: pos.merchant_name,
+          anchor: 'bottom-center',
+          offset: new AMap.Pixel(0, -8),
+          content: createMarkerContent(statusColor, pos.merchant_name, showLabels),
+        })
+
+        marker.on('click', () => {
+          selectPOSMachine(pos)
+          navigate(`/app/pos/${pos.id}`)
+        })
+
+        markers.push(marker)
+      })
+
+      return markers
+    }
+
+    const createClusterMarkers = () => {
+      type ClusterBucket = {
+        count: number
+        sumLng: number
+        sumLat: number
+      }
+
+      const buckets = new Map<string, ClusterBucket>()
+
+      posMachines.forEach((pos) => {
+        if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
+
+        let bucketKey = `${pos.longitude.toFixed(3)}_${pos.latitude.toFixed(3)}`
+        try {
+          const pixel = mapInstance.lngLatToContainer([pos.longitude, pos.latitude])
+          const pixelX = typeof pixel?.getX === 'function' ? pixel.getX() : Number.NaN
+          const pixelY = typeof pixel?.getY === 'function' ? pixel.getY() : Number.NaN
+
+          if (Number.isFinite(pixelX) && Number.isFinite(pixelY)) {
+            bucketKey = `${Math.floor(pixelX / CLUSTER_GRID_SIZE)}_${Math.floor(pixelY / CLUSTER_GRID_SIZE)}`
+          }
+        } catch (error) {
+          console.warn('[MapCanvas] 聚合计算像素坐标失败，回退经纬度分桶:', error)
+        }
+
+        const currentBucket = buckets.get(bucketKey) || { count: 0, sumLng: 0, sumLat: 0 }
+        currentBucket.count += 1
+        currentBucket.sumLng += pos.longitude
+        currentBucket.sumLat += pos.latitude
+        buckets.set(bucketKey, currentBucket)
+      })
+
+      const markers: AMap.Marker[] = []
+      buckets.forEach((bucket) => {
+        const center: [number, number] = [bucket.sumLng / bucket.count, bucket.sumLat / bucket.count]
+        const marker = new AMap.Marker({
+          position: center,
+          title: `${bucket.count} 台 POS 机`,
+          anchor: 'center',
+          content: createClusterContent(bucket.count),
+          zIndex: 120 + Math.min(bucket.count, 50),
+        })
+
+        marker.on('click', () => {
+          const currentZoom = mapInstance.getZoom()
+          const zoomStep = bucket.count > 20 ? 3 : bucket.count > 6 ? 2 : 1
+
+          mapInstance.setCenter(center)
+          mapInstance.setZoom(Math.min(DETAIL_VIEW_ZOOM, currentZoom + zoomStep))
+        })
+
+        markers.push(marker)
+      })
+
+      return markers
+    }
+
+    const renderMarkers = () => {
+      clearMarkers()
+
+      if (!mapInstance || typeof mapInstance.add !== 'function') {
+        console.warn('Map instance is unavailable or invalid, skip rendering markers')
+        return
+      }
+
+      const currentZoom = mapInstance.getZoom()
+      const shouldShowDetail = currentZoom >= DETAIL_VIEW_ZOOM
+      const nextMode: 'cluster' | 'detail' = shouldShowDetail ? 'detail' : 'cluster'
+      setMarkerMode((prev) => (prev === nextMode ? prev : nextMode))
+
+      const overlays = (shouldShowDetail ? createDetailMarkers() : createClusterMarkers()).filter(Boolean)
+      markersRef.current = overlays
+
+      if (overlays.length === 0) return
+
       try {
         mapInstance.add(overlays)
       } catch (error) {
         console.error('Failed to add markers to map:', error)
       }
+    }
+
+    const handleZoomEnd = () => {
+      renderMarkers()
+    }
+
+    const handleMoveEnd = () => {
+      if (mapInstance.getZoom() < DETAIL_VIEW_ZOOM) {
+        renderMarkers()
+      }
+    }
+
+    renderMarkers()
+    mapInstance.on('zoomend', handleZoomEnd)
+    mapInstance.on('moveend', handleMoveEnd)
+
+    return () => {
+      mapInstance.off('zoomend', handleZoomEnd)
+      mapInstance.off('moveend', handleMoveEnd)
+      clearMarkers()
     }
   }, [mapInstance, posMachines, navigate, selectPOSMachine, showLabels])
 
@@ -233,7 +355,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
     try {
       mapInstance.setCenter([selectedPOSMachine.longitude, selectedPOSMachine.latitude])
-      mapInstance.setZoom(15)
+      mapInstance.setZoom(DETAIL_VIEW_ZOOM)
     } catch (error) {
       console.error('Failed to focus map on selected POS:', error)
     }
@@ -264,7 +386,9 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
           附近 POS 机
         </h3>
         <div className="mt-2 text-2xl font-bold text-soft-black dark:text-white">{posMachines.length}</div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">点击标记查看详细信息</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          {markerMode === 'cluster' ? '缩小时显示聚合球，点击数字先放大再查看明细' : '点击具体标记查看 POS 详情'}
+        </p>
       </div>
 
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-8 flex gap-3 sm:flex-col z-30">
