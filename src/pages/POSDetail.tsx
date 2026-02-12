@@ -700,15 +700,6 @@ const POSDetail = () => {
     return undefined
   }
 
-  const getManualDeviceStatusState = (key: string): ThreeStateValue => {
-    if (!pos?.status) return 'unknown'
-    return pos.status === key ? 'supported' : 'unknown'
-  }
-
-  const getManualDeviceStatusNote = () => {
-    return undefined
-  }
-
   const getManualInstitutionState = (key: string): ThreeStateValue => {
     if (!pos?.basic_info?.acquiring_institution) return 'unknown'
     return pos.basic_info.acquiring_institution === key ? 'supported' : 'unknown'
@@ -757,18 +748,6 @@ const POSDetail = () => {
     getManualCheckoutNote
   )
 
-  const deviceStatusItems = buildSupportFusionItems(
-    [
-      { key: 'active', label: '正常运行' },
-      { key: 'inactive', label: '暂时不可用' },
-      { key: 'maintenance', label: '维修中' },
-      { key: 'disabled', label: '已停用' },
-    ],
-    attemptMatrix.deviceStatus,
-    getManualDeviceStatusState,
-    getManualDeviceStatusNote
-  )
-
   const institutionItems = buildSupportFusionItems(
     acquiringInstitutionKeys.map((key) => ({ key, label: key })),
     attemptMatrix.acquiringInstitutions,
@@ -781,11 +760,6 @@ const POSDetail = () => {
       key: 'checkout-location',
       title: '结账位置',
       items: checkoutLocationItems,
-    },
-    {
-      key: 'device-status',
-      title: '设备状态',
-      items: deviceStatusItems,
     },
     {
       key: 'institution',
@@ -853,7 +827,7 @@ const POSDetail = () => {
     {
       key: 'device-acquiring',
       title: '设备与收单',
-      description: '结账位置 / 设备状态 / 收单机构',
+      description: '结账位置 / 收单机构',
       icon: Settings,
       items: deviceAndAcquiringGroups.flatMap((group) => group.items),
       groups: deviceAndAcquiringGroups,
@@ -915,16 +889,13 @@ const POSDetail = () => {
   const getSupportAttemptField = (
     sectionKey: string,
     itemKey: string
-  ): 'card_network' | 'payment_method' | 'cvm' | 'acquiring_mode' | 'checkout_location' | 'device_status' | 'acquiring_institution' | null => {
+  ): 'card_network' | 'payment_method' | 'cvm' | 'acquiring_mode' | 'checkout_location' | 'acquiring_institution' | null => {
     if (sectionKey === 'network') return 'card_network'
     if (sectionKey === 'payment-method') return 'payment_method'
     if (sectionKey === 'cvm') return 'cvm'
     if (sectionKey === 'acquiring-mode') return 'acquiring_mode'
     if (sectionKey === 'device-acquiring') {
       if (itemKey === '自助收银' || itemKey === '人工收银') return 'checkout_location'
-      if (itemKey === 'active' || itemKey === 'inactive' || itemKey === 'maintenance' || itemKey === 'disabled') {
-        return 'device_status'
-      }
       return 'acquiring_institution'
     }
     return null
@@ -2668,10 +2639,6 @@ const POSDetail = () => {
                           <div>
                             <span className="text-gray-500">收单模式：</span>
                             <span className="text-soft-black">{attempt.acquiring_mode || '未记录'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">设备状态：</span>
-                            <span className="text-soft-black">{attempt.device_status || '未记录'}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">收单机构：</span>
