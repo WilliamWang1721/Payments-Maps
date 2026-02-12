@@ -3192,11 +3192,18 @@ const POSDetail = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="hidden sm:flex items-center gap-2">
+                  <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-2">
                     <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft dark:bg-slate-900/80 dark:border-slate-800 dark:text-gray-300">
                       <Clock className="w-3.5 h-3.5 text-accent-yellow" />
                       已有 {attemptsCount} 条记录
                     </span>
+                    <button
+                      type="button"
+                      onClick={addAttemptRow}
+                      className="px-4 py-2 rounded-full border border-accent-yellow/50 bg-accent-yellow/15 text-xs font-semibold text-soft-black hover:bg-accent-yellow/25 transition-colors dark:border-accent-yellow/30 dark:bg-accent-yellow/20 dark:text-gray-100 dark:hover:bg-accent-yellow/30"
+                    >
+                      + 添加记录
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3204,20 +3211,6 @@ const POSDetail = () => {
               <div className="flex-1 overflow-y-auto">
                 <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12 ${isAlbumPickerOpen ? 'blur-sm' : ''}`}>
                   <div className="space-y-6 animate-fade-in-up">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-500 shadow-soft">
-                          <Clock className="w-3.5 h-3.5 text-accent-yellow" />
-                          已有 {attemptsCount} 条记录
-                        </span>
-                        <button
-                          type="button"
-                          onClick={addAttemptRow}
-                          className="px-4 py-2 rounded-2xl text-xs font-semibold bg-cream text-soft-black hover:bg-accent-yellow/20 transition-colors"
-                        >
-                          + 添加记录
-                        </button>
-                    </div>
-
                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
                       <div className="space-y-8">
                         {attemptsCount === 0 ? (
