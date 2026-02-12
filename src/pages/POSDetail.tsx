@@ -138,6 +138,8 @@ interface SupportDetailTarget {
 const PAYMENT_METHOD_OPTIONS = ['tap', 'insert', 'swipe', 'apple_pay', 'google_pay', 'hce'] as const
 const CVM_OPTIONS = ['no_pin', 'pin', 'signature'] as const
 const ACQUIRING_MODE_OPTIONS = ['DCC', 'EDC'] as const
+const POS_ATTEMPTS_UPGRADE_HINT =
+  '请先执行 supabase/migrations/014_ensure_pos_records_columns.sql 与 supabase/migrations/015_add_pos_album_card_reference.sql（或最新迁移），并刷新 PostgREST schema cache。'
 type SchemeID = typeof CARD_NETWORKS[number]['value']
 type AttemptAlbumBinding = {
   cardId: string
@@ -1631,13 +1633,14 @@ const POSDetail = () => {
 
       const attemptsPayload = attemptsList.map((attempt, index) => {
         const linkedCardId = attempt.card_album_card_id?.trim() || null
+        const fallbackCardName = attempt.card_name?.trim() || null
         return {
           pos_id: id,
           user_id: user.id,
           attempt_number: nextAttemptNumber + index,
           result: attempt.result,
           card_album_card_id: linkedCardId,
-          card_name: linkedCardId ? null : attempt.card_name?.trim() || null,
+          card_name: fallbackCardName,
           card_network: attempt.card_network || null,
           payment_method: attempt.payment_method || null,
           cvm: attempt.cvm || 'unknown',
@@ -1676,8 +1679,7 @@ const POSDetail = () => {
         } else {
           const missingColumn = extractMissingColumnFromError(error)
           if (missingColumn) {
-            // Hard-fail: never drop fields silently when the schema is out of date.
-            notify.critical(`提交失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql 与 supabase/migrations/015_add_pos_album_card_reference.sql，并刷新 PostgREST schema cache。`, {
+            notify.critical(`提交失败：数据库缺少字段 ${missingColumn}，${POS_ATTEMPTS_UPGRADE_HINT}`, {
               title: '数据库需要升级',
             })
           } else {
@@ -1928,6 +1930,7 @@ const POSDetail = () => {
         if (missingColumn) {
           notify.critical(`刷新失败：数据库缺少字段 ${missingColumn}，请先升级数据库结构后重试。`, {
             title: '数据库需要升级',
+            details: POS_ATTEMPTS_UPGRADE_HINT,
           })
         } else {
           notify.error(`刷新失败：${updateError.message || '未知错误'}`, { id: toastId })

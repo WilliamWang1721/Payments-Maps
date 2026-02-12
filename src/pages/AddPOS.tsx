@@ -191,6 +191,28 @@ const ATTEMPT_CVM_OPTIONS = ['no_pin', 'pin', 'signature', 'unknown'] as const
 const ATTEMPT_ACQUIRING_MODE_OPTIONS = ['DCC', 'EDC', 'unknown'] as const
 const ATTEMPT_DEVICE_STATUS_OPTIONS = ['active', 'inactive', 'maintenance', 'disabled'] as const
 const ATTEMPT_CHECKOUT_LOCATION_OPTIONS = ['自助收银', '人工收银'] as const
+const POS_ATTEMPTS_REQUIRED_COLUMNS = [
+  'id',
+  'pos_id',
+  'user_id',
+  'attempt_number',
+  'result',
+  'card_network',
+  'payment_method',
+  'cvm',
+  'acquiring_mode',
+  'device_status',
+  'acquiring_institution',
+  'checkout_location',
+  'card_album_card_id',
+  'card_name',
+  'notes',
+  'attempted_at',
+  'is_conclusive_failure',
+  'created_at',
+].join(',')
+const POS_ATTEMPTS_UPGRADE_HINT =
+  '请先执行 supabase/migrations/014_ensure_pos_records_columns.sql 与 supabase/migrations/015_add_pos_album_card_reference.sql（或最新迁移），并刷新 PostgREST schema cache。'
 
 const isOptionIncluded = <T extends readonly string[]>(options: T, value: unknown): value is T[number] =>
   typeof value === 'string' && options.includes(value as T[number])
@@ -259,7 +281,7 @@ const AddPOS = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user } = useAuthStore()
-  const { addPOSMachine } = useMapStore()
+  const { addPOSMachine, deletePOSMachine } = useMapStore()
   const albumCards = useCardAlbumStore((state) => state.cards)
   const _permissions = usePermissions()
   const uiText = useAutoTranslatedTextMap(ADD_POS_TEXTS)
@@ -622,6 +644,37 @@ const AddPOS = () => {
     notify.success('位置选择成功')
   }
 
+  const ensureAttemptsSchemaReady = async () => {
+    const { error } = await supabase
+      .from('pos_attempts')
+      .select(POS_ATTEMPTS_REQUIRED_COLUMNS)
+      .limit(1)
+
+    if (!error) return { ok: true as const }
+
+    const missingColumn = extractMissingColumnFromError(error)
+    return {
+      ok: false as const,
+      error,
+      missingColumn,
+    }
+  }
+
+  const rollbackCreatedPOS = async (posId: string, reason: string) => {
+    try {
+      await deletePOSMachine(posId)
+      console.warn('[AddPOS] 已回滚POS创建，避免写入不完整数据', { posId, reason })
+      return { rolledBack: true as const }
+    } catch (rollbackError) {
+      console.error('[AddPOS] 尝试记录失败后回滚POS失败:', {
+        posId,
+        reason,
+        rollbackError,
+      })
+      return { rolledBack: false as const, rollbackError }
+    }
+  }
+
   const handleSubmit = async () => {
     if (loading || submittingRef.current) return
     if (!validateForm()) return
@@ -652,6 +705,26 @@ const AddPOS = () => {
         },
       }
 
+      const attemptInputs = formData.attempts || []
+      if (attemptInputs.length > 0) {
+        const schemaCheck = await ensureAttemptsSchemaReady()
+        if (!schemaCheck.ok) {
+          notify.dismiss('saving-pos')
+          if (schemaCheck.missingColumn) {
+            notify.critical(`保存前检查失败：数据库缺少字段 ${schemaCheck.missingColumn}。${POS_ATTEMPTS_UPGRADE_HINT}`, {
+              title: '数据库需要升级',
+              details: getErrorDetails(schemaCheck.error),
+            })
+          } else {
+            notify.critical(`保存前检查失败：${schemaCheck.error?.message || '无法确认尝试记录表结构'}`, {
+              title: '保存已中止',
+              details: getErrorDetails(schemaCheck.error),
+            })
+          }
+          return
+        }
+      }
+
       const { attempts: _attempts, ...posPayload } = payload
       const result = await Promise.race([addPOSMachine(posPayload), timeoutPromise]) as POSMachine
 
@@ -665,8 +738,9 @@ const AddPOS = () => {
         })
       }
 
-      const attemptsPayload = (formData.attempts || []).map((attempt, index) => {
+      const attemptsPayload = attemptInputs.map((attempt, index) => {
         const linkedCardId = attempt.card_album_card_id?.trim() || null
+        const fallbackCardName = attempt.card_name?.trim() || null
         return {
           pos_id: result.id,
           user_id: attemptUserId,
@@ -690,7 +764,7 @@ const AddPOS = () => {
               ? payload.basic_info.checkout_location
               : null,
           card_album_card_id: linkedCardId,
-          card_name: linkedCardId ? null : attempt.card_name?.trim() || null,
+          card_name: fallbackCardName,
           notes: attempt.notes?.trim() || null,
           attempted_at: normalizeAttemptedAt(attempt.attempted_at || attempt.timestamp),
           is_conclusive_failure: attempt.is_conclusive_failure || false,
@@ -714,8 +788,18 @@ const AddPOS = () => {
         console.groupEnd()
 
         if (!attemptUserId) {
-          console.error('[AddPOS] 保存尝试记录失败：缺少用户ID', attemptsDebugMeta)
-          notify.error('POS 已创建，但尝试记录保存失败（缺少用户身份）')
+          const rollback = await rollbackCreatedPOS(result.id, 'missing_attempt_user_id')
+          notify.dismiss('saving-pos')
+          if (rollback.rolledBack) {
+            notify.critical('保存失败：缺少用户身份，已自动回滚本次 POS 创建，未写入不完整数据。', {
+              title: '保存已回滚',
+            })
+          } else {
+            notify.critical(`保存失败：缺少用户身份，且自动回滚失败。请手动删除 POS（ID: ${result.id}）后重试。`, {
+              title: '保存失败且回滚失败',
+            })
+          }
+          return
         } else {
           const attemptsInsertStartedAt = Date.now()
           const {
@@ -732,6 +816,7 @@ const AddPOS = () => {
 
           if (attemptsError) {
             const missingColumn = extractMissingColumnFromError(attemptsError)
+            const rollback = await rollbackCreatedPOS(result.id, attemptsError.message || 'insert_pos_attempts_failed')
 
             console.error('[AddPOS] 保存尝试记录失败:', {
               meta: attemptsDebugMeta,
@@ -744,24 +829,38 @@ const AddPOS = () => {
               errorHint: attemptsError.hint,
               missingColumn,
               attemptsPayload,
+              rollback,
             })
 
             if (missingColumn) {
-              // Hard-fail: do not proceed/navigate if any attempt fields can't be persisted.
               notify.dismiss('saving-pos')
-              notify.critical(`POS 已创建，但尝试记录保存失败：数据库缺少字段 ${missingColumn}。请先执行 supabase/migrations/014_ensure_pos_records_columns.sql 与 supabase/migrations/015_add_pos_album_card_reference.sql，并刷新 PostgREST schema cache。`, {
-                title: '数据库需要升级',
-                details: getErrorDetails(attemptsError),
-              })
-              return
-            } else {
-              notify.dismiss('saving-pos')
-              notify.critical(`POS 已创建，但尝试记录保存失败：${attemptsError.message || '未知错误'}`, {
-                title: '尝试记录保存失败',
-                details: getErrorDetails(attemptsError),
-              })
+              if (rollback.rolledBack) {
+                notify.critical(`保存失败：数据库缺少字段 ${missingColumn}。已自动回滚本次 POS 创建，避免数据不完整。${POS_ATTEMPTS_UPGRADE_HINT}`, {
+                  title: '数据库需要升级',
+                  details: getErrorDetails(attemptsError),
+                })
+              } else {
+                notify.critical(`保存失败：数据库缺少字段 ${missingColumn}，且自动回滚失败。请手动删除 POS（ID: ${result.id}）并执行数据库升级。${POS_ATTEMPTS_UPGRADE_HINT}`, {
+                  title: '保存失败且回滚失败',
+                  details: getErrorDetails(attemptsError),
+                })
+              }
               return
             }
+
+            notify.dismiss('saving-pos')
+            if (rollback.rolledBack) {
+              notify.critical(`保存失败：尝试记录写入异常，已自动回滚本次 POS 创建。错误：${attemptsError.message || '未知错误'}`, {
+                title: '保存已回滚',
+                details: getErrorDetails(attemptsError),
+              })
+            } else {
+              notify.critical(`保存失败：尝试记录写入异常且自动回滚失败。请手动删除 POS（ID: ${result.id}）后重试。错误：${attemptsError.message || '未知错误'}`, {
+                title: '保存失败且回滚失败',
+                details: getErrorDetails(attemptsError),
+              })
+            }
+            return
           } else {
             console.info('[AddPOS] 尝试记录保存成功:', {
               meta: attemptsDebugMeta,

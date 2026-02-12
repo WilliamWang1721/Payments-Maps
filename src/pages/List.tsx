@@ -112,7 +112,6 @@ const List = () => {
     filters,
     loadPOSMachines,
     setFilters,
-    getCurrentLocation,
     resetFilters,
   } = useMapStore()
   
@@ -152,13 +151,6 @@ const List = () => {
   useEffect(() => {
     loadPOSMachines()
   }, [loadPOSMachines])
-
-  useEffect(() => {
-    if (currentLocation) return
-    getCurrentLocation().catch(() => {
-      console.warn('无法获取当前位置')
-    })
-  }, [currentLocation, getCurrentLocation])
 
   useEffect(() => {
     if (!canBulkDelete && selectionMode) {

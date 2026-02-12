@@ -21,9 +21,16 @@ import { getErrorDetails, notify } from '@/lib/notify'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useMapStore } from '@/stores/useMapStore'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useOnboardingTour } from '@/hooks/useOnboardingTour'
 import { PasskeyManager } from '@/components/settings/PasskeyManager'
+import {
+  DEFAULT_LOCATION_OPTIONS,
+  getDefaultLocationByKey,
+  getUserDefaultLocationKey,
+  saveUserDefaultLocationKey
+} from '@/lib/defaultLocation'
 
 interface UserSettings {
   id?: string
@@ -57,6 +64,7 @@ const Settings = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { user, logout } = useAuthStore()
+  const setCurrentLocation = useMapStore((state) => state.setCurrentLocation)
   const { resetTour } = useOnboardingTour()
 
   const [settings, setSettings] = useState<UserSettings>({
@@ -69,6 +77,7 @@ const Settings = () => {
     auto_refresh_interval: 30,
     show_pos_status: true
   })
+  const [defaultLocationKey, setDefaultLocationKey] = useState<string>('guangzhou')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -77,6 +86,7 @@ const Settings = () => {
   useEffect(() => {
     if (user) {
       setSettings((prev) => ({ ...prev, user_id: user.id }))
+      setDefaultLocationKey(getUserDefaultLocationKey(user.id))
       void loadSettings()
     } else {
       navigate('/login')
@@ -142,6 +152,8 @@ const Settings = () => {
         return
       }
 
+      saveUserDefaultLocationKey(user.id, defaultLocationKey)
+      setCurrentLocation(getDefaultLocationByKey(defaultLocationKey))
       notify.success('设置已保存')
     } catch (error) {
       console.error('保存设置失败:', error)
@@ -382,11 +394,30 @@ const Settings = () => {
                     className="h-2 w-full cursor-pointer rounded-lg bg-gray-200 accent-soft-black"
                   />
                 </div>
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-soft-black">默认地点</p>
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50/80">
+                    <select
+                      value={defaultLocationKey}
+                      onChange={(e) => setDefaultLocationKey(e.target.value)}
+                      className="w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-soft-black outline-none"
+                    >
+                      {DEFAULT_LOCATION_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    进入地图时将优先使用该城市，不会自动请求系统定位权限（可手动点击顶部定位按钮）。
+                  </p>
+                </div>
                 <div className="space-y-4">
                   <label className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3">
                     <div>
-                      <p className="text-sm font-semibold text-soft-black">启用定位权限</p>
-                      <p className="text-xs text-gray-500">自动获取位置以推荐附近 POS 机</p>
+                      <p className="text-sm font-semibold text-soft-black">允许定位权限</p>
+                      <p className="text-xs text-gray-500">用于手动点击定位按钮时获取当前位置</p>
                     </div>
                     <input
                       type="checkbox"
