@@ -64,12 +64,8 @@ export const locationUtils = {
   getCurrentPosition: (maxRetries: number = 3): Promise<{ longitude: number; latitude: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        console.error('Browser does not support geolocation, using default location / 浏览器不支持地理位置获取，使用默认位置')
-        // 使用北京市中心作为默认位置 / Use Beijing center as default
-        resolve({
-          longitude: 116.397428,
-          latitude: 39.90923
-        })
+        console.error('Browser does not support geolocation / 浏览器不支持地理位置获取')
+        reject(new Error('当前设备不支持定位，请在右上角搜索框输入地址进行手动定位'))
         return
       }
 
@@ -107,12 +103,8 @@ export const locationUtils = {
                 attemptGetLocation()
               }, 1000)
             } else {
-              console.error('All retries failed, using default location / 所有重试均失败，使用默认位置')
-              // 提供默认位置而不是拒绝 / Provide default location instead of rejecting
-              resolve({
-                longitude: 116.397428, // 北京市中心 / Beijing center
-                latitude: 39.90923
-              })
+              console.error('All retries failed / 所有重试均失败')
+              reject(new Error('无法获取当前位置，请在右上角搜索框输入当前地址进行手动定位'))
             }
           },
           {
@@ -124,6 +116,37 @@ export const locationUtils = {
       }
       
       attemptGetLocation()
+    })
+  },
+
+  // 根据地址获取经纬度（用于手动定位）
+  getCoordinatesByAddress: async (address: string): Promise<{ longitude: number; latitude: number }> => {
+    const normalizedAddress = address.trim()
+    if (!normalizedAddress) {
+      throw new Error('地址不能为空')
+    }
+
+    const geocoder = await loadGeocoder()
+    return new Promise((resolve, reject) => {
+      geocoder.getLocation(normalizedAddress, (status: string, result: any) => {
+        if (status !== 'complete' || result?.info !== 'OK') {
+          reject(handleApiError(result?.info || status || '地址解析失败', 'address'))
+          return
+        }
+
+        const geocodes = result?.geocodes
+        const first = Array.isArray(geocodes) ? geocodes[0] : null
+        const location = first?.location
+        const lng = Number(location?.lng)
+        const lat = Number(location?.lat)
+
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+          reject(new Error('未找到可用坐标，请尝试更完整的地址'))
+          return
+        }
+
+        resolve({ longitude: lng, latitude: lat })
+      })
     })
   },
 

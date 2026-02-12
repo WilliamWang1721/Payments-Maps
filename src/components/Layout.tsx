@@ -7,6 +7,8 @@ import ModernHeader from '@/components/modern-dashboard/Header'
 import MobileNav from '@/components/modern-dashboard/MobileNav'
 import { useMapStore } from '@/stores/useMapStore'
 import { parseSearchInput } from '@/utils/searchParser'
+import { notify } from '@/lib/notify'
+import { locationUtils } from '@/lib/amap'
 
 export type LayoutOutletContext = {
   showLabels: boolean
@@ -21,6 +23,7 @@ const Layout = () => {
   const loadPOSMachines = useMapStore((state) => state.loadPOSMachines)
   const getCurrentLocation = useMapStore((state) => state.getCurrentLocation)
   const locationLoading = useMapStore((state) => state.locationLoading)
+  const mapInstance = useMapStore((state) => state.mapInstance)
 
   const [searchValue, setSearchValue] = useState(searchKeyword)
   const [showLabels, setShowLabels] = useState(true)
@@ -46,6 +49,20 @@ const Layout = () => {
     const parsed = parseSearchInput(nextValue || '')
     setSearchValue(nextValue)
     setSearchQuery(parsed)
+
+    if (isMapPage && mapInstance && parsed.keyword && !parsed.coordinates) {
+      locationUtils
+        .getCoordinatesByAddress(parsed.keyword)
+        .then(({ longitude, latitude }) => {
+          mapInstance.setCenter([longitude, latitude])
+          mapInstance.setZoom(15)
+          notify.success('已根据输入地址完成手动定位')
+        })
+        .catch(() => {
+          // 地址可能不是定位地址（例如商户关键字），忽略解析失败并继续执行搜索
+        })
+    }
+
     if (isCardAlbumPage) {
       return
     }
@@ -58,7 +75,12 @@ const Layout = () => {
   }
 
   const handleLocate = () => {
-    getCurrentLocation().catch((error) => console.warn('定位失败:', error))
+    getCurrentLocation().catch((error) => {
+      console.warn('定位失败:', error)
+      notify.critical('无法获取当前位置，请在右上角搜索框输入当前地址进行手动定位。', {
+        title: '定位失败',
+      })
+    })
   }
 
   return (
