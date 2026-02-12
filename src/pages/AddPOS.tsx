@@ -1125,7 +1125,7 @@ const AddPOS = () => {
     const attemptsCount = attemptsList.length
     const attemptSuccessCount = attemptsList.filter((attempt) => attempt.result === 'success').length
     const attemptFailureCount = attemptsList.filter((attempt) => attempt.result === 'failure').length
-    const attemptSuccessRate = attemptsCount > 0 ? Math.round((attemptSuccessCount / attemptsCount) * 100) : 0
+    const attemptSuccessRate = attemptsCount > 0 ? Math.round((attemptSuccessCount / attemptsCount) * 100) : null
     const latestAttempt = attemptsList[attemptsCount - 1]
     const latestAttemptLabel = latestAttempt?.attempted_at
       ? new Date(latestAttempt.attempted_at).toLocaleString('zh-CN')
@@ -1170,7 +1170,9 @@ const AddPOS = () => {
               <div className="text-[11px] text-gray-500">失败</div>
             </div>
             <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3">
-              <div className="text-lg font-semibold text-blue-600">{attemptSuccessRate}%</div>
+              <div className="text-lg font-semibold text-blue-600">
+                {attemptSuccessRate === null ? '无数据' : `${attemptSuccessRate}%`}
+              </div>
               <div className="text-[11px] text-gray-500">成功率</div>
             </div>
           </div>
