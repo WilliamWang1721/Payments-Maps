@@ -194,6 +194,22 @@ const ATTEMPT_CHECKOUT_LOCATION_OPTIONS = ['自助收银', '人工收银'] as co
 const isOptionIncluded = <T extends readonly string[]>(options: T, value: unknown): value is T[number] =>
   typeof value === 'string' && options.includes(value as T[number])
 
+const DATETIME_LOCAL_VALUE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+
+const padDateTimePart = (value: number) => String(value).padStart(2, '0')
+
+const toDateTimeLocalValue = (value?: string) => {
+  if (!value) return ''
+  if (DATETIME_LOCAL_VALUE_PATTERN.test(value)) return value
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return ''
+  }
+  return `${parsed.getFullYear()}-${padDateTimePart(parsed.getMonth() + 1)}-${padDateTimePart(parsed.getDate())}T${padDateTimePart(parsed.getHours())}:${padDateTimePart(parsed.getMinutes())}`
+}
+
+const getCurrentDateTimeLocalValue = () => toDateTimeLocalValue(new Date().toISOString())
+
 const normalizeAttemptedAt = (value?: string) => {
   if (!value) return null
   const parsed = new Date(value)
@@ -836,7 +852,7 @@ const AddPOS = () => {
         ...(prev.attempts || []),
         {
           result: 'success',
-          attempted_at: new Date().toISOString(),
+          attempted_at: getCurrentDateTimeLocalValue(),
           card_network: '',
           payment_method: 'tap',
           cvm: 'unknown',
@@ -1345,8 +1361,8 @@ const AddPOS = () => {
                         <input
                           type="datetime-local"
                           className={attemptFieldBase}
-                          value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
-                          onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                          value={toDateTimeLocalValue(attempt.attempted_at)}
+                          onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value)}
                         />
                       </div>
                     </div>
