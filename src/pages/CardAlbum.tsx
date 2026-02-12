@@ -113,6 +113,8 @@ const CardAlbum = () => {
     title: '',
     bin: '',
     organization: '',
+    secondaryOrganization: '',
+    isDualNetwork: false,
     level: '',
     description: '',
     isCoBranded: false,
@@ -150,8 +152,15 @@ const CardAlbum = () => {
     } else if (formData.bin.trim().length < 6 || formData.bin.trim().length > 8) {
       errors.bin = '卡BIN需要6-8位数字'
     }
+    if (formData.isDualNetwork) {
+      if (!formData.secondaryOrganization.trim()) {
+        errors.secondaryOrganization = '双标卡请补充第二卡组织'
+      } else if (formData.secondaryOrganization.trim() === formData.organization.trim()) {
+        errors.secondaryOrganization = '双标卡的两个卡组织不能相同'
+      }
+    }
     return errors
-  }, [formData.bin, formData.issuer, formData.title])
+  }, [formData.bin, formData.issuer, formData.isDualNetwork, formData.organization, formData.secondaryOrganization, formData.title])
 
   useEffect(() => {
     Object.entries(validationErrors).forEach(([field, message]) => {
@@ -184,6 +193,14 @@ const CardAlbum = () => {
     setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
   }
 
+  const getCardOrganizationList = (card: Pick<CardAlbumItem, 'organization' | 'secondaryOrganization'>) => {
+    return Array.from(new Set([card.organization, card.secondaryOrganization].map((item) => item?.trim()).filter(Boolean)))
+  }
+
+  const getCardOrganizationLabel = (card: Pick<CardAlbumItem, 'organization' | 'secondaryOrganization'>) => {
+    return getCardOrganizationList(card).join(' / ')
+  }
+
   const baseCards = useMemo(() => cards.filter((card) => card.scope === activeTab), [cards, activeTab])
   const getCardKey = (card: CardAlbumItem) => `${card.issuer}-${card.title}-${card.bin}`
   const personalCardKeys = useMemo(() => {
@@ -202,7 +219,7 @@ const CardAlbum = () => {
     const bins = new Set<string>()
     baseCards.forEach((card) => {
       issuers.add(card.issuer)
-      organizations.add(card.organization)
+      getCardOrganizationList(card).forEach((organization) => organizations.add(organization))
       bins.add(card.bin)
     })
     return {
@@ -216,11 +233,12 @@ const CardAlbum = () => {
     const keyword = searchKeyword.trim().toLowerCase()
     return baseCards.filter((card) => {
       const matchesKeyword = keyword
-        ? [card.title, card.issuer, card.organization, card.level, card.group, card.bin]
-            .some((value) => value.toLowerCase().includes(keyword))
+        ? [card.title, card.issuer, card.organization, card.secondaryOrganization, card.level, card.group, card.bin]
+            .some((value) => (value || '').toLowerCase().includes(keyword))
         : true
       const matchesIssuer = filters.issuer === 'all' || card.issuer === filters.issuer
-      const matchesOrganization = filters.organization === 'all' || card.organization === filters.organization
+      const matchesOrganization = filters.organization === 'all'
+        || getCardOrganizationList(card).includes(filters.organization)
       const matchesBin = filters.bin === 'all' || card.bin === filters.bin
       return matchesKeyword && matchesIssuer && matchesOrganization && matchesBin
     })
@@ -246,6 +264,8 @@ const CardAlbum = () => {
       title: '',
       bin: '',
       organization: '',
+      secondaryOrganization: '',
+      isDualNetwork: false,
       level: '',
       description: '',
       isCoBranded: false,
@@ -283,6 +303,7 @@ const CardAlbum = () => {
     const updatedAt = new Date().toISOString().slice(0, 10)
     const normalizedPointsProgram = formData.hasPointsProgram ? formData.pointsProgramName.trim() : ''
     const normalizedClubPointsProgram = formData.hasClubPoints ? formData.clubPointsProgram.trim() : ''
+    const normalizedSecondaryOrganization = formData.isDualNetwork ? formData.secondaryOrganization.trim() : ''
 
     if (editingCard) {
       updateCard({
@@ -291,6 +312,8 @@ const CardAlbum = () => {
         title: formData.title.trim(),
         bin: formData.bin.trim(),
         organization: formData.organization.trim() || '未知卡组织',
+        secondaryOrganization: normalizedSecondaryOrganization,
+        isDualNetwork: Boolean(normalizedSecondaryOrganization),
         level: formData.level.trim() || '未知等级',
         description: formData.description.trim() || '暂无描述',
         isCoBranded: formData.isCoBranded,
@@ -314,6 +337,8 @@ const CardAlbum = () => {
       title: formData.title.trim(),
       bin: formData.bin.trim(),
       organization: formData.organization.trim() || '未知卡组织',
+      secondaryOrganization: normalizedSecondaryOrganization,
+      isDualNetwork: Boolean(normalizedSecondaryOrganization),
       level: formData.level.trim() || '未知等级',
       description: formData.description.trim() || '暂无描述',
       isCoBranded: formData.isCoBranded,
@@ -343,6 +368,8 @@ const CardAlbum = () => {
       title: card.title,
       bin: card.bin,
       organization: card.organization,
+      secondaryOrganization: card.secondaryOrganization || '',
+      isDualNetwork: Boolean(card.secondaryOrganization),
       level: card.level || card.group || '',
       description: card.description,
       isCoBranded: Boolean(card.isCoBranded),
@@ -500,7 +527,13 @@ const CardAlbum = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">卡组织</label>
                   <SystemSelect
                     value={formData.organization}
-                    onChange={(value) => setFormData((prev) => ({ ...prev, organization: value }))}
+                    onChange={(value) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        organization: value,
+                        secondaryOrganization: prev.secondaryOrganization === value ? '' : prev.secondaryOrganization,
+                      }))
+                    }
                     options={CARD_ORGANIZATION_OPTIONS}
                     placeholder="请选择卡组织"
                   />
@@ -516,6 +549,59 @@ const CardAlbum = () => {
                     placeholder={formData.organization ? '请选择卡等级' : '请先选择卡组织'}
                   />
                 </div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                <label className="block text-sm font-medium text-gray-700">是否双标卡</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        isDualNetwork: true,
+                      }))
+                    }
+                    className={clsx(
+                      'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                      formData.isDualNetwork
+                        ? 'border-soft-black bg-soft-black text-white'
+                        : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                    )}
+                  >
+                    是
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        isDualNetwork: false,
+                        secondaryOrganization: '',
+                      }))
+                    }
+                    className={clsx(
+                      'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
+                      !formData.isDualNetwork
+                        ? 'border-soft-black bg-soft-black text-white'
+                        : 'border-gray-200 text-gray-500 hover:border-accent-yellow/40'
+                    )}
+                  >
+                    否
+                  </button>
+                </div>
+
+                {formData.isDualNetwork && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">第二卡组织</label>
+                    <SystemSelect
+                      value={formData.secondaryOrganization}
+                      onChange={(value) => setFormData((prev) => ({ ...prev, secondaryOrganization: value }))}
+                      options={CARD_ORGANIZATION_OPTIONS.filter((option) => option.value !== formData.organization)}
+                      placeholder="请选择第二卡组织"
+                    />
+                    <p className="text-xs text-gray-400 mt-2">双标卡将在尝试记录中限制为这两个卡组织供选择。</p>
+                  </div>
+                )}
               </div>
               <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
                 <button
@@ -884,7 +970,7 @@ const CardAlbum = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span>卡组织</span>
-                      <span className="font-semibold text-soft-black dark:text-white">{card.organization}</span>
+                      <span className="font-semibold text-soft-black dark:text-white">{getCardOrganizationLabel(card)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>卡等级</span>
@@ -1088,7 +1174,7 @@ const CardAlbum = () => {
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
                   <span className="text-gray-500">卡组织</span>
-                  <span className="font-medium text-gray-900">{selectedCard.organization}</span>
+                  <span className="font-medium text-gray-900">{getCardOrganizationLabel(selectedCard)}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
                   <span className="text-gray-500">卡等级</span>

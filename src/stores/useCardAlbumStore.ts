@@ -16,6 +16,8 @@ export type CardAlbumItem = {
   title: string
   bin: string
   organization: string
+  secondaryOrganization?: string
+  isDualNetwork?: boolean
   level: string
   // 兼容旧数据，迁移后可删除
   group?: string
@@ -36,6 +38,8 @@ const defaultCards: CardAlbumItem[] = [
     title: '银联高端卡',
     bin: '622848',
     organization: 'UnionPay',
+    secondaryOrganization: '',
+    isDualNetwork: false,
     level: '白金卡',
     description: '适合公共展示的高端权益卡片。',
     isCoBranded: false,
@@ -52,6 +56,8 @@ const defaultCards: CardAlbumItem[] = [
     title: '旅行白金卡',
     bin: '436742',
     organization: 'Visa',
+    secondaryOrganization: '',
+    isDualNetwork: false,
     level: 'Infinite',
     description: '公共卡册中的旅行主题卡片模板。',
     isCoBranded: true,
@@ -68,6 +74,8 @@ const defaultCards: CardAlbumItem[] = [
     title: '环球通卡',
     bin: '621226',
     organization: 'Mastercard',
+    secondaryOrganization: '',
+    isDualNetwork: false,
     level: 'World',
     description: '个人卡册中常用的银行卡片。',
     isCoBranded: false,
@@ -125,13 +133,15 @@ export const useCardAlbumStore = create<CardAlbumState>()(
     }),
     {
       name: CARD_ALBUM_STORAGE_KEY,
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown) => {
         if (!persistedState || typeof persistedState !== 'object') {
           return persistedState as CardAlbumState
         }
 
-        const state = persistedState as { cards?: Array<CardAlbumItem & { group?: string }> }
+        const state = persistedState as {
+          cards?: Array<CardAlbumItem & { group?: string; secondaryOrganization?: string; isDualNetwork?: boolean }>
+        }
         if (!Array.isArray(state.cards)) {
           return persistedState as CardAlbumState
         }
@@ -141,6 +151,8 @@ export const useCardAlbumStore = create<CardAlbumState>()(
           cards: state.cards.map((card) => ({
             ...card,
             level: card.level || card.group || '未知等级',
+            secondaryOrganization: card.secondaryOrganization || '',
+            isDualNetwork: Boolean(card.isDualNetwork && card.secondaryOrganization),
           })),
         } as CardAlbumState
       },

@@ -29,6 +29,7 @@ import BrandSelector from '@/components/BrandSelector'
 import SystemSelect from '@/components/ui/SystemSelect'
 import SimpleMapPicker from '@/components/SimpleMapPicker'
 import { CARD_NETWORKS } from '@/lib/cardNetworks'
+import { getCardNetworkValue } from '@/lib/cardMetadata'
 import { locationUtils } from '@/lib/amap'
 import { POSMachine, supabase } from '@/lib/supabase'
 import { FeeType, FeesConfiguration, DEFAULT_FEES_CONFIG, CardNetworkFee } from '@/types/fees'
@@ -36,7 +37,7 @@ import { formatFeeDisplay } from '@/utils/feeUtils'
 import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
 import { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
-import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
+import { type CardAlbumItem, getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 
@@ -102,6 +103,11 @@ interface FormData {
 type TapMethod = 'card' | 'apple' | 'google' | 'hce'
 type TapState = 'yes' | 'no' | 'unknown'
 type SchemeID = typeof CARD_NETWORKS[number]['value']
+type AttemptAlbumBinding = {
+  cardId: string
+  cardName: string
+  networkValues: SchemeID[]
+}
 
 type CvmTab = 'noPin' | 'pin' | 'signature'
 const CVM_FLAGS = ['unsupported', 'uncertain', 'unknown'] as const
@@ -216,6 +222,22 @@ const ensureFees = (fees?: FeesConfiguration): FeesConfiguration => {
   return { ...DEFAULT_FEES_CONFIG }
 }
 
+const getAlbumCardOrganizationLabels = (card: Pick<CardAlbumItem, 'organization' | 'secondaryOrganization'>) => {
+  return Array.from(
+    new Set([card.organization, card.secondaryOrganization].map((item) => item?.trim()).filter(Boolean))
+  )
+}
+
+const getAlbumCardNetworkValues = (card: Pick<CardAlbumItem, 'organization' | 'secondaryOrganization'>): SchemeID[] => {
+  return Array.from(
+    new Set(
+      getAlbumCardOrganizationLabels(card)
+        .map((organization) => getCardNetworkValue(organization))
+        .filter((value): value is SchemeID => Boolean(value))
+    )
+  )
+}
+
 const AddPOS = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -238,6 +260,7 @@ const AddPOS = () => {
   const [isAlbumPickerOpen, setIsAlbumPickerOpen] = useState(false)
   const [albumScopeFilter, setAlbumScopeFilter] = useState<'personal' | 'public'>('personal')
   const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
+  const [attemptAlbumBindings, setAttemptAlbumBindings] = useState<Record<number, AttemptAlbumBinding>>({})
   const [touchedFields, setTouchedFields] = useState({
     merchant_name: false,
     address: false,
@@ -849,6 +872,18 @@ const AddPOS = () => {
   }
 
   const updateAttempt = (index: number, field: keyof NonNullable<FormData['attempts']>[number], value: any) => {
+    if (field === 'card_name') {
+      setAttemptAlbumBindings((prev) => {
+        const binding = prev[index]
+        if (!binding) return prev
+        const nextName = typeof value === 'string' ? value.trim() : ''
+        if (nextName === binding.cardName) {
+          return prev
+        }
+        const { [index]: _removed, ...rest } = prev
+        return rest
+      })
+    }
     setFormData((prev) => ({
       ...prev,
       attempts: prev.attempts?.map((attempt, i) => (i === index ? { ...attempt, [field]: value } : attempt)) || [],
@@ -856,6 +891,15 @@ const AddPOS = () => {
   }
 
   const removeAttempt = (index: number) => {
+    setAttemptAlbumBindings((prev) => {
+      const next: Record<number, AttemptAlbumBinding> = {}
+      Object.entries(prev).forEach(([key, binding]) => {
+        const parsedIndex = Number(key)
+        if (Number.isNaN(parsedIndex) || parsedIndex === index) return
+        next[parsedIndex > index ? parsedIndex - 1 : parsedIndex] = binding
+      })
+      return next
+    })
     setFormData((prev) => ({
       ...prev,
       attempts: prev.attempts?.filter((_, i) => i !== index) || [],
@@ -1208,6 +1252,18 @@ const AddPOS = () => {
             ) : (
               attemptsList.map((attempt, index) => (
                 <div key={`attempt-${index}`} className="space-y-6">
+                  {(() => {
+                    const binding = attemptAlbumBindings[index]
+                    const isDualBound = Boolean(
+                      binding
+                        && binding.networkValues.length > 1
+                        && (attempt.card_name || '').trim() === binding.cardName
+                    )
+                    const attemptNetworkOptions = isDualBound
+                      ? CARD_NETWORKS.filter((scheme) => binding.networkValues.includes(scheme.value as SchemeID))
+                      : CARD_NETWORKS
+                    return (
+                      <>
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em]">
                       尝试 {index + 1}
@@ -1273,11 +1329,14 @@ const AddPOS = () => {
                           onChange={(e) => updateAttempt(index, 'card_network', e.target.value)}
                           className={attemptSelectBase}
                         >
-                          <option value="">请选择卡组织</option>
-                          {CARD_NETWORKS.map((scheme) => (
+                          <option value="">{isDualBound ? '请选择该双标卡的卡组织' : '请选择卡组织'}</option>
+                          {attemptNetworkOptions.map((scheme) => (
                             <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
                           ))}
                         </select>
+                        {isDualBound && (
+                          <p className="text-xs text-gray-400">当前卡片为双标卡，仅可选择绑定的两个卡组织。</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">发生时间</label>
@@ -1428,6 +1487,9 @@ const AddPOS = () => {
                       )}
                     </div>
                   </section>
+                      </>
+                    )
+                  })()}
                 </div>
               ))
             )}
@@ -1851,7 +1913,8 @@ const AddPOS = () => {
     if (!selectedAlbumCard) return ''
     const card = albumCards.find((item) => item.id === selectedAlbumCard)
     if (!card) return ''
-    return `${card.title} · ${card.issuer} · ${card.organization} (${getAlbumScopeLabel(card.scope)})`
+    const organizations = getAlbumCardOrganizationLabels(card).join(' / ')
+    return `${card.title} · ${card.issuer} · ${organizations} (${getAlbumScopeLabel(card.scope)})`
   }, [albumCards, selectedAlbumCard])
 
   const filteredAlbumCards = useMemo(() => {
@@ -1874,10 +1937,29 @@ const AddPOS = () => {
       return
     }
     const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
-    const methodLabel = [selectedCard.organization, selectedCard.bin, selectedCard.level || selectedCard.group]
+    const networkValues = getAlbumCardNetworkValues(selectedCard)
+    const organizationLabel = getAlbumCardOrganizationLabels(selectedCard).join(' / ')
+    const methodLabel = [organizationLabel, selectedCard.bin, selectedCard.level || selectedCard.group]
       .filter(Boolean)
       .join(' · ')
     updateAttempt(targetIndex, 'card_name', cardLabel)
+    if (networkValues.length === 1) {
+      updateAttempt(targetIndex, 'card_network', networkValues[0])
+      setAttemptAlbumBindings((prev) => {
+        const { [targetIndex]: _removed, ...rest } = prev
+        return rest
+      })
+    } else if (networkValues.length > 1) {
+      updateAttempt(targetIndex, 'card_network', '')
+      setAttemptAlbumBindings((prev) => ({
+        ...prev,
+        [targetIndex]: {
+          cardId: selectedCard.id,
+          cardName: cardLabel,
+          networkValues,
+        },
+      }))
+    }
     updateAttempt(targetIndex, 'notes', methodLabel)
     notify.success('已填充卡片信息')
     setIsAlbumPickerOpen(false)
@@ -2001,7 +2083,8 @@ const AddPOS = () => {
                     </div>
                   )}
                   {filteredAlbumCards.map((card) => {
-                    const label = `${card.title} · ${card.issuer} · ${card.organization}`
+                    const organizationLabel = getAlbumCardOrganizationLabels(card).join(' / ')
+                    const label = `${card.title} · ${card.issuer} · ${organizationLabel}`
                     const isActive = selectedAlbumCard === card.id
                     return (
                       <button
