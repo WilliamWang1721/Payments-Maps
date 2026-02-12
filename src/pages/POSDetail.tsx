@@ -921,7 +921,10 @@ const POSDetail = () => {
     },
   ]
 
-  const allFusionItems = supportFusionSections.flatMap((section) => section.items)
+  const deviceAcquiringSection = supportFusionSections.find((section) => section.key === 'device-acquiring') || null
+  const paymentSupportSections = supportFusionSections.filter((section) => section.key !== 'device-acquiring')
+
+  const allFusionItems = paymentSupportSections.flatMap((section) => section.items)
   const supportFusionSummary = {
     supported: allFusionItems.filter((item) => item.resolvedState === 'supported').length,
     unsupported: allFusionItems.filter((item) => item.resolvedState === 'unsupported').length,
@@ -1804,6 +1807,135 @@ const POSDetail = () => {
     })
   }
 
+  const renderSupportSectionCard = (section: SupportFusionSection) => {
+    const SectionIcon = section.icon
+    const isDeviceSection = section.key === 'device-acquiring'
+    const useListLayout = section.key === 'payment-method' || section.key === 'cvm'
+
+    return (
+      <AnimatedCard
+        key={section.key}
+        className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft"
+        variant="elevated"
+        hoverable
+      >
+        <CardContent className="p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <SectionIcon className="w-5 h-5 text-accent-yellow" />
+              <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">{section.title}</h3>
+            </div>
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold text-gray-500">
+              {section.items.length} 项
+            </span>
+          </div>
+
+          {section.items.length > 0 ? (
+            isDeviceSection ? (
+              <div className="space-y-3">
+                {(section.groups || []).map((group) => (
+                  <div key={group.key} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                    <div className="text-xs font-semibold text-gray-400">{group.title}</div>
+                    {group.items.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {group.items.map((item) => {
+                          const unifiedNote = getUnifiedSupportNote(item)
+                          return (
+                            <button
+                              key={`${group.key}-${item.key}`}
+                              type="button"
+                              onClick={() => openSupportDetailDrawer(section, item)}
+                              className={`w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all hover:border-accent-yellow/40 hover:bg-cream/30 cursor-pointer ${
+                                item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                                    {supportStateLabelMap[item.resolvedState]}
+                                  </span>
+                                  <ChevronRight className="h-4 w-4 text-gray-300" />
+                                </div>
+                              </div>
+                              <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                                {unifiedNote || '点击查看相关尝试记录'}
+                              </p>
+                              {item.hasConflict && (
+                                <div className="mt-2">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    需复核
+                                  </span>
+                                </div>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-xs text-gray-500">暂无相关记录</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={useListLayout ? 'space-y-2.5' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'}>
+                {section.items.map((item) => {
+                  const unifiedNote = getUnifiedSupportNote(item)
+                  const MethodIcon = section.key === 'payment-method' ? (paymentMethodIconMap[item.key] || CreditCard) : null
+
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => openSupportDetailDrawer(section, item)}
+                      className={`w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all hover:border-accent-yellow/40 hover:bg-cream/30 cursor-pointer ${
+                        item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {MethodIcon && (
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-100 bg-gray-50 text-gray-500">
+                              <MethodIcon className="h-4 w-4" />
+                            </span>
+                          )}
+                          <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
+                            {supportStateLabelMap[item.resolvedState]}
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-gray-300" />
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                        {unifiedNote || '点击查看相关尝试记录'}
+                      </p>
+                      {item.hasConflict && (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            <AlertTriangle className="h-3 w-3" />
+                            需复核
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
+              暂无可展示数据
+            </div>
+          )}
+        </CardContent>
+      </AnimatedCard>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -2076,46 +2208,21 @@ const POSDetail = () => {
                   </CardContent>
                 </AnimatedCard>
 
-                <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
-                  <CardContent className="p-6 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <Settings className="w-5 h-5 text-accent-yellow" />
-                      <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">设备与收单</h3>
-                    </div>
-                    <div className="grid gap-3">
-                      <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
-                        <div className="text-xs font-semibold text-gray-400">POS机型号</div>
-                        <div className="text-sm font-semibold text-soft-black dark:text-gray-100 mt-1">
-                          {pos.basic_info?.model || '待勘察'}
-                        </div>
+                {deviceAcquiringSection ? (
+                  renderSupportSectionCard(deviceAcquiringSection)
+                ) : (
+                  <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
+                    <CardContent className="p-6 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Settings className="w-5 h-5 text-accent-yellow" />
+                        <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">设备与收单</h3>
                       </div>
-                      <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
-                        <div className="text-xs font-semibold text-gray-400">收单机构</div>
-                        <div className="text-sm font-semibold text-soft-black dark:text-gray-100 mt-1">
-                          {pos.basic_info?.acquiring_institution || '待勘察'}
-                        </div>
+                      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-500">
+                        暂无可展示数据
                       </div>
-                      <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
-                        <div className="text-xs font-semibold text-gray-400">收银位置</div>
-                        <div className="text-sm font-semibold text-soft-black dark:text-gray-100 mt-1">
-                          {pos.basic_info?.checkout_location || '待勘察'}
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
-                        <div className="text-xs font-semibold text-gray-400">设备状态</div>
-                        <div className="text-sm font-semibold text-soft-black dark:text-gray-100 mt-1">
-                          {pos.status === 'active'
-                            ? '正常运行'
-                            : pos.status === 'inactive'
-                            ? '暂时不可用'
-                            : pos.status === 'maintenance'
-                            ? '维修中'
-                            : '已停用'}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </AnimatedCard>
+                    </CardContent>
+                  </AnimatedCard>
+                )}
               </div>
 
               {pos.remarks && (
@@ -2156,134 +2263,7 @@ const POSDetail = () => {
                   </AnimatedCard>
 
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    {supportFusionSections.map((section) => {
-                      const SectionIcon = section.icon
-                      const isDeviceSection = section.key === 'device-acquiring'
-                      const useListLayout = section.key === 'payment-method' || section.key === 'cvm'
-
-                      return (
-                        <AnimatedCard
-                          key={section.key}
-                          className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft"
-                          variant="elevated"
-                          hoverable
-                        >
-                          <CardContent className="p-6 space-y-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-3">
-                                <SectionIcon className="w-5 h-5 text-accent-yellow" />
-                                <h3 className="text-lg font-semibold text-soft-black dark:text-gray-100">{section.title}</h3>
-                              </div>
-                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold text-gray-500">
-                                {section.items.length} 项
-                              </span>
-                            </div>
-
-                            {section.items.length > 0 ? (
-                              isDeviceSection ? (
-                                <div className="space-y-3">
-                                  {(section.groups || []).map((group) => (
-                                    <div key={group.key} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
-                                      <div className="text-xs font-semibold text-gray-400">{group.title}</div>
-                                      {group.items.length > 0 ? (
-                                        <div className="mt-3 space-y-2">
-                                          {group.items.map((item) => {
-                                            const unifiedNote = getUnifiedSupportNote(item)
-                                            return (
-                                              <button
-                                                key={`${group.key}-${item.key}`}
-                                                type="button"
-                                                onClick={() => openSupportDetailDrawer(section, item)}
-                                                className={`w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all hover:border-accent-yellow/40 hover:bg-cream/30 cursor-pointer ${
-                                                  item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
-                                                }`}
-                                              >
-                                                <div className="flex items-start justify-between gap-3">
-                                                  <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
-                                                  <div className="flex items-center gap-2">
-                                                    <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
-                                                      {supportStateLabelMap[item.resolvedState]}
-                                                    </span>
-                                                    <ChevronRight className="h-4 w-4 text-gray-300" />
-                                                  </div>
-                                                </div>
-                                                <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
-                                                  {unifiedNote || '点击查看相关尝试记录'}
-                                                </p>
-                                                {item.hasConflict && (
-                                                  <div className="mt-2">
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                                      <AlertTriangle className="h-3 w-3" />
-                                                      需复核
-                                                    </span>
-                                                  </div>
-                                                )}
-                                              </button>
-                                            )
-                                          })}
-                                        </div>
-                                      ) : (
-                                        <div className="mt-3 text-xs text-gray-500">暂无相关记录</div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className={useListLayout ? 'space-y-2.5' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'}>
-                                  {section.items.map((item) => {
-                                    const unifiedNote = getUnifiedSupportNote(item)
-                                    const MethodIcon = section.key === 'payment-method' ? (paymentMethodIconMap[item.key] || CreditCard) : null
-
-                                    return (
-                                      <button
-                                        key={item.key}
-                                        type="button"
-                                        onClick={() => openSupportDetailDrawer(section, item)}
-                                        className={`w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all hover:border-accent-yellow/40 hover:bg-cream/30 cursor-pointer ${
-                                          item.hasConflict ? 'ring-1 ring-amber-300/70' : ''
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="flex items-center gap-3">
-                                            {MethodIcon && (
-                                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-100 bg-gray-50 text-gray-500">
-                                                <MethodIcon className="h-4 w-4" />
-                                              </span>
-                                            )}
-                                            <p className="text-sm font-semibold text-soft-black dark:text-gray-100">{item.label}</p>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${supportStateBadgeClassMap[item.resolvedState]}`}>
-                                              {supportStateLabelMap[item.resolvedState]}
-                                            </span>
-                                            <ChevronRight className="h-4 w-4 text-gray-300" />
-                                          </div>
-                                        </div>
-                                        <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
-                                          {unifiedNote || '点击查看相关尝试记录'}
-                                        </p>
-                                        {item.hasConflict && (
-                                          <div className="mt-2">
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                              <AlertTriangle className="h-3 w-3" />
-                                              需复核
-                                            </span>
-                                          </div>
-                                        )}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                              )
-                            ) : (
-                              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-center text-sm text-gray-500">
-                                暂无可展示数据
-                              </div>
-                            )}
-                          </CardContent>
-                        </AnimatedCard>
-                      )
-                    })}
+                    {paymentSupportSections.map((section) => renderSupportSectionCard(section))}
                   </div>
 
                   {pos.fees && (
