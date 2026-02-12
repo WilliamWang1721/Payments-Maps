@@ -880,8 +880,8 @@ const POSDetail = () => {
   }
 
   const supportStateBadgeClassMap: Record<ThreeStateValue, string> = {
-    supported: 'bg-gray-100 text-gray-700 border border-gray-200',
-    unsupported: 'bg-gray-100 text-gray-700 border border-gray-200',
+    supported: 'bg-green-100 text-green-700 border border-green-200',
+    unsupported: 'bg-red-100 text-red-700 border border-red-200',
     unknown: 'bg-gray-100 text-gray-700 border border-gray-200',
   }
 
@@ -1798,7 +1798,7 @@ const POSDetail = () => {
                     </span>
                     {successRate !== null && (
                       <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-3 py-1 font-semibold">
-                        成功率 {(successRate * 100).toFixed(1)}%
+                        成功率 {Math.round(successRate)}%
                       </span>
                     )}
                   </div>
@@ -3272,12 +3272,12 @@ const POSDetail = () => {
                   </select>
                 </div>
                 
-                {successRate !== null && successRate < 0.5 && (
+                {successRate !== null && successRate < 50 && (
                   <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                       <span className="text-sm text-orange-700 font-medium">
-                        注意：当前成功率为 {(successRate * 100).toFixed(1)}%，低于50%
+                        注意：当前成功率为 {Math.round(successRate)}%，低于50%
                       </span>
                     </div>
                   </div>
