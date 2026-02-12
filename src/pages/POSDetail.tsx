@@ -142,6 +142,31 @@ type AttemptAlbumBinding = {
   networkValues: SchemeID[]
 }
 
+const DATETIME_LOCAL_VALUE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+
+const padDateTimePart = (value: number) => String(value).padStart(2, '0')
+
+const toDateTimeLocalValue = (value?: string) => {
+  if (!value) return ''
+  if (DATETIME_LOCAL_VALUE_PATTERN.test(value)) return value
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return ''
+  }
+  return `${parsed.getFullYear()}-${padDateTimePart(parsed.getMonth() + 1)}-${padDateTimePart(parsed.getDate())}T${padDateTimePart(parsed.getHours())}:${padDateTimePart(parsed.getMinutes())}`
+}
+
+const getCurrentDateTimeLocalValue = () => toDateTimeLocalValue(new Date().toISOString())
+
+const normalizeAttemptedAt = (value?: string) => {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+  return parsed.toISOString()
+}
+
 const getAlbumCardOrganizationLabels = (card: Pick<CardAlbumItem, 'organization' | 'secondaryOrganization'>) => {
   return Array.from(
     new Set([card.organization, card.secondaryOrganization].map((item) => item?.trim()).filter(Boolean))
@@ -260,7 +285,7 @@ const POSDetail = () => {
 
   const createAttemptDraft = (): AttemptDraft => ({
     result: 'success',
-    attempted_at: new Date().toISOString(),
+    attempted_at: getCurrentDateTimeLocalValue(),
     card_network: '',
     payment_method: 'tap',
     cvm: 'unknown',
@@ -1564,7 +1589,7 @@ const POSDetail = () => {
         acquiring_institution: attempt.acquiring_institution?.trim() || null,
         checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
         notes: attempt.notes?.trim() || null,
-        attempted_at: attempt.attempted_at || null,
+        attempted_at: normalizeAttemptedAt(attempt.attempted_at),
         is_conclusive_failure: attempt.result === 'failure' && Boolean(attempt.is_conclusive_failure),
       }))
 
@@ -3037,8 +3062,8 @@ const POSDetail = () => {
                                     <input
                                       type="datetime-local"
                                       className={attemptFieldBase}
-                                      value={attempt.attempted_at ? attempt.attempted_at.slice(0, 16) : ''}
-                                      onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                                      value={toDateTimeLocalValue(attempt.attempted_at)}
+                                      onChange={(e) => updateAttempt(index, 'attempted_at', e.target.value)}
                                     />
                                   </div>
                                 </div>
