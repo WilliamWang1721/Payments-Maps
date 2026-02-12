@@ -90,6 +90,7 @@ interface FormData {
     device_status?: 'active' | 'inactive' | 'maintenance' | 'disabled'
     acquiring_institution?: string
     checkout_location?: '自助收银' | '人工收银'
+    card_album_card_id?: string
     card_name?: string
     notes?: string
     is_conclusive_failure?: boolean
@@ -664,33 +665,37 @@ const AddPOS = () => {
         })
       }
 
-      const attemptsPayload = (formData.attempts || []).map((attempt, index) => ({
-        pos_id: result.id,
-        user_id: attemptUserId,
-        attempt_number: index + 1,
-        result: isOptionIncluded(ATTEMPT_RESULT_OPTIONS, attempt.result) ? attempt.result : 'unknown',
-        card_network: attempt.card_network || null,
-        payment_method: isOptionIncluded(ATTEMPT_PAYMENT_METHOD_OPTIONS, attempt.payment_method)
-          ? attempt.payment_method
-          : null,
-        cvm: isOptionIncluded(ATTEMPT_CVM_OPTIONS, attempt.cvm) ? attempt.cvm : 'unknown',
-        acquiring_mode: isOptionIncluded(ATTEMPT_ACQUIRING_MODE_OPTIONS, attempt.acquiring_mode)
-          ? attempt.acquiring_mode
-          : 'unknown',
-        device_status: isOptionIncluded(ATTEMPT_DEVICE_STATUS_OPTIONS, attempt.device_status)
-          ? attempt.device_status
-          : payload.status || 'active',
-        acquiring_institution: attempt.acquiring_institution?.trim() || null,
-        checkout_location: isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, attempt.checkout_location)
-          ? attempt.checkout_location
-          : isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, payload.basic_info.checkout_location)
-            ? payload.basic_info.checkout_location
+      const attemptsPayload = (formData.attempts || []).map((attempt, index) => {
+        const linkedCardId = attempt.card_album_card_id?.trim() || null
+        return {
+          pos_id: result.id,
+          user_id: attemptUserId,
+          attempt_number: index + 1,
+          result: isOptionIncluded(ATTEMPT_RESULT_OPTIONS, attempt.result) ? attempt.result : 'unknown',
+          card_network: attempt.card_network || null,
+          payment_method: isOptionIncluded(ATTEMPT_PAYMENT_METHOD_OPTIONS, attempt.payment_method)
+            ? attempt.payment_method
             : null,
-        card_name: attempt.card_name?.trim() || null,
-        notes: attempt.notes?.trim() || null,
-        attempted_at: normalizeAttemptedAt(attempt.attempted_at || attempt.timestamp),
-        is_conclusive_failure: attempt.is_conclusive_failure || false,
-      }))
+          cvm: isOptionIncluded(ATTEMPT_CVM_OPTIONS, attempt.cvm) ? attempt.cvm : 'unknown',
+          acquiring_mode: isOptionIncluded(ATTEMPT_ACQUIRING_MODE_OPTIONS, attempt.acquiring_mode)
+            ? attempt.acquiring_mode
+            : 'unknown',
+          device_status: isOptionIncluded(ATTEMPT_DEVICE_STATUS_OPTIONS, attempt.device_status)
+            ? attempt.device_status
+            : payload.status || 'active',
+          acquiring_institution: attempt.acquiring_institution?.trim() || null,
+          checkout_location: isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, attempt.checkout_location)
+            ? attempt.checkout_location
+            : isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, payload.basic_info.checkout_location)
+              ? payload.basic_info.checkout_location
+              : null,
+          card_album_card_id: linkedCardId,
+          card_name: linkedCardId ? null : attempt.card_name?.trim() || null,
+          notes: attempt.notes?.trim() || null,
+          attempted_at: normalizeAttemptedAt(attempt.attempted_at || attempt.timestamp),
+          is_conclusive_failure: attempt.is_conclusive_failure || false,
+        }
+      })
 
       if (attemptsPayload.length > 0) {
         const attemptsDebugMeta = {
@@ -744,7 +749,7 @@ const AddPOS = () => {
             if (missingColumn) {
               // Hard-fail: do not proceed/navigate if any attempt fields can't be persisted.
               notify.dismiss('saving-pos')
-              notify.critical(`POS 已创建，但尝试记录保存失败：数据库缺少字段 ${missingColumn}。请先执行 supabase/migrations/014_ensure_pos_records_columns.sql，并刷新 PostgREST schema cache。`, {
+              notify.critical(`POS 已创建，但尝试记录保存失败：数据库缺少字段 ${missingColumn}。请先执行 supabase/migrations/014_ensure_pos_records_columns.sql 与 supabase/migrations/015_add_pos_album_card_reference.sql，并刷新 PostgREST schema cache。`, {
                 title: '数据库需要升级',
                 details: getErrorDetails(attemptsError),
               })
@@ -860,6 +865,7 @@ const AddPOS = () => {
           device_status: prev.status || 'active',
           acquiring_institution: prev.basic_info.acquiring_institution || '',
           checkout_location: prev.basic_info.checkout_location,
+          card_album_card_id: '',
           card_name: '',
           notes: '',
           is_conclusive_failure: false,
@@ -902,7 +908,18 @@ const AddPOS = () => {
     }
     setFormData((prev) => ({
       ...prev,
-      attempts: prev.attempts?.map((attempt, i) => (i === index ? { ...attempt, [field]: value } : attempt)) || [],
+      attempts: prev.attempts?.map((attempt, i) => {
+        if (i !== index) return attempt
+        const nextAttempt = { ...attempt, [field]: value } as NonNullable<FormData['attempts']>[number]
+        if (field === 'card_name') {
+          const nextCardName = typeof value === 'string' ? value.trim() : ''
+          const currentCardName = attempt.card_name?.trim() || ''
+          if (attempt.card_album_card_id && nextCardName !== currentCardName) {
+            nextAttempt.card_album_card_id = ''
+          }
+        }
+        return nextAttempt
+      }) || [],
     }))
   }
 
@@ -1956,11 +1973,8 @@ const AddPOS = () => {
     }
     const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
     const networkValues = getAlbumCardNetworkValues(selectedCard)
-    const organizationLabel = getAlbumCardOrganizationLabels(selectedCard).join(' / ')
-    const methodLabel = [organizationLabel, selectedCard.bin, selectedCard.level || selectedCard.group]
-      .filter(Boolean)
-      .join(' · ')
     updateAttempt(targetIndex, 'card_name', cardLabel)
+    updateAttempt(targetIndex, 'card_album_card_id', selectedCard.id)
     if (networkValues.length === 1) {
       updateAttempt(targetIndex, 'card_network', networkValues[0])
       setAttemptAlbumBindings((prev) => {
@@ -1978,7 +1992,6 @@ const AddPOS = () => {
         },
       }))
     }
-    updateAttempt(targetIndex, 'notes', methodLabel)
     notify.success('已填充卡片信息')
     setIsAlbumPickerOpen(false)
   }

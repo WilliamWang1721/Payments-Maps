@@ -63,6 +63,7 @@ export interface POSAttempt {
   device_status?: AttemptDeviceStatus | null
   acquiring_institution?: string | null
   checkout_location?: AttemptCheckoutLocation | null
+  card_album_card_id?: string | null
   card_name?: string | null
   notes?: string | null
   attempted_at?: string | null
