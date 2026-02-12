@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, RefreshCcw, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -25,6 +25,7 @@ import { getPaymentMethodLabel } from '@/lib/utils'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
+import { buildRefreshedExtendedFields, derivePOSFromAttempts, readPOSAttemptRefreshMeta } from '@/utils/posRefreshLogic'
 import { exportToHTML, exportToJSON, exportToPDF, getFormatDisplayName, getStyleDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
 import { feeUtils } from '@/types/fees'
 import type { CardAlbumItem } from '@/stores/useCardAlbumStore'
@@ -53,6 +54,7 @@ interface Attempt {
   id: string
   created_at: string
   result: 'success' | 'failure' | 'unknown'
+  card_album_card_id?: string
   card_name?: string
   card_network?: string
   payment_method?: string
@@ -87,6 +89,7 @@ type AttemptDraft = {
   device_status?: 'active' | 'inactive' | 'maintenance' | 'disabled'
   acquiring_institution?: string
   checkout_location?: '自助收银' | '人工收银'
+  card_album_card_id?: string
   card_name?: string
   notes?: string
   is_conclusive_failure?: boolean
@@ -205,6 +208,8 @@ const POSDetail = () => {
   const [submittingReview, setSubmittingReview] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showRefreshModal, setShowRefreshModal] = useState(false)
+  const [refreshingPOS, setRefreshingPOS] = useState(false)
   const [showAttemptModal, setShowAttemptModal] = useState(false)
   const [draftAttempts, setDraftAttempts] = useState<AttemptDraft[]>([])
   const [commonCards, setCommonCards] = useState<Array<{ name: string; method?: string }>>([])
@@ -293,6 +298,7 @@ const POSDetail = () => {
     device_status: pos?.status || 'active',
     acquiring_institution: pos?.basic_info?.acquiring_institution || '',
     checkout_location: pos?.basic_info?.checkout_location,
+    card_album_card_id: '',
     card_name: '',
     notes: '',
     is_conclusive_failure: false,
@@ -339,6 +345,15 @@ const POSDetail = () => {
         if (i !== index) return attempt
         if (field === 'result' && value !== 'failure') {
           return { ...attempt, [field]: value, is_conclusive_failure: false }
+        }
+        if (field === 'card_name') {
+          const nextCardName = typeof value === 'string' ? value.trim() : ''
+          const currentCardName = attempt.card_name?.trim() || ''
+          const nextAttempt = { ...attempt, [field]: value }
+          if (attempt.card_album_card_id && nextCardName !== currentCardName) {
+            nextAttempt.card_album_card_id = ''
+          }
+          return nextAttempt
         }
         return { ...attempt, [field]: value }
       })
@@ -472,6 +487,14 @@ const POSDetail = () => {
     return albumCards.filter((card) => card.scope === albumScopeFilter)
   }, [albumCards, albumScopeFilter])
 
+  const albumCardsById = useMemo(() => {
+    const map = new Map<string, CardAlbumItem>()
+    albumCards.forEach((card) => {
+      map.set(card.id, card)
+    })
+    return map
+  }, [albumCards])
+
   const handleApplyAlbumCard = () => {
     if (!selectedAlbumCard) {
       notify.error('请选择要使用的卡片')
@@ -490,6 +513,7 @@ const POSDetail = () => {
     const cardLabel = `${selectedCard.issuer} ${selectedCard.title}`.trim()
     const networkValues = getAlbumCardNetworkValues(selectedCard)
     updateAttempt(targetIndex, 'card_name', cardLabel)
+    updateAttempt(targetIndex, 'card_album_card_id', selectedCard.id)
     if (networkValues.length === 1) {
       updateAttempt(targetIndex, 'card_network', networkValues[0])
       setAttemptAlbumBindings((prev) => {
@@ -638,6 +662,36 @@ const POSDetail = () => {
       return currentUserLabel
     }
     return fallback
+  }
+
+  const openAlbumCardDetail = (cardId: string) => {
+    if (!cardId) return
+    const query = new URLSearchParams({ cardId })
+    navigate(`/app/card-album?${query.toString()}`)
+  }
+
+  const getAttemptCardMeta = (attempt: Attempt) => {
+    const linkedId = attempt.card_album_card_id?.trim()
+    if (!linkedId) {
+      return {
+        label: attempt.card_name?.trim() || '未记录',
+        linkedCardId: '',
+        isLinked: false,
+      }
+    }
+    const linkedCard = albumCardsById.get(linkedId)
+    if (!linkedCard) {
+      return {
+        label: attempt.card_name?.trim() || '关联卡片已不存在',
+        linkedCardId: linkedId,
+        isLinked: false,
+      }
+    }
+    return {
+      label: `${linkedCard.issuer} ${linkedCard.title}`.trim(),
+      linkedCardId: linkedCard.id,
+      isLinked: true,
+    }
   }
 
   const normalizeThreeState = (value?: boolean | ThreeStateValue): ThreeStateValue => {
@@ -1575,23 +1629,27 @@ const POSDetail = () => {
       }
       const nextAttemptNumber = latestAttempt?.attempt_number ? latestAttempt.attempt_number + 1 : 1
 
-      const attemptsPayload = attemptsList.map((attempt, index) => ({
-        pos_id: id,
-        user_id: user.id,
-        attempt_number: nextAttemptNumber + index,
-        result: attempt.result,
-        card_name: attempt.card_name?.trim() || null,
-        card_network: attempt.card_network || null,
-        payment_method: attempt.payment_method || null,
-        cvm: attempt.cvm || 'unknown',
-        acquiring_mode: attempt.acquiring_mode || 'unknown',
-        device_status: attempt.device_status || pos?.status || 'active',
-        acquiring_institution: attempt.acquiring_institution?.trim() || null,
-        checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
-        notes: attempt.notes?.trim() || null,
-        attempted_at: normalizeAttemptedAt(attempt.attempted_at),
-        is_conclusive_failure: attempt.result === 'failure' && Boolean(attempt.is_conclusive_failure),
-      }))
+      const attemptsPayload = attemptsList.map((attempt, index) => {
+        const linkedCardId = attempt.card_album_card_id?.trim() || null
+        return {
+          pos_id: id,
+          user_id: user.id,
+          attempt_number: nextAttemptNumber + index,
+          result: attempt.result,
+          card_album_card_id: linkedCardId,
+          card_name: linkedCardId ? null : attempt.card_name?.trim() || null,
+          card_network: attempt.card_network || null,
+          payment_method: attempt.payment_method || null,
+          cvm: attempt.cvm || 'unknown',
+          acquiring_mode: attempt.acquiring_mode || 'unknown',
+          device_status: attempt.device_status || pos?.status || 'active',
+          acquiring_institution: attempt.acquiring_institution?.trim() || null,
+          checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
+          notes: attempt.notes?.trim() || null,
+          attempted_at: normalizeAttemptedAt(attempt.attempted_at),
+          is_conclusive_failure: attempt.result === 'failure' && Boolean(attempt.is_conclusive_failure),
+        }
+      })
 
       // 保存尝试记录到Supabase数据库
       const { data, error } = await supabase
@@ -1619,7 +1677,7 @@ const POSDetail = () => {
           const missingColumn = extractMissingColumnFromError(error)
           if (missingColumn) {
             // Hard-fail: never drop fields silently when the schema is out of date.
-            notify.critical(`提交失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql，并刷新 PostgREST schema cache。`, {
+            notify.critical(`提交失败：数据库缺少字段 ${missingColumn}，请先执行 supabase/migrations/014_ensure_pos_records_columns.sql 与 supabase/migrations/015_add_pos_album_card_reference.sql，并刷新 PostgREST schema cache。`, {
               title: '数据库需要升级',
             })
           } else {
@@ -1633,6 +1691,7 @@ const POSDetail = () => {
         id: item.id,
         created_at: item.created_at || new Date().toISOString(),
         result: item.result,
+        card_album_card_id: item.card_album_card_id,
         card_name: item.card_name,
         card_network: item.card_network,
         payment_method: item.payment_method,
@@ -1755,6 +1814,135 @@ const POSDetail = () => {
       notify.error('状态更新失败，请重试')
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const attemptRefreshMeta = useMemo(() => readPOSAttemptRefreshMeta(pos?.extended_fields), [pos?.extended_fields])
+  const canRefreshByPermission = Boolean(user && pos?.created_by && (permissions.isAdmin || pos.created_by === user.id))
+  const hasAttemptRecords = attempts.length > 0
+  const canRefreshOnce = canRefreshByPermission && !attemptRefreshMeta.hasRefreshed && hasAttemptRecords
+
+  const handleOpenRefreshModal = () => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+
+    if (!canRefreshByPermission) {
+      notify.error('只有记录创建者或管理员可以刷新该 POS 记录')
+      return
+    }
+
+    if (attemptRefreshMeta.hasRefreshed) {
+      notify.error('该 POS 记录已经刷新过，不能再次刷新')
+      return
+    }
+
+    if (!hasAttemptRecords) {
+      notify.error('暂无尝试记录，无法刷新该 POS 记录')
+      return
+    }
+
+    setShowRefreshModal(true)
+  }
+
+  const handleRefreshPOSFromAttempts = async () => {
+    if (!pos || !user) {
+      notify.error('请先登录后再操作')
+      return
+    }
+
+    if (!canRefreshByPermission) {
+      notify.error('只有记录创建者或管理员可以刷新该 POS 记录')
+      return
+    }
+
+    if (attemptRefreshMeta.hasRefreshed) {
+      notify.error('该 POS 记录已经刷新过，不能再次刷新')
+      setShowRefreshModal(false)
+      return
+    }
+
+    setRefreshingPOS(true)
+    const toastId = notify.loading('正在按最新尝试记录逻辑刷新 POS 记录...')
+
+    try {
+      const { data: latestAttempts, error: attemptsError } = await supabase
+        .from('pos_attempts')
+        .select('*')
+        .eq('pos_id', pos.id)
+        .order('attempted_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+
+      if (attemptsError) {
+        throw attemptsError
+      }
+
+      const attemptsData = (latestAttempts || []) as Attempt[]
+      if (attemptsData.length === 0) {
+        notify.error('暂无尝试记录，无法刷新 POS 记录', { id: toastId })
+        return
+      }
+
+      const derived = derivePOSFromAttempts(pos, attemptsData)
+      if (derived.decisiveAttemptCount === 0) {
+        notify.error('缺少成功或明确失败的尝试记录，无法刷新', { id: toastId })
+        return
+      }
+
+      const refreshedAt = new Date().toISOString()
+      const nextExtendedFields = buildRefreshedExtendedFields(
+        pos.extended_fields,
+        user.id,
+        refreshedAt,
+        derived.sourceAttemptCount
+      )
+
+      const updatePayload: Record<string, unknown> = {
+        basic_info: derived.basicInfo,
+        verification_modes: derived.verificationModes,
+        status: derived.status,
+        extended_fields: nextExtendedFields,
+        updated_at: refreshedAt,
+      }
+
+      let { error: updateError } = await supabase
+        .from('pos_machines')
+        .update(updatePayload)
+        .eq('id', pos.id)
+
+      if (updateError && updateError.message?.includes('verification_modes')) {
+        const fallbackPayload = { ...updatePayload }
+        delete fallbackPayload.verification_modes
+
+        const { error: fallbackError } = await supabase
+          .from('pos_machines')
+          .update(fallbackPayload)
+          .eq('id', pos.id)
+
+        updateError = fallbackError || null
+      }
+
+      if (updateError) {
+        const missingColumn = extractMissingColumnFromError(updateError)
+        if (missingColumn) {
+          notify.critical(`刷新失败：数据库缺少字段 ${missingColumn}，请先升级数据库结构后重试。`, {
+            title: '数据库需要升级',
+          })
+        } else {
+          notify.error(`刷新失败：${updateError.message || '未知错误'}`, { id: toastId })
+        }
+        return
+      }
+
+      notify.success('POS 记录已按最新尝试记录逻辑刷新', { id: toastId })
+      setShowRefreshModal(false)
+      await Promise.all([loadPOSDetail(), loadAttempts(), loadSuccessRate(), refreshMapData()])
+    } catch (error) {
+      console.error('刷新 POS 记录失败:', error)
+      notify.error('刷新失败，请稍后重试', { id: toastId })
+    } finally {
+      setRefreshingPOS(false)
     }
   }
 
@@ -2089,6 +2277,27 @@ const POSDetail = () => {
                 >
                   <Download className="w-5 h-5 mx-auto" />
                 </button>
+                {canRefreshByPermission && (
+                  <button
+                    onClick={handleOpenRefreshModal}
+                    disabled={!canRefreshOnce || refreshingPOS}
+                    className={`h-10 w-10 rounded-xl border transition-colors ${
+                      canRefreshOnce && !refreshingPOS
+                        ? 'border-gray-200 bg-white text-gray-500 hover:text-soft-black'
+                        : 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                    }`}
+                    title={
+                      canRefreshOnce
+                        ? '按尝试记录刷新 POS 信息（仅一次）'
+                        : attemptRefreshMeta.hasRefreshed
+                        ? '该记录已刷新过'
+                        : '暂无尝试记录，无法刷新'
+                    }
+                    aria-label="刷新POS机"
+                  >
+                    <RefreshCcw className={`w-5 h-5 mx-auto ${refreshingPOS ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
                 <button
                   onClick={() => setShowReportModal(true)}
                   className="h-10 w-10 rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-soft-black transition-colors"
@@ -2413,6 +2622,7 @@ const POSDetail = () => {
                             : attempt.result === 'failure'
                             ? 'bg-rose-50 text-rose-700 border border-rose-200'
                             : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        const cardMeta = getAttemptCardMeta(attempt)
                         const title = `${formatAttemptDate(attempt)} · ${getAttemptUserLabel(attempt)} · ${resultLabel}`
                         return (
                           <div key={attempt.id} className="rounded-2xl border border-gray-100 bg-white/90 p-4">
@@ -2441,7 +2651,18 @@ const POSDetail = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                               <div>
                                 <span className="text-gray-500">卡片名称：</span>
-                                <span className="text-soft-black dark:text-gray-100">{attempt.card_name || '未记录'}</span>
+                                {cardMeta.isLinked ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openAlbumCardDetail(cardMeta.linkedCardId)}
+                                    className="inline-flex items-center gap-1 font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                                  >
+                                    {cardMeta.label}
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <span className="text-soft-black dark:text-gray-100">{cardMeta.label}</span>
+                                )}
                               </div>
                               <div>
                                 <span className="text-gray-500">卡组织：</span>
@@ -2624,6 +2845,44 @@ const POSDetail = () => {
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </AnimatedCard>
+              )}
+
+              {canRefreshByPermission && (
+                <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold text-soft-black dark:text-gray-100">
+                      <RefreshCcw className="w-5 h-5 text-accent-yellow" />
+                      刷新 POS 记录
+                    </CardTitle>
+                    <CardDescription className="text-sm text-gray-500">
+                      使用最新尝试记录逻辑覆盖旧数据（每条 POS 仅允许刷新一次）
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {attemptRefreshMeta.hasRefreshed ? (
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        已刷新于 {attemptRefreshMeta.refreshedAt ? new Date(attemptRefreshMeta.refreshedAt).toLocaleString(localeTag) : '未知时间'}，该记录不可再次刷新。
+                      </div>
+                    ) : !hasAttemptRecords ? (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                        当前暂无尝试记录，暂时无法执行刷新。
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                        刷新会覆盖当前 POS 的支付能力字段、验证模式与设备状态，请确认后再执行。
+                      </div>
+                    )}
+                    <AnimatedButton
+                      onClick={handleOpenRefreshModal}
+                      disabled={!canRefreshOnce || refreshingPOS}
+                      loading={refreshingPOS}
+                      variant={canRefreshOnce ? 'primary' : 'outline'}
+                      size="sm"
+                    >
+                      {canRefreshOnce ? '刷新为最新尝试逻辑' : '已刷新（不可重复）'}
+                    </AnimatedButton>
                   </CardContent>
                 </AnimatedCard>
               )}
@@ -3351,6 +3610,48 @@ const POSDetail = () => {
 
       {!showAttemptModal && (
         <>
+          <AnimatedModal
+            isOpen={showRefreshModal}
+            onClose={() => setShowRefreshModal(false)}
+            title="刷新 POS 记录"
+            size="md"
+            footer={
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+                <AnimatedButton
+                  onClick={() => setShowRefreshModal(false)}
+                  variant="outline"
+                  disabled={refreshingPOS}
+                >
+                  取消
+                </AnimatedButton>
+                <AnimatedButton
+                  onClick={handleRefreshPOSFromAttempts}
+                  loading={refreshingPOS}
+                  disabled={!canRefreshOnce}
+                >
+                  {refreshingPOS ? '刷新中...' : '确认刷新并覆盖'}
+                </AnimatedButton>
+              </div>
+            }
+          >
+            <div className="space-y-4">
+              <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-800">
+                将按最新尝试记录逻辑重新写入当前 POS 的支付能力、验证模式与状态信息，并覆盖旧字段。
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600 space-y-1">
+                <div>POS：{pos?.merchant_name || '—'}</div>
+                <div>当前尝试记录数：{attempts.length}</div>
+                <div>执行人：{currentUserLabel}</div>
+                <div>限制：每条 POS 仅允许刷新一次</div>
+              </div>
+              {attemptRefreshMeta.hasRefreshed && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
+                  该 POS 已在 {attemptRefreshMeta.refreshedAt ? new Date(attemptRefreshMeta.refreshedAt).toLocaleString(localeTag) : '未知时间'} 刷新，无法再次执行。
+                </div>
+              )}
+            </div>
+          </AnimatedModal>
+
           {/* 状态修改模态框 */}
           <AnimatedModal
             isOpen={showStatusModal}

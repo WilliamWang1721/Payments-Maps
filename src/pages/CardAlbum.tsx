@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Edit, FileText, Filter, Plus, Trash2, User, Users, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'react-router-dom'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedListItem from '@/components/AnimatedListItem'
 import clsx from 'clsx'
@@ -87,6 +88,7 @@ const FOREIGN_ISSUER_GROUPS: Array<{
 ]
 
 const CardAlbum = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<AlbumScope>('public')
   const { cards, addCard, addToPersonal, updateCard, removeCard } = useCardAlbumStore()
   const permissions = usePermissions()
@@ -135,6 +137,7 @@ const CardAlbum = () => {
     title: false,
     bin: false,
   })
+  const linkedCardId = searchParams.get('cardId')?.trim() || ''
   const lastValidationToast = useRef<Record<string, string>>({})
 
   const validationErrors = useMemo(() => {
@@ -188,6 +191,31 @@ const CardAlbum = () => {
       document.documentElement.style.overflow = previousHtmlOverflow
     }
   }, [showIssuerMenu])
+
+  useEffect(() => {
+    if (!linkedCardId) return
+
+    const targetCard = cards.find((card) => card.id === linkedCardId)
+    if (!targetCard) return
+
+    if (targetCard.scope !== activeTab) {
+      setActiveTab(targetCard.scope)
+    }
+    setSelectedCard(targetCard)
+    setShowDetailModal(true)
+  }, [activeTab, cards, linkedCardId])
+
+  const clearCardIdQuery = () => {
+    if (!searchParams.get('cardId')) return
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('cardId')
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  const closeDetailModal = () => {
+    setShowDetailModal(false)
+    clearCardIdQuery()
+  }
 
   const markTouched = (field: keyof typeof touchedFields) => {
     setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
@@ -361,7 +389,7 @@ const CardAlbum = () => {
       notify.error('只有管理员可以编辑卡片')
       return
     }
-    setShowDetailModal(false)
+    closeDetailModal()
     setEditingCard(card)
     setFormData({
       issuer: card.issuer,
@@ -1140,7 +1168,7 @@ const CardAlbum = () => {
       {showDetailModal && selectedCard && (
         <AnimatedModal
           isOpen={showDetailModal}
-          onClose={() => setShowDetailModal(false)}
+          onClose={closeDetailModal}
           title="卡片详情"
           size="full"
           className="rounded-3xl !max-h-[95vh] h-[95vh]"
@@ -1262,7 +1290,7 @@ const CardAlbum = () => {
                   }
                   setCardToDelete(selectedCard)
                   setShowDeleteModal(true)
-                  setShowDetailModal(false)
+                  closeDetailModal()
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                 disabled={!permissions.isAdmin}
