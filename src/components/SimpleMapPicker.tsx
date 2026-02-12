@@ -56,10 +56,15 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
       const AMap = (window as any).AMap
       if (!AMap) return
 
-      // 移除旧标记
-      if (markerRef.current) {
-        mapRef.current.remove(markerRef.current)
+      // 移除旧标记（避免 map.remove(undefined) 触发 getOptions 异常）
+      if (markerRef.current && typeof markerRef.current.setMap === 'function') {
+        try {
+          markerRef.current.setMap(null)
+        } catch (error) {
+          console.warn('[SimpleMapPicker] 旧标记移除失败:', error)
+        }
       }
+      markerRef.current = null
 
       // 创建新标记
       const marker = new AMap.Marker({
