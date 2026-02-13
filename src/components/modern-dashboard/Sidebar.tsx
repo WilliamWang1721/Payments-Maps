@@ -1,13 +1,15 @@
 import clsx from 'clsx'
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookOpen, Clock, List, LogOut, Map, Plus, Settings, Tag } from 'lucide-react'
+import { Bell, BookOpen, Clock, List, LogOut, Map, Plus, Settings, Shield, Tag } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { usePermissions } from '@/hooks/usePermissions'
 
 const ModernSidebar = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const logout = useAuthStore((state) => state.logout)
+  const permissions = usePermissions()
 
   const navItems = [
     { icon: Map, label: 'Map', to: '/app/map', delay: 0.3 },
@@ -19,7 +21,10 @@ const ModernSidebar = () => {
   const secondaryNav = [
     { icon: Bell, label: 'Notifications', to: '/app/notifications', delay: 0.8 },
     { icon: Clock, label: 'History', to: '/app/history', delay: 0.9 },
-    { icon: Settings, label: 'Settings', to: '/app/settings', delay: 1.0 },
+    ...(permissions.isAdmin
+      ? [{ icon: Shield, label: '管理', to: '/app/management', delay: 1.0 }]
+      : []),
+    { icon: Settings, label: 'Settings', to: '/app/settings', delay: permissions.isAdmin ? 1.1 : 1.0 },
   ]
 
   const handleNavigate = (path: string) => {

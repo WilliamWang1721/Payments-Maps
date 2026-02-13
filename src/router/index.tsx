@@ -29,6 +29,7 @@ const Favorites = React.lazy(() => import('@/pages/Favorites'))
 const Notifications = React.lazy(() => import('@/pages/Notifications'))
 const History = React.lazy(() => import('@/pages/History'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
+const Management = React.lazy(() => import('@/pages/Management'))
 const OnboardingFlow = React.lazy(() => import('@/components/OnboardingFlow'))
 const Drafts = React.lazy(() => import('@/pages/Drafts'))
 // const SmartWelcome = React.lazy(() => import('@/components/SmartWelcome')) // removed
@@ -136,6 +137,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: <Suspense fallback={<Loading />}><Settings /></Suspense>,
+      },
+      {
+        path: 'management',
+        element: <Suspense fallback={<Loading />}><Management /></Suspense>,
       },
       {
         path: 'help',

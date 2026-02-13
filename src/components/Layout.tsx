@@ -38,7 +38,9 @@ const Layout = () => {
   const [searchValue, setSearchValue] = useState(searchKeyword)
   const [showLabels, setShowLabels] = useState(true)
   const hideHeaderControls =
-    location.pathname.startsWith('/app/profile') || location.pathname.startsWith('/app/brands')
+    location.pathname.startsWith('/app/profile') ||
+    location.pathname.startsWith('/app/brands') ||
+    location.pathname.startsWith('/app/management')
   const isMapPage = location.pathname.startsWith('/app/map')
   const isCardAlbumPage = location.pathname.startsWith('/app/card-album')
   const searchPlaceholder = isCardAlbumPage

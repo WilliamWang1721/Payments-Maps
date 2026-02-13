@@ -1,22 +1,25 @@
 import clsx from 'clsx'
-import { Bell, BookOpen, List, Map, Plus, Tag, User } from 'lucide-react'
+import { Bell, BookOpen, List, Map, Plus, Shield, Tag, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-
-const navItems = [
-  { icon: Map, label: 'Map', to: '/app/map' },
-  { icon: List, label: 'List', to: '/app/list' },
-  { icon: BookOpen, label: '卡册', to: '/app/card-album' },
-  { icon: Tag, label: 'Brands', to: '/app/brands' },
-  { icon: Bell, label: 'Notify', to: '/app/notifications' },
-  { icon: User, label: 'Profile', to: '/app/profile' },
-]
+import { usePermissions } from '@/hooks/usePermissions'
 
 const MobileNav = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const permissions = usePermissions()
   const [mounted, setMounted] = useState(false)
+
+  const navItems = [
+    { icon: Map, label: 'Map', to: '/app/map' },
+    { icon: List, label: 'List', to: '/app/list' },
+    { icon: BookOpen, label: '卡册', to: '/app/card-album' },
+    { icon: Tag, label: 'Brands', to: '/app/brands' },
+    ...(permissions.isAdmin ? [{ icon: Shield, label: '管理', to: '/app/management' }] : []),
+    { icon: Bell, label: 'Notify', to: '/app/notifications' },
+    { icon: User, label: 'Profile', to: '/app/profile' },
+  ]
 
   useEffect(() => {
     setMounted(true)
@@ -47,7 +50,10 @@ const MobileNav = () => {
         <div className="absolute inset-0 blur-2xl bg-gray-900/10 dark:bg-black/20" aria-hidden />
 
         <div className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-white/60 dark:border-slate-800 rounded-3xl shadow-2xl px-4 py-2 pointer-events-auto">
-          <div className="grid grid-cols-6 gap-1 sm:gap-2">
+          <div
+            className="grid gap-1 sm:gap-2"
+            style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+          >
             {navItems.map((item) => {
               const Icon = item.icon
               const active = isActive(item.to)
