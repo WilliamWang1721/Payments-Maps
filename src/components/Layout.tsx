@@ -7,10 +7,16 @@ import ModernHeader from '@/components/modern-dashboard/Header'
 import MobileNav from '@/components/modern-dashboard/MobileNav'
 import { useMapStore } from '@/stores/useMapStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { supabase } from '@/lib/supabase'
 import { parseSearchInput } from '@/utils/searchParser'
 import { notify } from '@/lib/notify'
 import { locationUtils } from '@/lib/amap'
-import { getUserDefaultLocation } from '@/lib/defaultLocation'
+import {
+  DEFAULT_LOCATION_OPTIONS,
+  getUserDefaultLocation,
+  resolveDefaultLocationFromSettings,
+  saveUserDefaultLocationKey,
+} from '@/lib/defaultLocation'
 
 export type LayoutOutletContext = {
   showLabels: boolean
@@ -44,8 +50,50 @@ const Layout = () => {
   }, [searchKeyword])
 
   useEffect(() => {
-    const defaultLocation = getUserDefaultLocation(user?.id)
-    setCurrentLocation(defaultLocation)
+    let cancelled = false
+
+    const applyDefaultLocation = async () => {
+      const localFallback = getUserDefaultLocation(user?.id)
+      if (!user?.id) {
+        setCurrentLocation(localFallback)
+        return
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('user_settings')
+          .select('default_location_key, default_location_address, default_location_longitude, default_location_latitude')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (error && error.code !== 'PGRST116') {
+          throw error
+        }
+
+        const resolved = resolveDefaultLocationFromSettings(data, user.id)
+        if (cancelled) return
+
+        if (resolved.key && DEFAULT_LOCATION_OPTIONS.some((item) => item.key === resolved.key)) {
+          saveUserDefaultLocationKey(user.id, resolved.key)
+        }
+
+        setCurrentLocation({
+          longitude: resolved.longitude,
+          latitude: resolved.latitude,
+        })
+      } catch (error) {
+        console.warn('加载用户默认地点失败，回退本地默认地点:', error)
+        if (!cancelled) {
+          setCurrentLocation(localFallback)
+        }
+      }
+    }
+
+    void applyDefaultLocation()
+
+    return () => {
+      cancelled = true
+    }
   }, [setCurrentLocation, user?.id])
 
   const handleSearchChange = (value: string) => {

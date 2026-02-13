@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -29,6 +29,7 @@ import {
   DEFAULT_LOCATION_OPTIONS,
   getDefaultLocationByKey,
   getUserDefaultLocationKey,
+  resolveDefaultLocationFromSettings,
   saveUserDefaultLocationKey
 } from '@/lib/defaultLocation'
 
@@ -83,31 +84,7 @@ const Settings = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      setSettings((prev) => ({ ...prev, user_id: user.id }))
-      setDefaultLocationKey(getUserDefaultLocationKey(user.id))
-      void loadSettings()
-    } else {
-      navigate('/login')
-    }
-  }, [user, navigate])
-
-  useEffect(() => {
-    if (typeof document === 'undefined' || !showDeleteModal) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [showDeleteModal])
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     if (!user) return
 
     try {
@@ -124,6 +101,11 @@ const Settings = () => {
 
       if (data) {
         setSettings(data as UserSettings)
+        const resolved = resolveDefaultLocationFromSettings(data, user.id)
+        if (resolved.key && DEFAULT_LOCATION_OPTIONS.some((option) => option.key === resolved.key)) {
+          setDefaultLocationKey(resolved.key)
+          saveUserDefaultLocationKey(user.id, resolved.key)
+        }
       }
     } catch (error) {
       console.error('加载设置失败:', error)
@@ -131,18 +113,47 @@ const Settings = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      setSettings((prev) => ({ ...prev, user_id: user.id }))
+      setDefaultLocationKey(getUserDefaultLocationKey(user.id))
+      void loadSettings()
+    } else {
+      navigate('/login')
+    }
+  }, [user, navigate, loadSettings])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !showDeleteModal) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [showDeleteModal])
 
   const saveSettings = async () => {
     if (!user) return
 
     setSaving(true)
     try {
+      const selectedDefaultLocation = getDefaultLocationByKey(defaultLocationKey)
       const { error } = await supabase
         .from('user_settings')
         .upsert({
           ...settings,
           user_id: user.id,
+          default_location_key: defaultLocationKey,
+          default_location_address: selectedDefaultLocation.label,
+          default_location_longitude: selectedDefaultLocation.longitude,
+          default_location_latitude: selectedDefaultLocation.latitude,
           updated_at: new Date().toISOString()
         })
 
