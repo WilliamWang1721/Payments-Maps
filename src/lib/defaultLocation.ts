@@ -5,6 +5,13 @@ export type DefaultLocationOption = {
   latitude: number
 }
 
+export type UserDefaultLocationSettingsRecord = {
+  default_location_key?: string | null
+  default_location_address?: string | null
+  default_location_longitude?: number | string | null
+  default_location_latitude?: number | string | null
+}
+
 export const DEFAULT_LOCATION_OPTIONS: DefaultLocationOption[] = [
   { key: 'guangzhou', label: '广州', longitude: 113.264385, latitude: 23.129112 },
   { key: 'shanghai', label: '上海', longitude: 121.473667, latitude: 31.230525 },
@@ -68,6 +75,43 @@ export const getDefaultLocationByKey = (key?: string | null): DefaultLocationOpt
   return DEFAULT_LOCATION_OPTIONS.find((item) => item.key === key) || getFallbackLocation()
 }
 
+export const findDefaultLocationOptionByCoordinates = (
+  longitude: number,
+  latitude: number,
+  tolerance = 0.0005
+): DefaultLocationOption | null => {
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null
+  return (
+    DEFAULT_LOCATION_OPTIONS.find(
+      (item) =>
+        Math.abs(item.longitude - longitude) <= tolerance &&
+        Math.abs(item.latitude - latitude) <= tolerance
+    ) || null
+  )
+}
+
+export const resolveDefaultLocationFromSettings = (
+  record: UserDefaultLocationSettingsRecord | null | undefined,
+  fallbackUserId?: string | null
+) => {
+  const longitude = Number(record?.default_location_longitude)
+  const latitude = Number(record?.default_location_latitude)
+  if (Number.isFinite(longitude) && Number.isFinite(latitude)) {
+    const matched = findDefaultLocationOptionByCoordinates(longitude, latitude)
+    const key = matched?.key || record?.default_location_key || null
+    const label = record?.default_location_address || matched?.label || '自定义地点'
+    return { key, label, longitude, latitude }
+  }
+
+  const option = getDefaultLocationByKey(record?.default_location_key || getUserDefaultLocationKey(fallbackUserId))
+  return {
+    key: option.key,
+    label: option.label,
+    longitude: option.longitude,
+    latitude: option.latitude,
+  }
+}
+
 export const getUserDefaultLocationKey = (userId?: string | null): string => {
   if (!userId) return FALLBACK_LOCATION_KEY
   const map = parseStorage()
@@ -81,8 +125,10 @@ export const getUserDefaultLocation = (userId?: string | null): DefaultLocationO
 
 export const saveUserDefaultLocationKey = (userId: string, key: string) => {
   if (!userId) return
+  const option = DEFAULT_LOCATION_OPTIONS.find((item) => item.key === key)
+  if (!option) return
   const map = parseStorage()
-  map[userId] = getDefaultLocationByKey(key).key
+  map[userId] = option.key
   writeStorage(map)
 }
 
