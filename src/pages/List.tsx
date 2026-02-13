@@ -17,6 +17,17 @@ import { locationUtils } from '@/lib/amap'
 interface POSMachineWithStats extends POSMachine {
   distance?: number
   review_count?: number
+  reviewCount?: number
+  success_rate?: number | null
+}
+
+type SortOption = 'distance' | 'rating' | 'successRate' | 'createdAt'
+
+const SORT_LABELS: Record<SortOption, string> = {
+  distance: '距离优先',
+  rating: '评分优先',
+  successRate: '成功率优先',
+  createdAt: '添加时间优先',
 }
 
 const STATUS_LABELS: Record<POSMachine['status'], string> = {
@@ -103,7 +114,8 @@ const getPosTags = (pos: POSMachineWithStats) => {
 const List = () => {
   const navigate = useNavigate()
   const [showFilters, setShowFilters] = useState(false)
-  const [sortBy, setSortBy] = useState<'distance' | 'rating'>('distance')
+  const [sortBy, setSortBy] = useState<SortOption>('distance')
+  const [attemptStats, setAttemptStats] = useState<Record<string, { success: number; total: number; rate: number | null }>>({})
   const {
     posMachines,
     currentLocation,
@@ -175,6 +187,79 @@ const List = () => {
     })
   }, [posMachines])
 
+  useEffect(() => {
+    if (sortBy !== 'successRate') return
+
+    let cancelled = false
+    const posIds = posMachines.map((pos) => pos.id).filter(Boolean)
+
+    if (posIds.length === 0) {
+      setAttemptStats({})
+      return
+    }
+
+    const uncachedPosIds = posIds.filter((id) => attemptStats[id] === undefined)
+    if (uncachedPosIds.length === 0) return
+
+    const fetchAttemptStats = async () => {
+      const chunkSize = 200
+      const allAttempts: Array<{ pos_id: string; result: string }> = []
+
+      for (let index = 0; index < uncachedPosIds.length; index += chunkSize) {
+        const chunkIds = uncachedPosIds.slice(index, index + chunkSize)
+        const { data, error } = await supabase
+          .from('pos_attempts')
+          .select('pos_id, result')
+          .in('pos_id', chunkIds)
+
+        if (error) {
+          throw error
+        }
+
+        allAttempts.push(...((data as Array<{ pos_id: string; result: string }>) || []))
+      }
+
+      if (cancelled) return
+
+      const nextStats: Record<string, { success: number; total: number; rate: number | null }> = {}
+
+      uncachedPosIds.forEach((id) => {
+        nextStats[id] = { success: 0, total: 0, rate: null }
+      })
+
+      allAttempts.forEach((attempt) => {
+        if (!attempt?.pos_id) return
+        const current = nextStats[attempt.pos_id] || { success: 0, total: 0, rate: null }
+        current.total += 1
+        if (attempt.result === 'success') {
+          current.success += 1
+        }
+        nextStats[attempt.pos_id] = current
+      })
+
+      Object.keys(nextStats).forEach((id) => {
+        const stat = nextStats[id]
+        stat.rate = stat.total > 0 ? (stat.success / stat.total) * 100 : null
+      })
+
+      setAttemptStats((prev) => ({
+        ...prev,
+        ...nextStats,
+      }))
+    }
+
+    fetchAttemptStats()
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('加载 POS 成功率数据失败:', error)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [attemptStats, posMachines, sortBy])
+
   // 计算距离的辅助函数
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371 // 地球半径（公里）
@@ -186,6 +271,16 @@ const List = () => {
       Math.sin(dLon/2) * Math.sin(dLon/2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
     return R * c
+  }
+
+  const getCreatedAtTimestamp = (value?: string) => {
+    if (!value) return 0
+    const timestamp = new Date(value).getTime()
+    return Number.isFinite(timestamp) ? timestamp : 0
+  }
+
+  const getReviewCount = (pos: POSMachineWithStats) => {
+    return pos.review_count ?? pos.reviewCount ?? 0
   }
 
   // 计算距离并排序
@@ -207,12 +302,32 @@ const List = () => {
     }
     
     if (sortBy === 'rating') {
-      return (b.review_count || 0) - (a.review_count || 0)
+      const reviewDiff = getReviewCount(b) - getReviewCount(a)
+      if (reviewDiff !== 0) return reviewDiff
+      return getCreatedAtTimestamp(b.created_at) - getCreatedAtTimestamp(a.created_at)
+    }
+
+    if (sortBy === 'successRate') {
+      const statA = attemptStats[a.id]
+      const statB = attemptStats[b.id]
+      const rateA = a.success_rate ?? statA?.rate ?? -1
+      const rateB = b.success_rate ?? statB?.rate ?? -1
+      if (rateB !== rateA) return rateB - rateA
+
+      const totalA = statA?.total ?? 0
+      const totalB = statB?.total ?? 0
+      if (totalB !== totalA) return totalB - totalA
+
+      return getCreatedAtTimestamp(b.created_at) - getCreatedAtTimestamp(a.created_at)
+    }
+
+    if (sortBy === 'createdAt') {
+      return getCreatedAtTimestamp(b.created_at) - getCreatedAtTimestamp(a.created_at)
     }
     
 
     
-    return 0
+    return getCreatedAtTimestamp(b.created_at) - getCreatedAtTimestamp(a.created_at)
   })
 
   const allSelectableIds = sortedPOSMachines
@@ -449,7 +564,7 @@ const List = () => {
                 )}
                 <span className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-cream text-soft-black/80">
                   <Star className="w-4 h-4 text-accent-yellow" />
-                  当前排序：{sortBy === 'distance' ? '距离优先' : '评分优先'}
+                  当前排序：{SORT_LABELS[sortBy]}
                 </span>
                 {searchKeyword && (
                   <span className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-cream text-soft-black/80">
@@ -480,6 +595,20 @@ const List = () => {
                     className={`px-2 py-1 rounded-full transition-colors ${sortBy === 'rating' ? 'bg-soft-black text-white shadow' : 'text-soft-black/70 hover:text-soft-black'}`}
                   >
                     评分优先
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortBy('successRate')}
+                    className={`px-2 py-1 rounded-full transition-colors ${sortBy === 'successRate' ? 'bg-soft-black text-white shadow' : 'text-soft-black/70 hover:text-soft-black'}`}
+                  >
+                    成功率优先
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortBy('createdAt')}
+                    className={`px-2 py-1 rounded-full transition-colors ${sortBy === 'createdAt' ? 'bg-soft-black text-white shadow' : 'text-soft-black/70 hover:text-soft-black'}`}
+                  >
+                    添加时间优先
                   </button>
                   <button
                     type="button"
