@@ -84,7 +84,7 @@ const AdminMainMenu = ({ role, onNavigate }: AdminMainMenuProps) => {
             <Shield className="w-5 h-5 text-accent-yellow" />
             管理主菜单
           </h3>
-          <p className="text-sm text-gray-500 mt-1">管理员入口已统一收纳到右侧菜单</p>
+          <p className="text-sm text-gray-500 mt-1">管理员入口已统一收纳到管理中心页面</p>
         </div>
         <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-accent-yellow/10 text-accent-yellow">
           {role === 'super_admin' ? '超级管理员' : '管理员'}

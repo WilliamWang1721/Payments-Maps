@@ -26,7 +26,6 @@ import { BetaActivationModal } from '@/components/BetaActivationModal'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 import { listDrafts } from '@/lib/drafts'
 import { getErrorDetails, notify } from '@/lib/notify'
-import AdminMainMenu from '@/components/profile/AdminMainMenu'
 
 interface UserStats {
   posCount: number
@@ -585,10 +584,6 @@ const Profile = () => {
           </div>
 
           <div className="space-y-8 xl:col-span-2 flex flex-col">
-            {isAdminUser && (
-              <AdminMainMenu role={permissions.role} onNavigate={navigate} />
-            )}
-
             <section className="bg-white rounded-[32px] border border-white shadow-soft p-6 sm:p-8">
               <div className="flex items-center justify-between mb-6">
                 <div>
