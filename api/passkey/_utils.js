@@ -58,9 +58,11 @@ export const requireAuth = async (req, res) => {
 
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data?.user) {
-    res
-      .status(401)
-      .json({ error: 'Invalid or expired session', detail: error?.message })
+    const payload = { error: 'Invalid or expired session' }
+    if (process.env.NODE_ENV !== 'production') {
+      payload.detail = error?.message
+    }
+    res.status(401).json(payload)
     return null
   }
 
