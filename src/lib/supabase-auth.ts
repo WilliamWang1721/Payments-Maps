@@ -14,7 +14,6 @@ type OAuthUserMetadata = User['user_metadata']
 interface OAuthSyncOptions {
   user: OAuthSyncUser
   metadata: OAuthUserMetadata
-  fallbackMetadata?: OAuthUserMetadata
   errorLogPrefix: string
 }
 
@@ -41,7 +40,6 @@ const createFallbackUser = (user: OAuthSyncUser, metadata?: OAuthUserMetadata): 
 const syncOAuthUserToSupabase = async ({
   user,
   metadata,
-  fallbackMetadata,
   errorLogPrefix,
 }: OAuthSyncOptions): Promise<User> => {
   const userData: Partial<User> = {
@@ -100,7 +98,7 @@ const syncOAuthUserToSupabase = async ({
     }
   } catch (error) {
     console.error(errorLogPrefix, error)
-    return createFallbackUser(user, fallbackMetadata ?? metadata)
+    return createFallbackUser(user, metadata)
   }
 }
 
@@ -185,20 +183,9 @@ export async function syncGoogleUserToSupabase(googleUser: GoogleUser): Promise<
     verified_email: googleUser.verified_email,
   }
 
-  const fallbackMetadata: OAuthUserMetadata = {
-    display_name: googleUser.name,
-    avatar_url: googleUser.picture,
-    provider: 'google',
-    username: googleUser.email.split('@')[0],
-    given_name: googleUser.given_name,
-    family_name: googleUser.family_name,
-    locale: googleUser.locale,
-  }
-
   return syncOAuthUserToSupabase({
     user: googleUser,
     metadata,
-    fallbackMetadata,
     errorLogPrefix: '同步Google用户到Supabase失败:',
   })
 }
@@ -218,21 +205,9 @@ export async function syncLinuxDOUserToSupabase(linuxdoUser: any): Promise<User>
     badge_count: linuxdoUser.user_metadata?.badge_count,
   }
 
-  const fallbackMetadata: OAuthUserMetadata = {
-    display_name:
-      linuxdoUser.user_metadata?.name ||
-      linuxdoUser.user_metadata?.username ||
-      linuxdoUser.email?.split('@')[0],
-    avatar_url: linuxdoUser.user_metadata?.avatar_url,
-    provider: 'linuxdo',
-    username:
-      linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0],
-  }
-
   return syncOAuthUserToSupabase({
     user: linuxdoUser,
     metadata,
-    fallbackMetadata,
     errorLogPrefix: '同步LinuxDO用户到Supabase失败:',
   })
 }
