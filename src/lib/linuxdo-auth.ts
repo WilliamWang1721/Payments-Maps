@@ -27,9 +27,17 @@ export function convertLinuxDOUserToAppUser(linuxdoUser: LinuxDOUserInfo): User 
       username: linuxdoUser.username,
       trust_level: linuxdoUser.trust_level,
       active: linuxdoUser.active,
-      silenced: linuxdoUser.silenced,
-      api_key: linuxdoUser.api_key
+      silenced: linuxdoUser.silenced
     }
+  }
+}
+
+function sanitizeUserForStorage(user: User): User {
+  const metadata = (user.user_metadata || {}) as Record<string, unknown>
+  const { api_key: _apiKey, access_token: _accessToken, refresh_token: _refreshToken, ...safeMetadata } = metadata
+  return {
+    ...user,
+    user_metadata: safeMetadata as User['user_metadata']
   }
 }
 
@@ -60,7 +68,7 @@ export async function handleLinuxDOCallback(code: string): Promise<User> {
     })
     
     // Store user in localStorage for persistence
-    localStorage.setItem('linuxdo_user', JSON.stringify(syncedUser))
+    localStorage.setItem('linuxdo_user', JSON.stringify(sanitizeUserForStorage(syncedUser)))
     localStorage.setItem('linuxdo_access_token', Date.now().toString())
     
     return syncedUser

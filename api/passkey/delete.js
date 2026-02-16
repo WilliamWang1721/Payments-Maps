@@ -1,15 +1,23 @@
 import { handleError, requireAuth } from './_utils.js'
+import {
+  applyApiSecurityHeaders,
+  enforceRateLimit,
+  ensureAllowedOrigin,
+  getClientIp,
+  parseJsonBody
+} from '../_security.js'
 
-const parseBody = (req) => {
-  if (req.body) {
-    return typeof req.body === 'string' ? JSON.parse(req.body) : req.body
-  }
-  return {}
-}
+const isProduction = process.env.NODE_ENV === 'production'
 
 export default async function handler(req, res) {
+  applyApiSecurityHeaders(req, res)
+
   if (req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!ensureAllowedOrigin(req, res, { allowNoOrigin: !isProduction })) {
+    return
   }
 
   const authContext = await requireAuth(req, res)
@@ -17,8 +25,20 @@ export default async function handler(req, res) {
 
   const { user, supabaseAdmin } = authContext
 
+  const identity = `${getClientIp(req)}:${user.id}`
+  if (
+    !enforceRateLimit(req, res, {
+      prefix: 'passkey-delete',
+      identifier: identity,
+      limit: 20,
+      windowMs: 60_000
+    })
+  ) {
+    return
+  }
+
   try {
-    const body = parseBody(req)
+    const body = parseJsonBody(req)
     const passkeyId = body?.id || body?.passkeyId
 
     if (!passkeyId) {

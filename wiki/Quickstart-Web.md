@@ -24,6 +24,8 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 VITE_AMAP_KEY=your_amap_api_key
 VITE_AMAP_SECURITY_JS_CODE=your_amap_security_js_code
@@ -32,8 +34,13 @@ VITE_GOOGLE_CLIENT_ID=your_google_client_id        # 可选
 VITE_GITHUB_CLIENT_ID=your_github_client_id        # 可选
 VITE_MICROSOFT_CLIENT_ID=your_microsoft_client_id  # 可选
 VITE_LINUXDO_CLIENT_ID=your_linuxdo_client_id      # 可选
+LINUXDO_CLIENT_ID=your_linuxdo_client_id           # 服务端必填（LinuxDO 登录）
+LINUXDO_CLIENT_SECRET=your_linuxdo_client_secret   # 服务端必填（LinuxDO 登录）
+APP_ORIGIN=https://your-domain.com
+ALLOWED_ORIGINS=https://your-domain.com
+PASSKEY_ORIGIN=https://your-domain.com
 ```
-- Supabase 服务端口令（service key）仅在服务器侧使用，不放入前端 `.env`。
+- Supabase service key 与 OAuth client secret 仅在服务器侧使用，严禁使用 `VITE_` 前缀暴露到浏览器。
 - 高德需配置安全密钥与白名单。
 
 ## 3. 运行与调试

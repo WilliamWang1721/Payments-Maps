@@ -4,32 +4,63 @@ import { type GoogleUser } from './google'
 
 // Supabase认证相关的工具函数
 
-// 将Microsoft用户信息同步到Supabase
-export async function syncMicrosoftUserToSupabase(microsoftUser: any): Promise<User> {
+type OAuthSyncUser = {
+  id: string
+  email?: string
+}
+
+type OAuthUserMetadata = User['user_metadata']
+
+interface OAuthSyncOptions {
+  user: OAuthSyncUser
+  metadata: OAuthUserMetadata
+  fallbackMetadata?: OAuthUserMetadata
+  errorLogPrefix: string
+}
+
+interface OAuthSignInOptions {
+  provider: 'google' | 'github' | 'azure'
+  redirectPath: string
+  queryParams?: Record<string, string>
+  errorLogPrefix: string
+}
+
+const PGRST_NOT_FOUND = 'PGRST116'
+
+const createFallbackUser = (user: OAuthSyncUser, metadata?: OAuthUserMetadata): User => {
+  const now = new Date().toISOString()
+  return {
+    id: user.id,
+    email: user.email,
+    created_at: now,
+    updated_at: now,
+    user_metadata: metadata,
+  }
+}
+
+const syncOAuthUserToSupabase = async ({
+  user,
+  metadata,
+  fallbackMetadata,
+  errorLogPrefix,
+}: OAuthSyncOptions): Promise<User> => {
+  const userData: Partial<User> = {
+    id: user.id,
+    email: user.email,
+    user_metadata: metadata,
+  }
+
   try {
     // 检查用户是否已存在
     const { data: existingUser, error: fetchError } = await supabase
       .from('users')
       .select('*')
-      .eq('email', microsoftUser.email)
+      .eq('email', user.email)
       .single()
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
+    if (fetchError && fetchError.code !== PGRST_NOT_FOUND) {
       // PGRST116 是"未找到记录"的错误码，其他错误需要抛出
       throw fetchError
-    }
-
-    const userData: Partial<User> = {
-      id: microsoftUser.id,
-      email: microsoftUser.email,
-      user_metadata: {
-        display_name: microsoftUser.user_metadata?.full_name || microsoftUser.user_metadata?.name || microsoftUser.email?.split('@')[0],
-        avatar_url: microsoftUser.user_metadata?.avatar_url,
-        provider: 'azure',
-        username: microsoftUser.user_metadata?.preferred_username || microsoftUser.email?.split('@')[0],
-        given_name: microsoftUser.user_metadata?.given_name,
-        family_name: microsoftUser.user_metadata?.family_name
-      }
     }
 
     if (existingUser) {
@@ -68,372 +99,193 @@ export async function syncMicrosoftUserToSupabase(microsoftUser: any): Promise<U
       return newUser
     }
   } catch (error) {
-    console.error('同步Microsoft用户到Supabase失败:', error)
-    
-    // 如果Supabase同步失败，返回本地用户对象
-    return {
-      id: microsoftUser.id,
-      email: microsoftUser.email,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user_metadata: {
-        display_name: microsoftUser.user_metadata?.full_name || microsoftUser.user_metadata?.name || microsoftUser.email?.split('@')[0],
-        avatar_url: microsoftUser.user_metadata?.avatar_url,
-        provider: 'azure',
-        username: microsoftUser.user_metadata?.preferred_username || microsoftUser.email?.split('@')[0],
-        given_name: microsoftUser.user_metadata?.given_name,
-        family_name: microsoftUser.user_metadata?.family_name
-      }
-    }
+    console.error(errorLogPrefix, error)
+    return createFallbackUser(user, fallbackMetadata ?? metadata)
   }
+}
+
+const signInWithOAuthProvider = async ({
+  provider,
+  redirectPath,
+  queryParams,
+  errorLogPrefix,
+}: OAuthSignInOptions) => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}${redirectPath}`,
+        queryParams,
+      },
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error(errorLogPrefix, error)
+    throw error
+  }
+}
+
+// 将Microsoft用户信息同步到Supabase
+export async function syncMicrosoftUserToSupabase(microsoftUser: any): Promise<User> {
+  const metadata: OAuthUserMetadata = {
+    display_name:
+      microsoftUser.user_metadata?.full_name ||
+      microsoftUser.user_metadata?.name ||
+      microsoftUser.email?.split('@')[0],
+    avatar_url: microsoftUser.user_metadata?.avatar_url,
+    provider: 'azure',
+    username:
+      microsoftUser.user_metadata?.preferred_username ||
+      microsoftUser.email?.split('@')[0],
+    given_name: microsoftUser.user_metadata?.given_name,
+    family_name: microsoftUser.user_metadata?.family_name,
+  }
+
+  return syncOAuthUserToSupabase({
+    user: microsoftUser,
+    metadata,
+    errorLogPrefix: '同步Microsoft用户到Supabase失败:',
+  })
 }
 
 // 将GitHub用户信息同步到Supabase
 export async function syncGitHubUserToSupabase(githubUser: any): Promise<User> {
-  try {
-    // 检查用户是否已存在
-    const { data: existingUser, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', githubUser.email)
-      .single()
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      // PGRST116 是"未找到记录"的错误码，其他错误需要抛出
-      throw fetchError
-    }
-
-    const userData: Partial<User> = {
-      id: githubUser.id,
-      email: githubUser.email,
-      user_metadata: {
-        display_name: githubUser.user_metadata?.full_name || githubUser.user_metadata?.name || githubUser.email?.split('@')[0],
-        avatar_url: githubUser.user_metadata?.avatar_url,
-        provider: 'github',
-        username: githubUser.user_metadata?.user_name || githubUser.email?.split('@')[0]
-      }
-    }
-
-    if (existingUser) {
-      // 更新现有用户
-      const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
-        .update({
-          ...userData,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingUser.id)
-        .select()
-        .single()
-
-      if (updateError) {
-        throw updateError
-      }
-
-      return updatedUser
-    } else {
-      // 创建新用户
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert({
-          ...userData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        throw insertError
-      }
-
-      return newUser
-    }
-  } catch (error) {
-    console.error('同步GitHub用户到Supabase失败:', error)
-    
-    // 如果Supabase同步失败，返回本地用户对象
-    return {
-      id: githubUser.id,
-      email: githubUser.email,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user_metadata: {
-        display_name: githubUser.user_metadata?.full_name || githubUser.user_metadata?.name || githubUser.email?.split('@')[0],
-        avatar_url: githubUser.user_metadata?.avatar_url,
-        provider: 'github',
-        username: githubUser.user_metadata?.user_name || githubUser.email?.split('@')[0]
-      }
-    }
+  const metadata: OAuthUserMetadata = {
+    display_name:
+      githubUser.user_metadata?.full_name ||
+      githubUser.user_metadata?.name ||
+      githubUser.email?.split('@')[0],
+    avatar_url: githubUser.user_metadata?.avatar_url,
+    provider: 'github',
+    username: githubUser.user_metadata?.user_name || githubUser.email?.split('@')[0],
   }
+
+  return syncOAuthUserToSupabase({
+    user: githubUser,
+    metadata,
+    errorLogPrefix: '同步GitHub用户到Supabase失败:',
+  })
 }
 
 // 将Google用户信息同步到Supabase
 export async function syncGoogleUserToSupabase(googleUser: GoogleUser): Promise<User> {
-  try {
-    // 检查用户是否已存在
-    const { data: existingUser, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', googleUser.email)
-      .single()
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      // PGRST116 是"未找到记录"的错误码，其他错误需要抛出
-      throw fetchError
-    }
-
-    const userData: Partial<User> = {
-      id: googleUser.id,
-      email: googleUser.email,
-      user_metadata: {
-        display_name: googleUser.name,
-        avatar_url: googleUser.picture,
-        provider: 'google',
-        username: googleUser.email.split('@')[0],
-        given_name: googleUser.given_name,
-        family_name: googleUser.family_name,
-        locale: googleUser.locale,
-        verified_email: googleUser.verified_email
-      }
-    }
-
-    if (existingUser) {
-      // 更新现有用户
-      const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
-        .update({
-          ...userData,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingUser.id)
-        .select()
-        .single()
-
-      if (updateError) {
-        throw updateError
-      }
-
-      return updatedUser
-    } else {
-      // 创建新用户
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert({
-          ...userData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        throw insertError
-      }
-
-      return newUser
-    }
-  } catch (error) {
-    console.error('同步Google用户到Supabase失败:', error)
-    
-    // 如果Supabase同步失败，返回本地用户对象
-    return {
-      id: googleUser.id,
-      email: googleUser.email,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user_metadata: {
-        display_name: googleUser.name,
-        avatar_url: googleUser.picture,
-        provider: 'google',
-        username: googleUser.email.split('@')[0],
-        given_name: googleUser.given_name,
-        family_name: googleUser.family_name,
-        locale: googleUser.locale
-      }
-    }
+  const metadata: OAuthUserMetadata = {
+    display_name: googleUser.name,
+    avatar_url: googleUser.picture,
+    provider: 'google',
+    username: googleUser.email.split('@')[0],
+    given_name: googleUser.given_name,
+    family_name: googleUser.family_name,
+    locale: googleUser.locale,
+    verified_email: googleUser.verified_email,
   }
+
+  const fallbackMetadata: OAuthUserMetadata = {
+    display_name: googleUser.name,
+    avatar_url: googleUser.picture,
+    provider: 'google',
+    username: googleUser.email.split('@')[0],
+    given_name: googleUser.given_name,
+    family_name: googleUser.family_name,
+    locale: googleUser.locale,
+  }
+
+  return syncOAuthUserToSupabase({
+    user: googleUser,
+    metadata,
+    fallbackMetadata,
+    errorLogPrefix: '同步Google用户到Supabase失败:',
+  })
 }
 
 // 将LinuxDO用户信息同步到Supabase
 export async function syncLinuxDOUserToSupabase(linuxdoUser: any): Promise<User> {
-  try {
-    // 检查用户是否已存在
-    const { data: existingUser, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', linuxdoUser.email)
-      .single()
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      // PGRST116 是"未找到记录"的错误码，其他错误需要抛出
-      throw fetchError
-    }
-
-    const userData: Partial<User> = {
-      id: linuxdoUser.id,
-      email: linuxdoUser.email,
-      user_metadata: {
-        display_name: linuxdoUser.user_metadata?.name || linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0],
-        avatar_url: linuxdoUser.user_metadata?.avatar_url,
-        provider: 'linuxdo',
-        username: linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0],
-        trust_level: linuxdoUser.user_metadata?.trust_level,
-        badge_count: linuxdoUser.user_metadata?.badge_count
-      }
-    }
-
-    if (existingUser) {
-      // 更新现有用户
-      const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
-        .update({
-          ...userData,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingUser.id)
-        .select()
-        .single()
-
-      if (updateError) {
-        throw updateError
-      }
-
-      return updatedUser
-    } else {
-      // 创建新用户
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert({
-          ...userData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        throw insertError
-      }
-
-      return newUser
-    }
-  } catch (error) {
-    console.error('同步LinuxDO用户到Supabase失败:', error)
-    
-    // 如果Supabase同步失败，返回本地用户对象
-    return {
-      id: linuxdoUser.id,
-      email: linuxdoUser.email,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user_metadata: {
-        display_name: linuxdoUser.user_metadata?.name || linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0],
-        avatar_url: linuxdoUser.user_metadata?.avatar_url,
-        provider: 'linuxdo',
-        username: linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0]
-      }
-    }
+  const metadata: OAuthUserMetadata = {
+    display_name:
+      linuxdoUser.user_metadata?.name ||
+      linuxdoUser.user_metadata?.username ||
+      linuxdoUser.email?.split('@')[0],
+    avatar_url: linuxdoUser.user_metadata?.avatar_url,
+    provider: 'linuxdo',
+    username:
+      linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0],
+    trust_level: linuxdoUser.user_metadata?.trust_level,
+    badge_count: linuxdoUser.user_metadata?.badge_count,
   }
+
+  const fallbackMetadata: OAuthUserMetadata = {
+    display_name:
+      linuxdoUser.user_metadata?.name ||
+      linuxdoUser.user_metadata?.username ||
+      linuxdoUser.email?.split('@')[0],
+    avatar_url: linuxdoUser.user_metadata?.avatar_url,
+    provider: 'linuxdo',
+    username:
+      linuxdoUser.user_metadata?.username || linuxdoUser.email?.split('@')[0],
+  }
+
+  return syncOAuthUserToSupabase({
+    user: linuxdoUser,
+    metadata,
+    fallbackMetadata,
+    errorLogPrefix: '同步LinuxDO用户到Supabase失败:',
+  })
 }
 
 // 使用Supabase Auth进行Google OAuth（可选的增强方案）
 export async function signInWithGoogleSupabase() {
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/google/callback`,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    })
-
-    if (error) {
-      throw error
-    }
-
-    return data
-  } catch (error) {
-    console.error('Supabase Google OAuth失败:', error)
-    throw error
-  }
+  return signInWithOAuthProvider({
+    provider: 'google',
+    redirectPath: '/auth/google/callback',
+    queryParams: {
+      access_type: 'offline',
+      prompt: 'consent',
+    },
+    errorLogPrefix: 'Supabase Google OAuth失败:',
+  })
 }
 
 // 使用Supabase Auth进行GitHub OAuth
 export async function signInWithGitHubSupabase() {
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: {
-        redirectTo: `${window.location.origin}/auth/github/callback`,
-        queryParams: {
-          scope: 'user:email',
-        },
-      },
-    })
-
-    if (error) {
-      throw error
-    }
-
-    return data
-  } catch (error) {
-    console.error('Supabase GitHub OAuth失败:', error)
-    throw error
-  }
+  return signInWithOAuthProvider({
+    provider: 'github',
+    redirectPath: '/auth/github/callback',
+    queryParams: {
+      scope: 'user:email',
+    },
+    errorLogPrefix: 'Supabase GitHub OAuth失败:',
+  })
 }
 
 // 使用Supabase Auth进行Microsoft OAuth
 export async function signInWithMicrosoftSupabase() {
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'azure',
-      options: {
-        redirectTo: `${window.location.origin}/auth/microsoft/callback`,
-        queryParams: {
-          scope: 'openid email profile',
-        },
-      },
-    })
-
-    if (error) {
-      throw error
-    }
-
-    return data
-  } catch (error) {
-    console.error('Supabase Microsoft OAuth失败:', error)
-    throw error
-  }
+  return signInWithOAuthProvider({
+    provider: 'azure',
+    redirectPath: '/auth/microsoft/callback',
+    queryParams: {
+      scope: 'openid email profile',
+    },
+    errorLogPrefix: 'Supabase Microsoft OAuth失败:',
+  })
 }
 
 // 使用Supabase Auth进行LinuxDO OAuth
 export async function signInWithLinuxDOSupabase() {
-  try {
-    // Since LinuxDO is not a built-in provider, we'll use a custom implementation
-    // This will need to be configured in Supabase as a custom OAuth provider
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'github', // Temporarily using github as placeholder - needs Supabase configuration
-      options: {
-        redirectTo: `${window.location.origin}/auth/linuxdo/callback`,
-        queryParams: {
-          scope: 'read',
-        },
-      },
-    })
-
-    if (error) {
-      throw error
-    }
-
-    return data
-  } catch (error) {
-    console.error('Supabase LinuxDO OAuth失败:', error)
-    throw error
-  }
+  // Since LinuxDO is not a built-in provider, we'll use a custom implementation
+  // This will need to be configured in Supabase as a custom OAuth provider
+  return signInWithOAuthProvider({
+    provider: 'github', // Temporarily using github as placeholder - needs Supabase configuration
+    redirectPath: '/auth/linuxdo/callback',
+    queryParams: {
+      scope: 'read',
+    },
+    errorLogPrefix: 'Supabase LinuxDO OAuth失败:',
+  })
 }
 
 // 获取当前Supabase认证用户

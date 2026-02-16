@@ -5,18 +5,15 @@ import {
   getSupabaseAdminClient,
   handleError
 } from '../_utils.js'
+import {
+  applyApiSecurityHeaders,
+  enforceRateLimit,
+  ensureAllowedOrigin,
+  getClientIp,
+  parseJsonBody
+} from '../../_security.js'
 
-const parseBody = async (req) => {
-  if (!req.body) return {}
-  if (typeof req.body === 'string') {
-    try {
-      return JSON.parse(req.body)
-    } catch {
-      return {}
-    }
-  }
-  return req.body
-}
+const isProduction = process.env.NODE_ENV === 'production'
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase()
 
@@ -85,8 +82,25 @@ const createSupabaseSession = async (userId) => {
 }
 
 export default async function handler(req, res) {
+  applyApiSecurityHeaders(req, res)
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!ensureAllowedOrigin(req, res, { allowNoOrigin: !isProduction })) {
+    return
+  }
+
+  if (
+    !enforceRateLimit(req, res, {
+      prefix: 'passkey-auth-verify-ip',
+      identifier: getClientIp(req),
+      limit: 30,
+      windowMs: 60_000
+    })
+  ) {
+    return
   }
 
   let supabaseAdmin
@@ -97,7 +111,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = await parseBody(req)
+    const body = parseJsonBody(req)
     const email = normalizeEmail(body?.email || '')
     const assertionResponse = body?.assertionResponse
 
@@ -105,9 +119,20 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '参数不完整，无法完成 Passkey 登录' })
     }
 
+    if (
+      !enforceRateLimit(req, res, {
+        prefix: 'passkey-auth-verify-email',
+        identifier: `${getClientIp(req)}:${email}`,
+        limit: 10,
+        windowMs: 60_000
+      })
+    ) {
+      return
+    }
+
     const authUsers = await findAuthUsersByEmail(supabaseAdmin, email)
     if (!authUsers.length) {
-      return res.status(404).json({ error: '未找到对应的用户，请确认邮箱是否正确' })
+      return res.status(400).json({ error: 'Passkey 验证失败，请确认账号或重试' })
     }
 
     const userIds = authUsers.map((user) => user.id)
@@ -126,7 +151,7 @@ export default async function handler(req, res) {
     }
 
     if (!credential) {
-      return res.status(400).json({ error: 'Passkey 未注册或已被删除' })
+      return res.status(400).json({ error: 'Passkey 验证失败，请确认账号或重试' })
     }
 
     const { data: challengeRow, error: challengeError } = await supabaseAdmin

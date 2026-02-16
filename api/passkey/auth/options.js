@@ -5,20 +5,15 @@ import {
   getSupabaseAdminClient,
   handleError
 } from '../_utils.js'
+import {
+  applyApiSecurityHeaders,
+  enforceRateLimit,
+  ensureAllowedOrigin,
+  getClientIp,
+  parseJsonBody
+} from '../../_security.js'
 
-const parseBody = async (req) => {
-  if (!req.body) {
-    return {}
-  }
-  if (typeof req.body === 'string') {
-    try {
-      return JSON.parse(req.body)
-    } catch {
-      return {}
-    }
-  }
-  return req.body
-}
+const isProduction = process.env.NODE_ENV === 'production'
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase()
 
@@ -58,14 +53,42 @@ const findAuthUsersByEmail = async (supabaseAdmin, email) => {
 }
 
 export default async function handler(req, res) {
+  applyApiSecurityHeaders(req, res)
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const body = await parseBody(req)
+  if (!ensureAllowedOrigin(req, res, { allowNoOrigin: !isProduction })) {
+    return
+  }
+
+  if (
+    !enforceRateLimit(req, res, {
+      prefix: 'passkey-auth-options-ip',
+      identifier: getClientIp(req),
+      limit: 40,
+      windowMs: 60_000
+    })
+  ) {
+    return
+  }
+
+  const body = parseJsonBody(req)
   const email = normalizeEmail(body?.email || '')
   if (!email) {
     return res.status(400).json({ error: '请提供注册时使用的邮箱' })
+  }
+
+  if (
+    !enforceRateLimit(req, res, {
+      prefix: 'passkey-auth-options-email',
+      identifier: `${getClientIp(req)}:${email}`,
+      limit: 12,
+      windowMs: 60_000
+    })
+  ) {
+    return
   }
 
   let supabaseAdmin
@@ -78,7 +101,7 @@ export default async function handler(req, res) {
   try {
     const authUsers = await findAuthUsersByEmail(supabaseAdmin, email)
     if (!authUsers.length) {
-      return res.status(404).json({ error: '未找到对应的用户，请确认邮箱是否正确' })
+      return res.status(400).json({ error: '无法创建 Passkey 登录请求，请检查邮箱和 Passkey 状态' })
     }
 
     const userIds = authUsers.map((user) => user.id)
@@ -93,7 +116,7 @@ export default async function handler(req, res) {
     }
 
     if (!credentials || credentials.length === 0) {
-      return res.status(404).json({ error: '该账号尚未注册 Passkey' })
+      return res.status(400).json({ error: '无法创建 Passkey 登录请求，请检查邮箱和 Passkey 状态' })
     }
 
     const allowCredentials = credentials.map((cred) => ({

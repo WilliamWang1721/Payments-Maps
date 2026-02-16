@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { syncGitHubUserToSupabase } from '@/lib/supabase-auth'
 import { getErrorDetails, notify } from '@/lib/notify'
+import FullScreenLoading from '@/components/ui/FullScreenLoading'
 
 export default function GitHubCallback() {
   const navigate = useNavigate()
@@ -65,11 +66,6 @@ export default function GitHubCallback() {
   }, [navigate, setUser])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">正在处理 GitHub 登录...</p>
-      </div>
-    </div>
+    <FullScreenLoading message="正在处理 GitHub 登录..." />
   )
 }

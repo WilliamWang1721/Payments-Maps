@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useTranslation } from 'react-i18next'
+import FullScreenLoading from '@/components/ui/FullScreenLoading'
 
 interface OnboardingDetectorProps {
   children: React.ReactNode
@@ -63,12 +64,10 @@ const OnboardingDetector: React.FC<OnboardingDetectorProps> = ({ children }) => 
   // 在检查完成前显示加载状态（仅当已登录用户）
   if (!hasChecked && user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">正在初始化...</p>
-        </div>
-      </div>
+      <FullScreenLoading
+        message="正在初始化..."
+        backgroundClassName="bg-gradient-to-br from-blue-50 to-indigo-100"
+      />
     )
   }
 
