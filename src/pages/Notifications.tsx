@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import usePermissions from '@/hooks/usePermissions'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 type NotificationType = 'message' | 'alert' | 'promo' | 'success' | 'system'
 type NotificationAudience = 'all' | 'role' | 'user'
@@ -99,19 +100,7 @@ const Notifications = () => {
     linkUrl: ''
   })
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !selectedNotification) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [selectedNotification])
+  useBodyScrollLock(Boolean(selectedNotification), { includeHtml: true })
 
   const formatTimeAgo = (value: string) => {
     const date = new Date(value)

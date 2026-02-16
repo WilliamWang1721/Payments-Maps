@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
 import { notify } from '@/lib/notify'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface SimpleMapPickerProps {
   isOpen: boolean
@@ -167,17 +168,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
     }
   }
 
-  // 使用 React Portal 确保脱离父级层叠上下文，并锁定页面滚动
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [isOpen])
+  useBodyScrollLock(isOpen)
 
   if (!isOpen) return null
 

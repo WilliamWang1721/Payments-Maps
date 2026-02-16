@@ -103,12 +103,12 @@ export const router = createBrowserRouter([
         element: <Suspense fallback={<Loading />}><MCPSettings /></Suspense>,
       },
       {
-        path: 'role-management',
+        path: 'management',
         element: <Suspense fallback={<Loading />}><RoleManagement /></Suspense>,
       },
       {
-        path: 'management',
-        element: <Navigate to="/app/role-management" replace />,
+        path: 'role-management',
+        element: <Navigate to="/app/management" replace />,
       },
       // {
       //   path: 'debug-role',

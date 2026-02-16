@@ -40,6 +40,7 @@ import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
 import { type CardAlbumItem, getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface FormData {
   merchant_name: string
@@ -505,19 +506,7 @@ const AddPOS = () => {
     })
   }, [formData.basic_info.supported_card_networks])
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !isAlbumPickerOpen) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [isAlbumPickerOpen])
+  useBodyScrollLock(isAlbumPickerOpen, { includeHtml: true })
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {}

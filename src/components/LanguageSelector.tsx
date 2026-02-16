@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Globe, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { supportedLanguages, changeLanguage } from '@/lib/i18n'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface LanguageSelectorProps {
   onClose?: () => void
@@ -50,19 +51,7 @@ const LanguageSelector = ({ onClose, isFirstVisit = false }: LanguageSelectorPro
     }
   }, [isOpen])
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !isFirstVisit) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [isFirstVisit])
+  useBodyScrollLock(isFirstVisit, { includeHtml: true })
 
   // Apple 风格的语言选项
   const languageOptions = Object.entries(supportedLanguages).map(([code, name]) => ({

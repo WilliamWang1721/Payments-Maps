@@ -5,6 +5,7 @@ import { ArrowLeft, MapPin, Star, Clock, Edit, Trash2, Plus } from 'lucide-react
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase, type POSMachine } from '@/lib/supabase'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 const MyPOS: React.FC = () => {
   const navigate = useNavigate()
@@ -23,19 +24,7 @@ const MyPOS: React.FC = () => {
     }
   }, [user, navigate])
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !showDeleteModal) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [showDeleteModal])
+  useBodyScrollLock(showDeleteModal, { includeHtml: true })
 
   const loadMyPOSMachines = async () => {
     if (!user) return

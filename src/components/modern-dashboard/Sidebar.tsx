@@ -22,7 +22,7 @@ const ModernSidebar = () => {
     { icon: Bell, label: 'Notifications', to: '/app/notifications', delay: 0.8 },
     { icon: Clock, label: 'History', to: '/app/history', delay: 0.9 },
     ...(permissions.isAdmin
-      ? [{ icon: Shield, label: '管理', to: '/app/role-management', delay: 1.0 }]
+      ? [{ icon: Shield, label: '管理', to: '/app/management', delay: 1.0 }]
       : []),
     { icon: Settings, label: 'Settings', to: '/app/settings', delay: permissions.isAdmin ? 1.1 : 1.0 },
   ]
