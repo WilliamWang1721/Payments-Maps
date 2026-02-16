@@ -19,10 +19,10 @@ const menuItems: AdminMenuItem[] = [
   {
     id: 'role-management',
     title: '用户与角色管理',
-    description: '管理用户角色与 Beta 激活码',
+    description: '管理用户角色、默认地点与 Beta 激活码',
     to: '/app/role-management',
     icon: Users,
-    roles: ['super_admin']
+    roles: ['super_admin', 'admin']
   },
   {
     id: 'notifications',

@@ -16,7 +16,7 @@ const MobileNav = () => {
     { icon: List, label: 'List', to: '/app/list' },
     { icon: BookOpen, label: '卡册', to: '/app/card-album' },
     { icon: Tag, label: 'Brands', to: '/app/brands' },
-    ...(permissions.isAdmin ? [{ icon: Shield, label: '管理', to: '/app/management' }] : []),
+    ...(permissions.isAdmin ? [{ icon: Shield, label: '管理', to: '/app/role-management' }] : []),
     { icon: Bell, label: 'Notify', to: '/app/notifications' },
     { icon: User, label: 'Profile', to: '/app/profile' },
   ]
