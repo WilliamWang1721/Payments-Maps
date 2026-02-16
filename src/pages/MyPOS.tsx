@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Star, Clock, Edit, Trash2, Plus } from 'lucide-react'
@@ -16,17 +16,7 @@ const MyPOS: React.FC = () => {
   const [selectedPOS, setSelectedPOS] = useState<POSMachine | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      loadMyPOSMachines()
-    } else {
-      navigate('/login')
-    }
-  }, [user, navigate])
-
-  useBodyScrollLock(showDeleteModal, { includeHtml: true })
-
-  const loadMyPOSMachines = async () => {
+  const loadMyPOSMachines = useCallback(async () => {
     if (!user) return
 
     try {
@@ -55,7 +45,17 @@ const MyPOS: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      void loadMyPOSMachines()
+    } else {
+      navigate('/login')
+    }
+  }, [loadMyPOSMachines, navigate, user])
+
+  useBodyScrollLock(showDeleteModal, { includeHtml: true })
 
   const handleDelete = async () => {
     if (!selectedPOS) return
@@ -76,7 +76,7 @@ const MyPOS: React.FC = () => {
       notify.success('POS机已删除')
       setShowDeleteModal(false)
       setSelectedPOS(null)
-      loadMyPOSMachines() // 重新加载列表
+      await loadMyPOSMachines()
     } catch (error) {
       console.error('删除POS机失败:', error)
       notify.error('删除失败，请重试')

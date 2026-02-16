@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Clock, MapPin, Sparkles, Trash2 } from 'lucide-react'
@@ -34,17 +34,7 @@ const History: React.FC = () => {
   const [showClearModal, setShowClearModal] = useState(false)
   const [clearing, setClearing] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      loadHistory()
-    } else {
-      navigate('/login')
-    }
-  }, [user, navigate])
-
-  useBodyScrollLock(showClearModal, { includeHtml: true })
-
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     if (!user) return
 
     try {
@@ -95,7 +85,17 @@ const History: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      void loadHistory()
+    } else {
+      navigate('/login')
+    }
+  }, [loadHistory, navigate, user])
+
+  useBodyScrollLock(showClearModal, { includeHtml: true })
 
   const clearAllHistory = async () => {
     if (!user) return
@@ -138,7 +138,7 @@ const History: React.FC = () => {
       }
 
       notify.success(`已删除 "${posName}" 的访问记录`)
-      loadHistory() // 重新加载列表
+      await loadHistory()
     } catch (error) {
       console.error('删除历史记录失败:', error)
       notify.error('删除失败，请重试')

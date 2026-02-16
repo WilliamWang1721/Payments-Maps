@@ -1096,15 +1096,13 @@ const POSDetail = () => {
       .sort((left, right) => getAttemptTimestamp(right) - getAttemptTimestamp(left))
   }
 
-  const supportDetailAttempts = useMemo(() => {
-    if (!supportDetailTarget) return []
-    return getRelatedAttemptsForSupportItem(supportDetailTarget.sectionKey, supportDetailTarget.itemKey)
-  }, [attempts, supportDetailTarget])
+  const supportDetailAttempts = supportDetailTarget
+    ? getRelatedAttemptsForSupportItem(supportDetailTarget.sectionKey, supportDetailTarget.itemKey)
+    : []
 
-  const supportDetailSection = useMemo(() => {
-    if (!supportDetailTarget) return null
-    return supportFusionSections.find((section) => section.key === supportDetailTarget.sectionKey) || null
-  }, [supportDetailTarget, supportFusionSections])
+  const supportDetailSection = supportDetailTarget
+    ? supportFusionSections.find((section) => section.key === supportDetailTarget.sectionKey) || null
+    : null
   const SupportDetailIcon = supportDetailSection?.icon || CreditCard
 
   const openSupportDetailDrawer = (section: SupportFusionSection, item: SupportFusionItem) => {
@@ -1148,6 +1146,8 @@ const POSDetail = () => {
         recordVisitHistory()
       }
     }
+    // 这些加载函数共享同一批查询参数，避免 useCallback 链式依赖导致重复拉取。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user])
 
   useEffect(() => {
@@ -1156,6 +1156,7 @@ const POSDetail = () => {
     } else {
       setExternalLinks([])
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos])
 
   useEffect(() => {

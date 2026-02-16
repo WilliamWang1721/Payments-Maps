@@ -22,7 +22,6 @@ const Brands = React.lazy(() => import('@/pages/Brands'))
 const RoleManagement = React.lazy(() => import('@/pages/RoleManagement'))
 const MyPOS = React.lazy(() => import('@/pages/MyPOS'))
 const Favorites = React.lazy(() => import('@/pages/Favorites'))
-const Notifications = React.lazy(() => import('@/pages/Notifications'))
 const History = React.lazy(() => import('@/pages/History'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
 const OnboardingFlow = React.lazy(() => import('@/components/OnboardingFlow'))
@@ -126,7 +125,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'notifications',
-        element: withSuspense(<Notifications />),
+        loader: () => redirect('/app/settings'),
       },
       {
         path: 'settings',

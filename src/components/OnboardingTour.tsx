@@ -74,6 +74,36 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
 
   const currentTourStep = tourSteps[currentStep]
 
+  const handleComplete = useCallback(() => {
+    setIsVisible(false)
+    localStorage.setItem('onboarding_completed', 'true')
+    setTimeout(onComplete, 200)
+  }, [onComplete])
+
+  const handleNext = useCallback(() => {
+    if (currentStep < tourSteps.length - 1) {
+      setIsVisible(false)
+      setTimeout(() => {
+        setCurrentStep(currentStep + 1)
+      }, 200)
+    } else {
+      handleComplete()
+    }
+  }, [currentStep, handleComplete])
+
+  const handlePrev = useCallback(() => {
+    if (currentStep > 0) {
+      setIsVisible(false)
+      setTimeout(() => {
+        setCurrentStep(currentStep - 1)
+      }, 200)
+    }
+  }, [currentStep])
+
+  const handleSkip = useCallback(() => {
+    handleComplete()
+  }, [handleComplete])
+
   // 获取目标元素位置
   const updateTargetPosition = useCallback(() => {
     if (!currentTourStep) return
@@ -91,7 +121,7 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
         }
       }, 500)
     }
-  }, [currentStep, currentTourStep])
+  }, [currentStep, currentTourStep, handleNext])
 
   useEffect(() => {
     if (isOpen) {
@@ -116,36 +146,6 @@ const OnboardingTour = ({ onComplete, isOpen }: OnboardingTourProps) => {
       }
     }
   }, [isOpen, currentStep, updateTargetPosition])
-
-  const handleNext = () => {
-    if (currentStep < tourSteps.length - 1) {
-      setIsVisible(false)
-      setTimeout(() => {
-        setCurrentStep(currentStep + 1)
-      }, 200)
-    } else {
-      handleComplete()
-    }
-  }
-
-  const handlePrev = () => {
-    if (currentStep > 0) {
-      setIsVisible(false)
-      setTimeout(() => {
-        setCurrentStep(currentStep - 1)
-      }, 200)
-    }
-  }
-
-  const handleComplete = () => {
-    setIsVisible(false)
-    localStorage.setItem('onboarding_completed', 'true')
-    setTimeout(onComplete, 200)
-  }
-
-  const handleSkip = () => {
-    handleComplete()
-  }
 
   if (!isOpen || !targetRect || !currentTourStep) return null
 

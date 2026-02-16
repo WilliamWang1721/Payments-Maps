@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Star, Heart, Clock } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -28,15 +28,7 @@ const Favorites: React.FC = () => {
   const [favorites, setFavorites] = useState<FavoriteWithPOS[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (user) {
-      loadFavorites()
-    } else {
-      navigate('/login')
-    }
-  }, [user, navigate])
-
-  const loadFavorites = async () => {
+  const loadFavorites = useCallback(async () => {
     if (!user) return
 
     try {
@@ -85,7 +77,15 @@ const Favorites: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      void loadFavorites()
+    } else {
+      navigate('/login')
+    }
+  }, [loadFavorites, navigate, user])
 
   const removeFavorite = async (favoriteId: string, posName: string) => {
     try {
@@ -101,7 +101,7 @@ const Favorites: React.FC = () => {
       }
 
       notify.success(`已取消收藏 "${posName}"`)
-      loadFavorites() // 重新加载列表
+      await loadFavorites()
     } catch (error) {
       console.error('取消收藏失败:', error)
       notify.error('取消收藏失败，请重试')

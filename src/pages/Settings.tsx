@@ -8,7 +8,6 @@ import {
   Hash,
   Loader2,
   Map,
-  Bell,
   RotateCcw,
   LogOut,
   Trash2,
@@ -38,7 +37,6 @@ interface UserSettings {
   id?: string
   user_id: string
   default_search_radius: number
-  enable_notifications: boolean
   enable_location_tracking: boolean
   preferred_language: string
   theme: string
@@ -72,7 +70,6 @@ const Settings = () => {
   const [settings, setSettings] = useState<UserSettings>({
     user_id: user?.id || '',
     default_search_radius: 2000,
-    enable_notifications: true,
     enable_location_tracking: true,
     preferred_language: 'zh-CN',
     theme: 'light',
@@ -465,32 +462,6 @@ const Settings = () => {
                   </div>
                 </div>
               </div>
-            </section>
-
-            <section className="rounded-3xl border border-gray-100 bg-cream p-6 shadow-soft lg:mt-auto">
-              <div className="flex items-start gap-3">
-                <div className="rounded-2xl bg-white px-3 py-2 text-soft-black">
-                  <Bell className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-soft-black">提醒与推送</h2>
-                  <p className="text-sm text-gray-500">关注收藏更新与附近新增推荐</p>
-                </div>
-              </div>
-              <label className="mt-6 flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-soft-black">通知推送</p>
-                  <p className="text-xs text-gray-500">收藏的 POS 有更新时通过通知告知</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.enable_notifications}
-                  onChange={(e) =>
-                    setSettings({ ...settings, enable_notifications: e.target.checked })
-                  }
-                  className="h-5 w-10 cursor-pointer rounded-full border-0 bg-gray-300 transition checked:bg-soft-black"
-                />
-              </label>
             </section>
           </div>
         </div>

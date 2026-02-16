@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookOpen, Clock, List, LogOut, Map, Plus, Settings, Shield, Tag } from 'lucide-react'
+import { BookOpen, Clock, List, LogOut, Map, Plus, Settings, Shield, Tag } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { usePermissions } from '@/hooks/usePermissions'
 
@@ -19,12 +19,11 @@ const ModernSidebar = () => {
   ]
 
   const secondaryNav = [
-    { icon: Bell, label: 'Notifications', to: '/app/notifications', delay: 0.8 },
-    { icon: Clock, label: 'History', to: '/app/history', delay: 0.9 },
+    { icon: Clock, label: 'History', to: '/app/history', delay: 0.8 },
     ...(permissions.isAdmin
-      ? [{ icon: Shield, label: '管理', to: '/app/management', delay: 1.0 }]
+      ? [{ icon: Shield, label: '管理', to: '/app/management', delay: 0.9 }]
       : []),
-    { icon: Settings, label: 'Settings', to: '/app/settings', delay: permissions.isAdmin ? 1.1 : 1.0 },
+    { icon: Settings, label: 'Settings', to: '/app/settings', delay: permissions.isAdmin ? 1.0 : 0.9 },
   ]
 
   const handleNavigate = (path: string) => {
@@ -123,9 +122,6 @@ const ModernSidebar = () => {
                   style={{ animationDelay: `${item.delay}s` }}
                 >
                   <Icon className="w-5 h-5" />
-                  {item.icon === Bell && (
-                    <span className="absolute top-2 right-3 w-1.5 h-1.5 bg-accent-salmon rounded-full ring-2 ring-white" />
-                  )}
                 </button>
               )
             })}

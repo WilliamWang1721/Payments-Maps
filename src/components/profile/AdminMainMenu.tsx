@@ -1,4 +1,4 @@
-import { ArrowUpRight, Bell, BookOpen, Cpu, Heart, List, MapPin, Shield, Tag, Users, type LucideIcon } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Cpu, Heart, List, MapPin, Shield, Tag, Users, type LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/hooks/usePermissions'
 
 interface AdminMenuItem {
@@ -19,17 +19,10 @@ const menuItems: AdminMenuItem[] = [
   {
     id: 'role-management',
     title: '用户与角色管理',
-    description: '管理用户角色、默认地点与 Beta 激活码',
+    description: '管理用户角色与默认地点',
     to: '/app/management',
     icon: Users,
     roles: ['super_admin', 'admin']
-  },
-  {
-    id: 'notifications',
-    title: '通知管理',
-    description: '发布系统广播与运营通知',
-    to: '/app/notifications',
-    icon: Bell
   },
   {
     id: 'mcp',
