@@ -79,7 +79,7 @@ const Settings = () => {
     auto_refresh_interval: 30,
     show_pos_status: true
   })
-  const [defaultLocationKey, setDefaultLocationKey] = useState<string>('guangzhou')
+  const [defaultLocationKey, setDefaultLocationKey] = useState<string>('beijing')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)

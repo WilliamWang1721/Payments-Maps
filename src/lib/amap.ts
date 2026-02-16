@@ -53,7 +53,7 @@ export const DEFAULT_MAP_CONFIG = {
   center: [
     FALLBACK_DEFAULT_LOCATION.longitude,
     FALLBACK_DEFAULT_LOCATION.latitude,
-  ] as [number, number], // 广州（可按用户默认地点覆盖）
+  ] as [number, number], // 系统默认地点（北京，可按用户默认地点覆盖）
   mapStyle: MAP_STYLES.normal,
   showIndoorMap: false,
   resizeEnable: true,

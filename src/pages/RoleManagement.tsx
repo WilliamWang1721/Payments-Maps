@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import Input from '@/components/ui/Input'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import { notify } from '@/lib/notify'
+import { FALLBACK_DEFAULT_LOCATION } from '@/lib/defaultLocation'
 
 interface UserData {
   id: string
@@ -224,7 +225,7 @@ const RoleManagement = () => {
 
   const getUserDefaultLocationSummary = (userId: string) => {
     const item = defaultLocationByUserId[userId]
-    if (!item) return '未设置'
+    if (!item) return `${FALLBACK_DEFAULT_LOCATION.label}（系统默认）`
 
     if (item.default_location_address) {
       return item.default_location_address
@@ -236,7 +237,7 @@ const RoleManagement = () => {
       return `${lat.toFixed(6)}, ${lng.toFixed(6)}`
     }
 
-    return '未设置'
+    return `${FALLBACK_DEFAULT_LOCATION.label}（系统默认）`
   }
 
   const openDefaultLocationEditor = (user: UserData) => {
@@ -838,6 +839,9 @@ const RoleManagement = () => {
               />
               <p className="text-xs text-gray-500">
                 支持自然语言地址。点击“解析地址”后会自动转成经纬度和标准化详细地址。
+              </p>
+              <p className="text-xs text-gray-500">
+                未单独设置时，系统默认地点为北京。
               </p>
             </div>
 
