@@ -20,6 +20,7 @@ import Checkbox from '@/components/ui/Checkbox'
 import Select from '@/components/ui/Select'
 import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType, CardNetworkFee, feeUtils } from '@/types/fees'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 const EditPOS = () => {
   const { id } = useParams<{ id: string }>()
@@ -99,19 +100,7 @@ const EditPOS = () => {
     }
   }, [user, navigate])
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !showCardInfoModal) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [showCardInfoModal])
+  useBodyScrollLock(showCardInfoModal, { includeHtml: true })
 
   useEffect(() => {
     if (!id) return

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Upload, Globe, Store } from 'lucide-react';
 import { BrandCategory, BrandBusinessType, CreateBrandFormData } from '../types/brands';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/useAuthStore';
 import { notify } from '../lib/notify';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface AddBrandModalProps {
   isOpen: boolean;
@@ -25,19 +26,7 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
     website: ''
   });
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !isOpen) return;
-
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
-    };
-  }, [isOpen]);
+  useBodyScrollLock(isOpen, { includeHtml: true });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

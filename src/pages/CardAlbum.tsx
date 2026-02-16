@@ -20,6 +20,7 @@ import {
 } from '@/stores/useCardAlbumStore'
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 const TAB_OPTIONS = [
   { key: 'public', label: '公共卡册', icon: Users },
@@ -178,19 +179,7 @@ const CardAlbum = () => {
     })
   }, [touchedFields, validationErrors])
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !showIssuerMenu) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [showIssuerMenu])
+  useBodyScrollLock(showIssuerMenu, { includeHtml: true })
 
   useEffect(() => {
     if (!linkedCardId) return

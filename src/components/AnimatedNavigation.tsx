@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { LucideIcon } from 'lucide-react'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface AnimatedTabProps {
   isActive: boolean
@@ -288,19 +289,7 @@ export const AnimatedSidebar: React.FC<AnimatedSidebarProps> = ({
   className = '',
   side = 'left'
 }) => {
-  useEffect(() => {
-    if (typeof document === 'undefined' || !isOpen) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [isOpen])
+  useBodyScrollLock(isOpen, { includeHtml: true })
 
   const sidebarContent = (
     <AnimatePresence>

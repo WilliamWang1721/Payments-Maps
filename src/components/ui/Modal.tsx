@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Button from './Button'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface ModalProps {
   isOpen: boolean
@@ -25,17 +26,7 @@ const Modal = ({
   backdropClassName,
   className,
 }: ModalProps) => {
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
-
-    return () => {
-      document.body.style.overflow = 'unset'
-    }
-  }, [isOpen])
+  useBodyScrollLock(isOpen)
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {

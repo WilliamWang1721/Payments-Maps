@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import MapCanvas from '@/components/modern-dashboard/MapCanvas'
 import FilterPanel from '@/components/modern-dashboard/FilterPanel'
 import { type LayoutOutletContext } from '@/components/Layout'
 import { useMapStore } from '@/stores/useMapStore'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 const Map = () => {
   const context = useOutletContext<LayoutOutletContext>()
@@ -13,17 +13,7 @@ const Map = () => {
 
   const { filters, setFilters, loadPOSMachines, resetFilters } = useMapStore()
 
-  useEffect(() => {
-    const prevBodyOverflow = document.body.style.overflow
-    const prevHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = prevBodyOverflow
-      document.documentElement.style.overflow = prevHtmlOverflow
-    }
-  }, [])
+  useBodyScrollLock(true, { includeHtml: true })
 
   const closeFilters = () => {
     const next = new URLSearchParams(searchParams)

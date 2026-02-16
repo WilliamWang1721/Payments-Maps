@@ -29,6 +29,7 @@ import { buildRefreshedExtendedFields, derivePOSFromAttempts, readPOSAttemptRefr
 import { exportToHTML, exportToJSON, exportToPDF, getFormatDisplayName, getStyleDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
 import { feeUtils } from '@/types/fees'
 import type { CardAlbumItem } from '@/stores/useCardAlbumStore'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface Review {
   id: string
@@ -1163,46 +1164,9 @@ const POSDetail = () => {
     }
   }, [activeTab, supportDetailTarget])
 
-  useEffect(() => {
-    if (!supportDetailTarget) return
-    const prevBodyOverflow = document.body.style.overflow
-    const prevHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = prevBodyOverflow
-      document.documentElement.style.overflow = prevHtmlOverflow
-    }
-  }, [supportDetailTarget])
-
-  useEffect(() => {
-    if (typeof document === 'undefined' || !isAlbumPickerOpen) return
-
-    const prevBodyOverflow = document.body.style.overflow
-    const prevHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = prevBodyOverflow
-      document.documentElement.style.overflow = prevHtmlOverflow
-    }
-  }, [isAlbumPickerOpen])
-
-  useEffect(() => {
-    if (typeof document === 'undefined' || !showDeleteModal) return
-
-    const prevBodyOverflow = document.body.style.overflow
-    const prevHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = prevBodyOverflow
-      document.documentElement.style.overflow = prevHtmlOverflow
-    }
-  }, [showDeleteModal])
+  useBodyScrollLock(Boolean(supportDetailTarget), { includeHtml: true })
+  useBodyScrollLock(isAlbumPickerOpen, { includeHtml: true })
+  useBodyScrollLock(showDeleteModal, { includeHtml: true })
 
   const loadPOSDetail = async () => {
     try {

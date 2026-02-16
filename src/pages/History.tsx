@@ -6,11 +6,12 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase } from '@/lib/supabase'
 import Loading from '@/components/ui/Loading'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface HistoryWithPOS {
   id: string
   user_id: string
-  pos_id: string
+  pos_machine_id: string
   visited_at: string
   created_at: string
   pos_machines: {
@@ -41,19 +42,7 @@ const History: React.FC = () => {
     }
   }, [user, navigate])
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !showClearModal) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [showClearModal])
+  useBodyScrollLock(showClearModal, { includeHtml: true })
 
   const loadHistory = async () => {
     if (!user) return
@@ -64,7 +53,7 @@ const History: React.FC = () => {
         .select(`
           id,
           user_id,
-          pos_id,
+          pos_machine_id,
           visited_at,
           created_at,
           pos_machines (
@@ -235,7 +224,7 @@ const History: React.FC = () => {
   }
 
   const validHistory = history.filter((item) => item.pos_machines)
-  const uniquePOSCount = new Set(history.map((item) => item.pos_id)).size
+  const uniquePOSCount = new Set(history.map((item) => item.pos_machine_id)).size
   const latestVisitedText = history[0]?.visited_at ? formatAbsoluteTime(history[0].visited_at) : '暂无记录'
 
   return (

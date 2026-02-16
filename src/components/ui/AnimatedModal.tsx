@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import AnimatedButton from './AnimatedButton'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface AnimatedModalProps {
   isOpen: boolean
@@ -25,19 +26,7 @@ const AnimatedModal: React.FC<AnimatedModalProps> = ({
   className = '',
   footer
 }) => {
-  useEffect(() => {
-    if (typeof document === 'undefined' || !isOpen) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [isOpen])
+  useBodyScrollLock(isOpen, { includeHtml: true })
 
   const sizeClasses = {
     sm: 'max-w-sm',
