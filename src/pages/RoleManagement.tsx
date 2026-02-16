@@ -363,9 +363,9 @@ const RoleManagement = () => {
         }
       case 'beta':
         return {
-          label: 'Beta用户',
-          icon: Users,
-          color: 'text-blue-600 bg-blue-50 border-blue-200'
+          label: '普通用户',
+          icon: User,
+          color: 'text-gray-600 bg-gray-50 border-gray-200'
         }
       case 'regular':
       default:
@@ -485,7 +485,7 @@ const RoleManagement = () => {
                         <Button
                           onClick={() => {
                             setEditingUser(user)
-                            setNewRole(user.role)
+                            setNewRole(user.role === 'beta' ? 'regular' : user.role)
                           }}
                           variant="outline"
                           size="sm"
@@ -614,7 +614,7 @@ const RoleManagement = () => {
                 选择新角色
               </label>
               <div className="space-y-2">
-                {(['super_admin', 'admin', 'beta', 'regular'] as UserRole[]).map((role) => {
+                {(['super_admin', 'admin', 'regular'] as UserRole[]).map((role) => {
                   const roleInfo = getRoleInfo(role)
                   const RoleIcon = roleInfo.icon
                   
@@ -641,8 +641,7 @@ const RoleManagement = () => {
                         <div className="text-sm text-gray-600">
                           {role === 'super_admin' && '拥有所有权限，可以管理用户角色'}
                           {role === 'admin' && '可以管理所有数据，但不能修改用户角色'}
-                          {role === 'beta' && '可以添加、编辑和删除自己的数据'}
-                          {role === 'regular' && '只能查看数据，不能进行修改操作'}
+                          {role === 'regular' && '可以添加、编辑和删除自己的数据'}
                         </div>
                       </div>
                     </label>

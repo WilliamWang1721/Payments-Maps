@@ -12,7 +12,6 @@ import {
   MapPin,
   Shield,
   Archive,
-  Users,
   User
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -275,9 +274,9 @@ const Profile = () => {
         }
       case 'beta':
         return {
-          label: 'Beta用户',
-          icon: Users,
-          color: 'text-blue-600 bg-blue-50 border-blue-200'
+          label: '普通用户',
+          icon: User,
+          color: 'text-gray-600 bg-gray-50 border-gray-200'
         }
       case 'regular':
       default:
