@@ -5,7 +5,8 @@ import {
   enforceRateLimit,
   ensureAllowedOrigin,
   getClientIp,
-  parseJsonBody
+  parseJsonBody,
+  sanitizePlainText
 } from '../_security.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -45,7 +46,7 @@ export default async function handler(req, res) {
   try {
     const body = parseJsonBody(req)
     const passkeyId = body?.id || body?.passkeyId
-    const friendlyName = (body?.friendlyName || '').trim().slice(0, 120)
+    const friendlyName = sanitizePlainText(body?.friendlyName, { maxLength: 120 })
 
     if (!passkeyId || !friendlyName) {
       return res.status(400).json({ error: 'Passkey id and friendly name are required' })

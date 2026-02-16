@@ -11,7 +11,8 @@ import {
   enforceRateLimit,
   ensureAllowedOrigin,
   getClientIp,
-  parseJsonBody
+  parseJsonBody,
+  sanitizePlainText
 } from '../../_security.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -97,7 +98,7 @@ export default async function handler(req, res) {
       credentialBackedUp
     } = verification.registrationInfo
 
-    const nameToStore = (friendlyName || '').trim().slice(0, 120)
+    const nameToStore = sanitizePlainText(friendlyName, { maxLength: 120 })
     const normalizedEmail = (user.email || '').toLowerCase()
 
     const credentialPayload = {

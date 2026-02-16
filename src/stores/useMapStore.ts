@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { locationUtils } from '@/lib/amap'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { parseSearchInput, type GlobalSearchQuery } from '@/utils/searchParser'
+import { sanitizeExternalUrl, sanitizePlainText } from '@/utils/sanitize'
 import type { POSMachine } from '@/types'
 
 const ADD_POS_IDEMPOTENCY_STORAGE_KEY = 'pos_add_idempotency_v1'
@@ -91,6 +92,117 @@ const buildAddPOSFingerprint = (data: { merchant_name?: string; address?: string
 const isNetworkError = (error: any) => {
   const message = error?.message?.toLowerCase?.() || ''
   return message.includes('timeout') || message.includes('network') || message.includes('fetch')
+}
+
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const sanitizeStringList = (value: unknown, maxLength: number, maxItems: number) => {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  return value
+    .map((item) => sanitizePlainText(item, { maxLength }))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+const sanitizePOSPayloadForStorage = <T extends Record<string, any>>(payload: T): T => {
+  const sanitized: Record<string, any> = { ...payload }
+
+  if ('merchant_name' in sanitized) {
+    sanitized.merchant_name = sanitizePlainText(sanitized.merchant_name, { maxLength: 120 })
+  }
+
+  if ('address' in sanitized) {
+    sanitized.address = sanitizePlainText(sanitized.address, { maxLength: 320 })
+  }
+
+  if ('remarks' in sanitized) {
+    sanitized.remarks = sanitizePlainText(sanitized.remarks, {
+      maxLength: 2000,
+      preserveLineBreaks: true,
+    })
+  }
+
+  if (isPlainObject(sanitized.merchant_info)) {
+    sanitized.merchant_info = {
+      ...sanitized.merchant_info,
+      transaction_name: sanitizePlainText(sanitized.merchant_info.transaction_name, { maxLength: 120 }),
+      transaction_type: sanitizePlainText(sanitized.merchant_info.transaction_type, { maxLength: 120 }),
+    }
+  }
+
+  if (isPlainObject(sanitized.basic_info)) {
+    sanitized.basic_info = {
+      ...sanitized.basic_info,
+      model: sanitizePlainText(sanitized.basic_info.model, { maxLength: 120 }),
+      acquiring_institution: sanitizePlainText(sanitized.basic_info.acquiring_institution, { maxLength: 120 }),
+      acquiring_modes: sanitizeStringList(sanitized.basic_info.acquiring_modes, 40, 20),
+      supported_card_networks: sanitizeStringList(sanitized.basic_info.supported_card_networks, 40, 20),
+    }
+  }
+
+  if (isPlainObject(sanitized.verification_modes)) {
+    const nextVerificationModes: Record<string, any> = { ...sanitized.verification_modes }
+    Object.entries(nextVerificationModes).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        nextVerificationModes[key] = sanitizeStringList(value, 40, 20) || []
+      }
+    })
+    sanitized.verification_modes = nextVerificationModes
+  }
+
+  if (Array.isArray(sanitized.custom_links)) {
+    sanitized.custom_links = sanitized.custom_links
+      .map((link: Record<string, unknown>) => {
+        const title = sanitizePlainText(link?.title, { maxLength: 80 })
+        const platform = sanitizePlainText(link?.platform, { maxLength: 40 })
+        const rawUrl = typeof link?.url === 'string' ? link.url.trim() : ''
+        const safeUrl = rawUrl ? sanitizeExternalUrl(rawUrl) : ''
+
+        if (rawUrl && !safeUrl) {
+          throw new Error('外部链接包含非法 URL，请仅使用 http(s) 链接')
+        }
+
+        return {
+          title,
+          platform,
+          url: safeUrl || '',
+        }
+      })
+      .filter((link: { title: string; platform: string; url: string }) => link.title || link.platform || link.url)
+  }
+
+  if (Array.isArray(sanitized.attempts)) {
+    sanitized.attempts = sanitized.attempts.map((attempt: Record<string, unknown>) => ({
+      ...attempt,
+      card_name: sanitizePlainText(attempt.card_name, { maxLength: 120 }),
+      acquiring_institution: sanitizePlainText(attempt.acquiring_institution, { maxLength: 120 }),
+      notes: sanitizePlainText(attempt.notes, {
+        maxLength: 1000,
+        preserveLineBreaks: true,
+      }),
+    }))
+  }
+
+  if (isPlainObject(sanitized.extended_fields)) {
+    const nextExtendedFields: Record<string, unknown> = {}
+    Object.entries(sanitized.extended_fields).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        nextExtendedFields[key] = sanitizePlainText(value, {
+          maxLength: 500,
+          preserveLineBreaks: true,
+        })
+      } else {
+        nextExtendedFields[key] = value
+      }
+    })
+    sanitized.extended_fields = nextExtendedFields
+  }
+
+  return sanitized as T
 }
 
 const processPOSMachine = (data: POSMachine) => ({
@@ -565,7 +677,8 @@ export const useMapStore = create<MapState>((set, get) => ({
       }
       
       // 准备数据 - 移除attempts字段（attempts应保存到pos_attempts表），使用merchant_name作为name字段
-      const { attempts: _, ...baseData } = posMachineData as any
+      const { attempts: _, ...rawBaseData } = posMachineData as any
+      const baseData = sanitizePOSPayloadForStorage(rawBaseData)
       const fingerprint = buildAddPOSFingerprint(baseData, userId)
       const idempotencyKey = getOrCreateIdempotencyKey(fingerprint)
 
@@ -715,7 +828,8 @@ export const useMapStore = create<MapState>((set, get) => ({
   updatePOSMachine: async (id, updates) => {
     try {
       // 准备更新数据 - 确保name字段有值或者不包含name字段
-      const { name: _, ...baseUpdates } = updates as any
+      const { name: _, ...rawBaseUpdates } = updates as any
+      const baseUpdates = sanitizePOSPayloadForStorage(rawBaseUpdates)
       const finalUpdates = {
         ...baseUpdates,
         // 如果有merchant_name，使用它作为name的默认值，否则不包含name字段

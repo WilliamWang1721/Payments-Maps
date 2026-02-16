@@ -41,6 +41,7 @@ import { type CardAlbumItem, getAlbumScopeLabel, useCardAlbumStore } from '@/sto
 import { getErrorDetails, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import { sanitizeExternalUrl, sanitizePlainText } from '@/utils/sanitize'
 import type { POSMachine } from '@/types'
 
 interface FormData {
@@ -683,8 +684,28 @@ const AddPOS = () => {
 
       notify.loading('正在保存POS机信息...', { id: 'saving-pos' })
 
+      const sanitizedCustomLinks = (formData.custom_links || [])
+        .map((link) => {
+          const title = link.title?.trim() || ''
+          const platform = link.platform?.trim() || ''
+          const rawUrl = link.url?.trim() || ''
+          const safeUrl = rawUrl ? sanitizeExternalUrl(rawUrl) : null
+
+          if (rawUrl && !safeUrl) {
+            throw new Error('外部链接包含非法 URL，请仅使用 http(s) 链接')
+          }
+
+          return {
+            title,
+            platform,
+            url: safeUrl || '',
+          }
+        })
+        .filter((link) => link.title || link.platform || link.url)
+
       const payload = {
         ...formData,
+        custom_links: sanitizedCustomLinks,
         status: formData.status || 'active',
         basic_info: {
           ...formData.basic_info,
@@ -730,7 +751,7 @@ const AddPOS = () => {
 
       const attemptsPayload = attemptInputs.map((attempt, index) => {
         const linkedCardId = attempt.card_album_card_id?.trim() || null
-        const fallbackCardName = attempt.card_name?.trim() || null
+        const fallbackCardName = sanitizePlainText(attempt.card_name, { maxLength: 120 }) || null
         return {
           pos_id: result.id,
           user_id: attemptUserId,
@@ -747,7 +768,7 @@ const AddPOS = () => {
           device_status: isOptionIncluded(ATTEMPT_DEVICE_STATUS_OPTIONS, attempt.device_status)
             ? attempt.device_status
             : payload.status || 'active',
-          acquiring_institution: attempt.acquiring_institution?.trim() || null,
+          acquiring_institution: sanitizePlainText(attempt.acquiring_institution, { maxLength: 120 }) || null,
           checkout_location: isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, attempt.checkout_location)
             ? attempt.checkout_location
             : isOptionIncluded(ATTEMPT_CHECKOUT_LOCATION_OPTIONS, payload.basic_info.checkout_location)
@@ -755,7 +776,7 @@ const AddPOS = () => {
               : null,
           card_album_card_id: linkedCardId,
           card_name: fallbackCardName,
-          notes: attempt.notes?.trim() || null,
+          notes: sanitizePlainText(attempt.notes, { maxLength: 1000, preserveLineBreaks: true }) || null,
           attempted_at: normalizeAttemptedAt(attempt.attempted_at || attempt.timestamp),
           is_conclusive_failure: attempt.is_conclusive_failure || false,
         }

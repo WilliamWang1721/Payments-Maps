@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { z } from "zod";
+import { sanitizePOSMachineData, sanitizePlainText } from "../utils/contentSanitizer.js";
 
 /**
  * POS 机搜索筛选条件
@@ -81,6 +81,7 @@ export class POSService {
     limit = 50
   ) {
     try {
+      const safeQuery = sanitizePlainText(query, { maxLength: 120 });
       let queryBuilder = this.supabase
         .from("pos_machines")
         .select(`
@@ -99,9 +100,9 @@ export class POSService {
         `);
 
       // 文本搜索
-      if (query) {
+      if (safeQuery) {
         queryBuilder = queryBuilder.or(
-          `merchant_name.ilike.%${query}%,address.ilike.%${query}%`
+          `merchant_name.ilike.%${safeQuery}%,address.ilike.%${safeQuery}%`
         );
       }
 
@@ -268,10 +269,13 @@ export class POSService {
    */
   async addPOSMachine(posData: POSMachineData, userId: string) {
     try {
+      const sanitizedPosData = sanitizePOSMachineData(
+        posData as unknown as Record<string, unknown>
+      ) as unknown as POSMachineData;
       const newPOS = {
-        ...posData,
+        ...sanitizedPosData,
         id: this.generateId(),
-        status: posData.status || "active",
+        status: sanitizedPosData.status || "active",
         created_by: userId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -323,8 +327,11 @@ export class POSService {
         throw new Error("无权限修改此 POS 机");
       }
 
+      const sanitizedUpdates = sanitizePOSMachineData(
+        updates as unknown as Record<string, unknown>
+      ) as unknown as Partial<POSMachineData>;
       const updateData = {
-        ...updates,
+        ...sanitizedUpdates,
         updated_at: new Date().toISOString(),
       };
 

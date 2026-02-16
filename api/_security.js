@@ -5,6 +5,8 @@ const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const SAME_SITE_FETCH_VALUES = new Set(['same-origin', 'same-site', 'none'])
 const DEFAULT_CSRF_COOKIE_NAME = 'payments_maps_csrf'
 const DEFAULT_CSRF_HEADER_NAME = 'x-csrf-token'
+const HTML_TAG_PATTERN = /<\/?[a-z][^>]*>/gi
+const INLINE_WHITESPACE_PATTERN = /[^\S\n]+/g
 
 const readHeader = (headers, name) => {
   if (!headers) return ''
@@ -35,6 +37,20 @@ const parseCookies = (cookieHeader) => {
     }
     return acc
   }, {})
+}
+
+const stripControlCharacters = (value) => {
+  if (typeof value !== 'string' || !value) return ''
+
+  let output = ''
+  for (const char of value) {
+    const code = char.charCodeAt(0)
+    const isAllowed = code === 0x09 || code === 0x0a || code === 0x0d || (code >= 0x20 && code !== 0x7f)
+    if (isAllowed) {
+      output += char
+    }
+  }
+  return output
 }
 
 const safeCompare = (left, right) => {
@@ -258,6 +274,34 @@ export const parseJsonBody = (req) => {
     return req.body
   }
   return {}
+}
+
+export const sanitizePlainText = (value, options = {}) => {
+  if (value === null || value === undefined) return ''
+
+  const { maxLength, preserveLineBreaks = false } = options
+  let normalized = String(value)
+    .replace(/\r\n?/g, '\n')
+    .split('\u0000')
+    .join('')
+
+  normalized = stripControlCharacters(normalized).replace(HTML_TAG_PATTERN, '')
+
+  normalized = preserveLineBreaks
+    ? normalized
+        .split('\n')
+        .map((line) => line.replace(INLINE_WHITESPACE_PATTERN, ' ').trim())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+    : normalized.replace(/\s+/g, ' ')
+
+  normalized = normalized.trim()
+
+  if (typeof maxLength === 'number' && maxLength > 0 && normalized.length > maxLength) {
+    normalized = normalized.slice(0, maxLength).trim()
+  }
+
+  return normalized
 }
 
 export const getSafeErrorMessage = (error) => {

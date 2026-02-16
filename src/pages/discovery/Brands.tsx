@@ -10,6 +10,7 @@ import AnimatedModal from '@/components/ui/AnimatedModal'
 import PageTransition from '@/components/PageTransition'
 import AddBrandModal from '@/components/AddBrandModal'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { sanitizeExternalUrl } from '@/utils/sanitize'
 
 const Brands: React.FC = () => {
   const { user } = useAuthStore();
@@ -168,6 +169,10 @@ const Brands: React.FC = () => {
     };
   }, [brands]);
 
+  const safeSelectedBrandWebsite = useMemo(() => {
+    return sanitizeExternalUrl(selectedBrand?.website)
+  }, [selectedBrand?.website])
+
   // 处理分类筛选
   const handleCategoryFilter = (category: BrandCategory, checked: boolean) => {
     setFilters(prev => ({
@@ -251,150 +256,81 @@ const Brands: React.FC = () => {
   ];
 
   // 品牌卡片组件
-  const BrandCard: React.FC<{ brand: Brand; onClick: () => void }> = ({ brand, onClick }) => (
-    <AnimatedCard 
-      className="cursor-pointer relative group rounded-2xl border border-white/70 bg-gradient-to-br from-white/95 via-white/90 to-cream/80 shadow-sm hover:shadow-soft transition-all duration-300 hover:-translate-y-1"
-      onClick={onClick}
-    >
-      <div className="p-5 sm:p-6 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center space-x-3 flex-1 min-w-0">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 bg-cream border border-white shadow-inner">
-              {brand.iconUrl ? (
-                <img 
-                  src={brand.iconUrl} 
-                  alt={brand.name}
-                  className="w-full h-full rounded-2xl object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                    if (nextElement) nextElement.style.display = 'block';
-                  }}
-                />
-              ) : null}
-              <span 
-                className={`${brand.iconUrl ? 'hidden' : 'block'} text-gray-600 dark:text-gray-300 font-semibold`}
-                style={{ display: brand.iconUrl ? 'none' : 'block' }}
-              >
-                {brand.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-base sm:text-lg text-soft-black dark:text-white truncate">
-                {brand.name}
-              </h3>
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
-                {getCategoryLabel(brand.category)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-1">
-            {brand.businessType === BrandBusinessType.ONLINE ? (
-              <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-1 rounded-full text-xs font-semibold">
-                线上
-              </span>
-            ) : (
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full text-xs font-semibold">
-                线下
-              </span>
-            )}
-          </div>
-        </div>
-        
-        <p className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm line-clamp-2">
-          {brand.description || '暂无描述'}
-        </p>
-        
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <div className="flex items-center space-x-1">
-            <User className="w-3.5 h-3.5" />
-            <span>{brand.createdBy || '系统'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {brand.notes && (
-              <span className="bg-yellow-50 text-yellow-700 border border-yellow-100 px-2 py-0.5 rounded-full text-xs font-medium">
-                有备注
-              </span>
-            )}
-            {brand.posSupport?.supported && (
-              <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full text-xs font-medium">
-                POS支持
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      {/* 管理员删除按钮 */}
-      {(user as any)?.isAdmin && !brand.isSystemBrand && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDeleteBrand(brand.id);
-          }}
-          className="absolute top-3 right-3 p-2 bg-white text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-red-100 shadow-sm"
-          title="删除品牌"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </AnimatedCard>
-  );
+  const BrandCard: React.FC<{ brand: Brand; onClick: () => void }> = ({ brand, onClick }) => {
+    const safeIconUrl = sanitizeExternalUrl(brand.iconUrl)
 
-  // 品牌列表项组件
-  const BrandListItem: React.FC<{ brand: Brand; onClick: () => void }> = ({ brand, onClick }) => (
-    <AnimatedCard 
-      className="cursor-pointer relative group rounded-2xl border border-gray-100 bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-soft transition-all duration-200"
-      onClick={onClick}
-    >
-      <div className="p-4 sm:p-5 flex items-center space-x-4">
-        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-cream border border-white shadow-inner">
-          {brand.iconUrl ? (
-            <img 
-              src={brand.iconUrl} 
-              alt={brand.name}
-              className="w-full h-full rounded-xl object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                if (nextElement) nextElement.style.display = 'block';
-              }}
-            />
-          ) : null}
-          <span 
-            className={`${brand.iconUrl ? 'hidden' : 'block'} text-gray-600 dark:text-gray-300 font-semibold`}
-            style={{ display: brand.iconUrl ? 'none' : 'block' }}
-          >
-            {brand.name.charAt(0).toUpperCase()}
-          </span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-2 mb-1 flex-wrap">
-            <h3 className="font-semibold text-sm sm:text-base text-soft-black dark:text-white truncate">
-              {brand.name}
-            </h3>
-            {brand.businessType === BrandBusinessType.ONLINE ? (
-              <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full text-xs font-semibold">
-                线上
-              </span>
-            ) : (
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full text-xs font-semibold">
-                线下
-              </span>
-            )}
-            {brand.posSupport?.supported && (
-              <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full text-xs font-semibold">
-                POS支持
-              </span>
-            )}
+    return (
+      <AnimatedCard 
+        className="cursor-pointer relative group rounded-2xl border border-white/70 bg-gradient-to-br from-white/95 via-white/90 to-cream/80 shadow-sm hover:shadow-soft transition-all duration-300 hover:-translate-y-1"
+        onClick={onClick}
+      >
+        <div className="p-5 sm:p-6 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center space-x-3 flex-1 min-w-0">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 bg-cream border border-white shadow-inner">
+                {safeIconUrl ? (
+                  <img 
+                    src={safeIconUrl}
+                    alt={brand.name}
+                    className="w-full h-full rounded-2xl object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (nextElement) nextElement.style.display = 'block';
+                    }}
+                  />
+                ) : null}
+                <span 
+                  className={`${safeIconUrl ? 'hidden' : 'block'} text-gray-600 dark:text-gray-300 font-semibold`}
+                  style={{ display: safeIconUrl ? 'none' : 'block' }}
+                >
+                  {brand.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold text-base sm:text-lg text-soft-black dark:text-white truncate">
+                  {brand.name}
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+                  {getCategoryLabel(brand.category)}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-1">
+              {brand.businessType === BrandBusinessType.ONLINE ? (
+                <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-1 rounded-full text-xs font-semibold">
+                  线上
+                </span>
+              ) : (
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full text-xs font-semibold">
+                  线下
+                </span>
+              )}
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
+          
+          <p className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm line-clamp-2">
             {brand.description || '暂无描述'}
           </p>
-        </div>
-        <div className="text-right text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
-          <div className="truncate max-w-[100px]">{getCategoryLabel(brand.category)}</div>
-          <div>{brand.createdBy || '系统'}</div>
+          
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center space-x-1">
+              <User className="w-3.5 h-3.5" />
+              <span>{brand.createdBy || '系统'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {brand.notes && (
+                <span className="bg-yellow-50 text-yellow-700 border border-yellow-100 px-2 py-0.5 rounded-full text-xs font-medium">
+                  有备注
+                </span>
+              )}
+              {brand.posSupport?.supported && (
+                <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full text-xs font-medium">
+                  POS支持
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         
         {/* 管理员删除按钮 */}
@@ -404,15 +340,92 @@ const Brands: React.FC = () => {
               e.stopPropagation();
               handleDeleteBrand(brand.id);
             }}
-            className="p-2 bg-white text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-red-100 shadow-sm flex-shrink-0"
+            className="absolute top-3 right-3 p-2 bg-white text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-red-100 shadow-sm"
             title="删除品牌"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
-      </div>
-    </AnimatedCard>
-  );
+      </AnimatedCard>
+    )
+  };
+
+  // 品牌列表项组件
+  const BrandListItem: React.FC<{ brand: Brand; onClick: () => void }> = ({ brand, onClick }) => {
+    const safeIconUrl = sanitizeExternalUrl(brand.iconUrl)
+
+    return (
+      <AnimatedCard 
+        className="cursor-pointer relative group rounded-2xl border border-gray-100 bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-soft transition-all duration-200"
+        onClick={onClick}
+      >
+        <div className="p-4 sm:p-5 flex items-center space-x-4">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-cream border border-white shadow-inner">
+            {safeIconUrl ? (
+              <img 
+                src={safeIconUrl}
+                alt={brand.name}
+                className="w-full h-full rounded-xl object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                  if (nextElement) nextElement.style.display = 'block';
+                }}
+              />
+            ) : null}
+            <span 
+              className={`${safeIconUrl ? 'hidden' : 'block'} text-gray-600 dark:text-gray-300 font-semibold`}
+              style={{ display: safeIconUrl ? 'none' : 'block' }}
+            >
+              {brand.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2 mb-1 flex-wrap">
+              <h3 className="font-semibold text-sm sm:text-base text-soft-black dark:text-white truncate">
+                {brand.name}
+              </h3>
+              {brand.businessType === BrandBusinessType.ONLINE ? (
+                <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  线上
+                </span>
+              ) : (
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  线下
+                </span>
+              )}
+              {brand.posSupport?.supported && (
+                <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  POS支持
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
+              {brand.description || '暂无描述'}
+            </p>
+          </div>
+          <div className="text-right text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
+            <div className="truncate max-w-[100px]">{getCategoryLabel(brand.category)}</div>
+            <div>{brand.createdBy || '系统'}</div>
+          </div>
+          
+          {/* 管理员删除按钮 */}
+          {(user as any)?.isAdmin && !brand.isSystemBrand && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteBrand(brand.id);
+              }}
+              className="p-2 bg-white text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 border border-red-100 shadow-sm flex-shrink-0"
+              title="删除品牌"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </AnimatedCard>
+    )
+  };
 
   return (
     <PageTransition>
@@ -734,11 +747,11 @@ const Brands: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-3">
-                    {selectedBrand.website && (
+                    {safeSelectedBrandWebsite && (
                       <div className="flex items-center space-x-2 text-xs sm:text-sm">
                         <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         <a 
-                          href={selectedBrand.website} 
+                          href={safeSelectedBrandWebsite} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:underline truncate"
