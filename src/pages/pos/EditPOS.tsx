@@ -21,6 +21,7 @@ import Select from '@/components/ui/Select'
 import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType, CardNetworkFee, feeUtils } from '@/types/fees'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import { sanitizeExternalUrl } from '@/utils/sanitize'
 import type { POSMachine } from '@/types'
 
 const EditPOS = () => {
@@ -310,8 +311,28 @@ const EditPOS = () => {
       // 显示详细的加载状态
       notify.loading('正在更新POS机信息...', { id: 'updating-pos' })
 
+      const sanitizedCustomLinks = (formData.custom_links || [])
+        .map((link) => {
+          const title = link.title?.trim() || ''
+          const platform = link.platform?.trim() || ''
+          const rawUrl = link.url?.trim() || ''
+          const safeUrl = rawUrl ? sanitizeExternalUrl(rawUrl) : null
+
+          if (rawUrl && !safeUrl) {
+            throw new Error('外部链接包含非法 URL，请仅使用 http(s) 链接')
+          }
+
+          return {
+            title,
+            platform,
+            url: safeUrl || '',
+          }
+        })
+        .filter((link) => link.title || link.platform || link.url)
+
       const updatedData = { 
-        ...formData, 
+        ...formData,
+        custom_links: sanitizedCustomLinks,
         updated_at: new Date().toISOString() 
       }
       

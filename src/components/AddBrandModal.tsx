@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/useAuthStore';
 import { notify } from '../lib/notify';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { sanitizeExternalUrl } from '@/utils/sanitize';
 
 interface AddBrandModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
   });
 
   useBodyScrollLock(isOpen, { includeHtml: true });
+  const safeIconPreviewUrl = sanitizeExternalUrl(formData.iconUrl);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +44,12 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
 
     setIsLoading(true);
     try {
+      const normalizedIconUrl = sanitizeExternalUrl(formData.iconUrl);
+      if (formData.iconUrl?.trim() && !normalizedIconUrl) {
+        notify.error('品牌图标URL不合法，请使用 http(s) 链接');
+        return;
+      }
+
       const { error } = await supabase
         .from('brands')
         .insert({
@@ -49,7 +57,7 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
           description: formData.description?.trim() || null,
           notes: formData.notes?.trim() || null,
           category: formData.category,
-          icon_url: formData.iconUrl?.trim() || null,
+          icon_url: normalizedIconUrl || null,
           created_by: user.id
         });
 
@@ -216,10 +224,10 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSucces
                 <Upload className="w-4 h-4" />
               </button>
             </div>
-            {formData.iconUrl && (
+            {safeIconPreviewUrl && (
               <div className="mt-2">
                 <img
-                  src={formData.iconUrl}
+                  src={safeIconPreviewUrl}
                   alt="品牌图标预览"
                   className="w-12 h-12 rounded-lg object-cover border border-gray-200"
                   onError={(e) => {

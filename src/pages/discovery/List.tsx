@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Filter, MapPin, Star, Plus, Navigation, Trash2, CheckSquare, Square, RefreshCcw } from 'lucide-react'
 import { useMapStore } from '@/stores/useMapStore'
@@ -15,6 +15,7 @@ import { locationUtils } from '@/lib/amap'
 import type { POSMachine } from '@/types'
 import ActiveFiltersPanel from './list/ActiveFiltersPanel'
 import POSListCard from './list/POSListCard'
+import VirtualizedPOSGrid from './list/VirtualizedPOSGrid'
 
 interface POSMachineWithStats extends POSMachine {
   distance?: number
@@ -68,6 +69,7 @@ const SORT_SUCCESS_RATE_EMPTY = -1
 const ADDRESS_REFRESH_THROTTLE_MS = 150
 const SEARCH_DEBOUNCE_MS = 500
 const SKELETON_CARD_COUNT = 5
+const LIST_VIRTUALIZATION_THRESHOLD = 80
 
 const formatCreatedAt = (value?: string) => {
   if (!value) return ''
@@ -192,9 +194,6 @@ const List = () => {
       return next
     })
   }, [])
-
-  // 滚动容器引用，用于在数据变化后自动调整 scrollTop，避免出现空白
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadPOSMachines()
@@ -569,15 +568,7 @@ const List = () => {
     return () => clearTimeout(timeoutId)
   }, [searchKeyword, handleSearch])
 
-  // 当列表长度变化，确保滚动条位置始终在有效范围内
-  useEffect(() => {
-    const el = scrollContainerRef.current
-    if (!el) return
-    const maxScrollTop = Math.max(el.scrollHeight - el.clientHeight, 0)
-    if (el.scrollTop > maxScrollTop) {
-      el.scrollTop = maxScrollTop
-    }
-  }, [sortedPOSMachines.length])
+  const shouldUseVirtualizedList = sortedPOSMachines.length >= LIST_VIRTUALIZATION_THRESHOLD
 
   if (loading) {
     return (
@@ -775,11 +766,8 @@ const List = () => {
       {/* POS机列表 */}
       <div className="flex-1 overflow-hidden p-4 sm:p-6">
         <div className="bg-white rounded-[32px] shadow-soft flex flex-col h-full border border-white/50">
-          <div
-            ref={scrollContainerRef}
-            className="flex-1 overflow-y-auto p-5 sm:p-10 pt-5 custom-scrollbar"
-          >
-            {sortedPOSMachines.length === 0 ? (
+          {sortedPOSMachines.length === 0 ? (
+            <div className="flex-1 overflow-y-auto p-5 sm:p-10 pt-5 custom-scrollbar">
               <div className="text-center py-12">
                 <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">暂无POS机数据</h3>
@@ -791,7 +779,21 @@ const List = () => {
                   </Button>
                 )}
               </div>
-            ) : (
+            </div>
+          ) : shouldUseVirtualizedList ? (
+            <VirtualizedPOSGrid
+              items={sortedPOSMachines}
+              selectionMode={selectionMode}
+              searchKeyword={searchKeyword}
+              selectedPOSIds={selectedPOSIds}
+              cardMetaById={posCardMetaById}
+              canDeleteItem={canDeleteItem}
+              onCardClick={handlePOSCardClick}
+              onToggleSelection={togglePosSelection}
+              onOpenDetail={openPOSDetail}
+            />
+          ) : (
+            <div className="flex-1 overflow-y-auto p-5 sm:p-10 pt-5 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {sortedPOSMachines.map((pos: POSMachineWithStats, index) => {
                   const cardMeta = posCardMetaById.get(pos.id)
@@ -822,8 +824,8 @@ const List = () => {
                   )
                 })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

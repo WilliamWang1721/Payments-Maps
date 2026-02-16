@@ -3,6 +3,7 @@ import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import type { POSMachine } from '@/types'
+import { escapeHtml } from '@/utils/sanitize'
 
 // 导出格式类型
 export type ExportFormat = 'json' | 'html' | 'pdf'
@@ -22,6 +23,52 @@ export interface ExportOptions {
 // 获取卡片模板函数
 const getCardTemplate = (style: CardStyle) => {
   return (data: any) => generateCardHTML(data, style)
+}
+
+const toSafeText = (value: unknown, fallback = '待勘察') => {
+  if (value === null || value === undefined) {
+    return escapeHtml(fallback)
+  }
+
+  const normalized = String(value).trim()
+  return normalized ? escapeHtml(normalized) : escapeHtml(fallback)
+}
+
+const toSafeOptionalText = (value: unknown) => {
+  if (value === null || value === undefined) return ''
+  const normalized = String(value).trim()
+  return normalized ? escapeHtml(normalized) : ''
+}
+
+const sanitizeRenderedHTML = (html: string) => {
+  if (typeof DOMParser === 'undefined') {
+    return html
+  }
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+
+  doc.querySelectorAll('script,iframe,object,embed').forEach((node) => node.remove())
+  doc.querySelectorAll('*').forEach((element) => {
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase()
+      const value = attribute.value.trim().toLowerCase()
+
+      if (name.startsWith('on')) {
+        element.removeAttribute(attribute.name)
+        return
+      }
+
+      if (
+        (name === 'href' || name === 'src' || name === 'xlink:href') &&
+        value.startsWith('javascript:')
+      ) {
+        element.removeAttribute(attribute.name)
+      }
+    })
+  })
+
+  return `<!DOCTYPE html>${doc.documentElement.outerHTML}`
 }
 
 // 导出为JSON文件
@@ -317,9 +364,16 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
       break
   }
 
+  const safeMerchantName = toSafeText(pos.merchant_name, '未命名 POS')
+  const safeAddress = toSafeText(pos.address)
+  const safeModel = toSafeText(pos.basic_info?.model)
+  const safeAcquiringInstitution = toSafeText(pos.basic_info?.acquiring_institution)
+  const safeCheckoutLocation = toSafeText(pos.basic_info?.checkout_location)
+  const safeStatus = getStatusText(pos.status || 'unknown')
+
   // 生成支持的卡组织标签
   const cardNetworkTags = pos.basic_info?.supported_card_networks?.map(network => 
-    `<span class="tag">${getCardNetworkLabel(network)}</span>`
+    `<span class="tag">${escapeHtml(getCardNetworkLabel(network))}</span>`
   ).join('') || '<span class="info-value" style="color: #6b7280;">待勘察</span>'
 
   // 生成Contactless支持信息
@@ -330,7 +384,7 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
   if (pos.basic_info?.supports_hce_simulation) contactlessSupport.push('HCE模拟')
   
   const contactlessTags = contactlessSupport.length > 0 
-    ? contactlessSupport.map(support => `<span class="tag">${support}</span>`).join('')
+    ? contactlessSupport.map(support => `<span class="tag">${escapeHtml(support)}</span>`).join('')
     : '<span class="info-value" style="color: #6b7280;">待勘察</span>'
 
   // 生成手续费信息
@@ -345,8 +399,8 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
           : `${config.value} ${config.currency || 'HKD'}`
         return `
           <div class="info-item">
-            <div class="info-label">${getCardNetworkLabel(network)}</div>
-            <div class="info-value">${rate}</div>
+            <div class="info-label">${escapeHtml(getCardNetworkLabel(network))}</div>
+            <div class="info-value">${escapeHtml(rate)}</div>
           </div>
         `
       }).join('')
@@ -369,15 +423,15 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>POS机信息卡片 - ${pos.merchant_name}</title>
+      <title>POS机信息卡片 - ${safeMerchantName}</title>
       ${baseStyles}
       ${styleOverrides}
     </head>
     <body>
       <div class="card">
         <div class="header">
-          <h1 class="title">${pos.merchant_name}</h1>
-          <p class="subtitle">📍 ${pos.address}</p>
+          <h1 class="title">${safeMerchantName}</h1>
+          <p class="subtitle">📍 ${safeAddress}</p>
         </div>
         
         <div class="content">
@@ -387,21 +441,21 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
             <div class="info-grid">
               <div class="info-item">
                 <div class="info-label">POS机型号</div>
-                <div class="info-value">${pos.basic_info?.model || '待勘察'}</div>
+                <div class="info-value">${safeModel}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">收单机构</div>
-                <div class="info-value">${pos.basic_info?.acquiring_institution || '待勘察'}</div>
+                <div class="info-value">${safeAcquiringInstitution}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">收银位置</div>
-                <div class="info-value">${pos.basic_info?.checkout_location || '待勘察'}</div>
+                <div class="info-value">${safeCheckoutLocation}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">设备状态</div>
                 <div class="info-value">
                   <span class="status-badge" style="background-color: ${getStatusColor(pos.status || 'unknown')}">
-                    ${getStatusText(pos.status || 'unknown')}
+                    ${escapeHtml(safeStatus)}
                   </span>
                 </div>
               </div>
@@ -432,7 +486,11 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
             <div class="info-grid">
               <div class="info-item">
                 <div class="info-label">${pos.address ? '详细地址' : '经纬度坐标'}</div>
-                <div class="info-value">${pos.address || `${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`}</div>
+                <div class="info-value">${
+                  pos.address
+                    ? safeAddress
+                    : escapeHtml(`${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`)
+                }</div>
               </div>
             </div>
           </div>
@@ -443,7 +501,7 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
           <div class="section">
             <h3 class="section-title">📝 备注信息</h3>
             <div class="info-item">
-              <div class="info-value">${pos.remarks}</div>
+              <div class="info-value">${toSafeOptionalText(pos.remarks)}</div>
             </div>
           </div>
           ` : ''}
@@ -451,7 +509,7 @@ export const generateCardHTML = (pos: POSMachine, style: CardStyle = 'detailed')
         
         <div class="footer">
           <p>导出时间: ${new Date().toLocaleString('zh-CN')} | 数据来源: Payments Maps</p>
-          ${pos.created_at ? `<p>创建时间: ${formatDate(pos.created_at)}</p>` : ''}
+          ${pos.created_at ? `<p>创建时间: ${escapeHtml(formatDate(pos.created_at))}</p>` : ''}
         </div>
       </div>
     </body>
@@ -491,7 +549,7 @@ export const exportToPDF = async (data: any, filename: string, style: CardStyle 
     
     // 创建临时容器
     const container = document.createElement('div')
-    container.innerHTML = html
+    container.innerHTML = sanitizeRenderedHTML(html)
     container.style.position = 'absolute'
     container.style.left = '-9999px'
     container.style.width = '800px'

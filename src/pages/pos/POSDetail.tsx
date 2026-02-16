@@ -26,6 +26,7 @@ import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
 import { buildRefreshedExtendedFields, derivePOSFromAttempts, readPOSAttemptRefreshMeta } from '@/utils/posRefreshLogic'
 import { exportToHTML, exportToJSON, exportToPDF, getFormatDisplayName, getStyleDisplayName, type CardStyle, type ExportFormat } from '@/utils/exportUtils'
+import { sanitizeExternalUrl, sanitizePlainText } from '@/utils/sanitize'
 import { feeUtils } from '@/types/fees'
 import type { CardAlbumItem } from '@/stores/useCardAlbumStore'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
@@ -50,6 +51,10 @@ interface ExternalLinkType {
   url: string
   description?: string
   created_at: string
+}
+
+type SafeExternalLink = ExternalLinkType & {
+  safeUrl: string
 }
 
 interface Attempt {
@@ -218,6 +223,17 @@ const POSDetail = () => {
   const [draftAttempts, setDraftAttempts] = useState<AttemptDraft[]>([])
   const [commonCards, setCommonCards] = useState<Array<{ name: string; method?: string }>>([])
   const [isAlbumPickerOpen, setIsAlbumPickerOpen] = useState(false)
+  const safeExternalLinks = useMemo<SafeExternalLink[]>(() => {
+    return externalLinks.reduce<SafeExternalLink[]>((acc, link) => {
+      const safeUrl = sanitizeExternalUrl(link.url)
+      if (!safeUrl) return acc
+      acc.push({
+        ...link,
+        safeUrl,
+      })
+      return acc
+    }, [])
+  }, [externalLinks])
   const [albumScopeFilter, setAlbumScopeFilter] = useState<'personal' | 'public'>('personal')
   const [selectedAlbumCard, setSelectedAlbumCard] = useState('')
   const [attemptAlbumBindings, setAttemptAlbumBindings] = useState<Record<number, AttemptAlbumBinding>>({})
@@ -1210,17 +1226,25 @@ const POSDetail = () => {
 
   const handleSubmitReport = () => {
     if (!pos) return
-    if (!reportForm.issueType.trim() || !reportForm.description.trim()) {
+    const sanitizedIssueType = sanitizePlainText(reportForm.issueType, { maxLength: 80 })
+    const sanitizedDescription = sanitizePlainText(reportForm.description, {
+      maxLength: 1000,
+      preserveLineBreaks: true,
+    })
+    const sanitizedContact = sanitizePlainText(reportForm.contact, { maxLength: 120 })
+
+    if (!sanitizedIssueType || !sanitizedDescription) {
       notify.error('请补充申报类型与问题描述')
       return
     }
+
     addReport({
       itemType: 'pos',
       itemId: pos.id,
       itemLabel: pos.merchant_name,
-      issueType: reportForm.issueType.trim(),
-      description: reportForm.description.trim(),
-      contact: reportForm.contact.trim() || undefined,
+      issueType: sanitizedIssueType,
+      description: sanitizedDescription,
+      contact: sanitizedContact || undefined,
       reporter: {
         id: user?.id,
         name: user?.user_metadata?.display_name || user?.email || '匿名用户',
@@ -1443,7 +1467,12 @@ const POSDetail = () => {
 
     if (!id) return
 
-    if (!newReview.comment.trim()) {
+    const sanitizedReviewComment = sanitizePlainText(newReview.comment, {
+      maxLength: 1000,
+      preserveLineBreaks: true,
+    })
+
+    if (!sanitizedReviewComment) {
       notify.error('请填写评价内容')
       return
     }
@@ -1457,7 +1486,7 @@ const POSDetail = () => {
           pos_id: id,
           user_id: user.id,
           rating: newReview.rating,
-          content: newReview.comment.trim()
+          content: sanitizedReviewComment
         })
         .select(`
           id,
@@ -1550,7 +1579,7 @@ const POSDetail = () => {
 
       const attemptsPayload = attemptsList.map((attempt, index) => {
         const linkedCardId = attempt.card_album_card_id?.trim() || null
-        const fallbackCardName = attempt.card_name?.trim() || null
+        const fallbackCardName = sanitizePlainText(attempt.card_name, { maxLength: 120 }) || null
         return {
           pos_id: id,
           user_id: user.id,
@@ -1563,9 +1592,9 @@ const POSDetail = () => {
           cvm: attempt.cvm || 'unknown',
           acquiring_mode: attempt.acquiring_mode || 'unknown',
           device_status: attempt.device_status || pos?.status || 'active',
-          acquiring_institution: attempt.acquiring_institution?.trim() || null,
+          acquiring_institution: sanitizePlainText(attempt.acquiring_institution, { maxLength: 120 }) || null,
           checkout_location: attempt.checkout_location || pos?.basic_info?.checkout_location || null,
-          notes: attempt.notes?.trim() || null,
+          notes: sanitizePlainText(attempt.notes, { maxLength: 1000, preserveLineBreaks: true }) || null,
           attempted_at: normalizeAttemptedAt(attempt.attempted_at),
           is_conclusive_failure: attempt.result === 'failure' && Boolean(attempt.is_conclusive_failure),
         }
@@ -2721,7 +2750,7 @@ const POSDetail = () => {
                 </AnimatedCard>
               )}
 
-              {externalLinks.length > 0 && (
+              {safeExternalLinks.length > 0 && (
                 <AnimatedCard className="bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-white/60 dark:border-slate-800 rounded-[28px] shadow-soft" variant="elevated" hoverable>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-soft-black dark:text-gray-100">
@@ -2731,10 +2760,10 @@ const POSDetail = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {externalLinks.map((link) => (
+                      {safeExternalLinks.map((link) => (
                         <a
                           key={link.id}
-                          href={link.url}
+                          href={link.safeUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-soft-black hover:bg-gray-100 transition-colors"

@@ -1,6 +1,7 @@
 import express from "express";
 import { AuthService } from "./AuthService.js";
 import { SessionManager } from "./SessionManager.js";
+import { escapeHtml, isSafeLoopbackCallback } from "../utils/contentSanitizer.js";
 
 /**
  * 认证页面服务 - 为 MCP 客户端提供友好的认证界面
@@ -22,12 +23,12 @@ export class AuthPageService {
     this.app.get('/auth/start', (req: express.Request, res: express.Response) => {
       const { callback } = req.query;
       
-      if (!callback) {
-        return res.status(400).send("缺少回调 URL");
+      if (typeof callback !== 'string' || !isSafeLoopbackCallback(callback)) {
+        return res.status(400).send("回调 URL 无效");
       }
 
       // 渲染认证选择页面
-      res.send(this.getAuthSelectionPage(callback as string));
+      res.send(this.getAuthSelectionPage(callback));
     });
 
     // OAuth 提供商选择：使用 state 传递 provider 与 callback
@@ -35,8 +36,8 @@ export class AuthPageService {
       const { provider } = req.params as { provider: string };
       const { callback } = req.query;
 
-      if (!callback) {
-        return res.status(400).send("缺少回调 URL");
+      if (typeof callback !== 'string' || !isSafeLoopbackCallback(callback)) {
+        return res.status(400).send("回调 URL 无效");
       }
 
       try {
@@ -45,7 +46,8 @@ export class AuthPageService {
         const authUrl = this.authService.getAuthUrl(provider, state);
         res.redirect(authUrl);
       } catch (error) {
-        res.status(400).send(error instanceof Error ? error.message : '获取授权链接失败');
+        const safeErrorMessage = error instanceof Error ? escapeHtml(error.message) : '获取授权链接失败';
+        res.status(400).send(safeErrorMessage);
       }
     });
 
@@ -66,7 +68,7 @@ export class AuthPageService {
         }
 
         const { provider, callback } = parsed || {};
-        if (!provider || !callback) {
+        if (!provider || !callback || !isSafeLoopbackCallback(callback)) {
           return res.status(400).send('state 缺少 provider 或 callback');
         }
 
@@ -84,7 +86,7 @@ export class AuthPageService {
           
           res.redirect(callbackUrl.toString());
         } else {
-          res.status(401).send(`认证失败: ${result.error}`);
+          res.status(401).send(`认证失败: ${escapeHtml(result.error)}`);
         }
       } catch (error) {
         console.error('OAuth 回调错误:', error);
