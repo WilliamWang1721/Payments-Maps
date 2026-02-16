@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, CreditCard, Smartphone, Settings, FileText, Link, Plus, Building } from 'lucide-react'
@@ -27,7 +27,7 @@ const EditPOS = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const { posMachines, updatePOSMachine, deletePOSMachine } = useMapStore()
-  const permissions = usePermissions()
+  const { isLoading: permissionsLoading, canEditItem, canDeleteItem } = usePermissions()
   
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -85,6 +85,27 @@ const EditPOS = () => {
     setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
   }
 
+  const loadAttempts = useCallback(async () => {
+    if (!id) return
+
+    try {
+      const { data, error } = await supabase
+        .from('pos_attempts')
+        .select('*')
+        .eq('pos_id', id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('加载尝试记录失败:', error)
+        return
+      }
+
+      setAttempts(data || [])
+    } catch (error) {
+      console.error('加载尝试记录失败:', error)
+    }
+  }, [id])
+
   useEffect(() => {
     if (scrollContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current
@@ -136,7 +157,7 @@ const EditPOS = () => {
         }
         
         // 权限检查
-        if (!permissions.isLoading && !permissions.canEditItem(posData.created_by)) {
+        if (!permissionsLoading && !canEditItem(posData.created_by)) {
           notify.critical('您没有权限编辑此POS机', {
             title: '权限不足',
           })
@@ -150,7 +171,7 @@ const EditPOS = () => {
           fees: posData.fees || DEFAULT_FEES_CONFIG
         }
         setFormData(formDataWithDefaults)
-        loadAttempts() // 加载尝试记录
+        void loadAttempts() // 加载尝试记录
       } catch (error) {
         console.error('加载POS机数据失败:', error)
         notify.critical('加载数据失败，请重试', {
@@ -164,7 +185,7 @@ const EditPOS = () => {
     }
 
     loadPOSData()
-  }, [id, posMachines, user, navigate, permissions.isLoading, permissions.canEditItem])
+  }, [id, posMachines, navigate, permissionsLoading, canEditItem, loadAttempts])
 
 
 
@@ -335,27 +356,6 @@ const EditPOS = () => {
     }
   }
 
-  const loadAttempts = async () => {
-    if (!id) return
-    
-    try {
-      const { data, error } = await supabase
-        .from('pos_attempts')
-        .select('*')
-        .eq('pos_id', id)
-        .order('created_at', { ascending: false })
-      
-      if (error) {
-        console.error('加载尝试记录失败:', error)
-        return
-      }
-      
-      setAttempts(data || [])
-    } catch (error) {
-      console.error('加载尝试记录失败:', error)
-    }
-  }
-
   const deleteAttempt = async (attemptId: string) => {
     if (!user) {
       navigate('/login')
@@ -501,7 +501,7 @@ const EditPOS = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              {permissions.canDeleteItem(formData.created_by) && (
+              {canDeleteItem(formData.created_by) && (
                 <button
                   onClick={() => setShowDeleteModal(true)}
                   className="px-4 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2"

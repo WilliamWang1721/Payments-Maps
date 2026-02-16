@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Terminal, Copy, Eye, EyeOff, Trash2, Shield, Book, Download, ExternalLink, AlertCircle, CheckCircle, Clock, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -38,15 +38,7 @@ const MCPSettings = () => {
   const [generatedConfig, setGeneratedConfig] = useState('')
   const [sessionToken, setSessionToken] = useState('')
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/login')
-      return
-    }
-    loadMCPData()
-  }, [user, navigate])
-
-  const loadMCPData = async () => {
+  const loadMCPData = useCallback(async () => {
     if (!user) return
     
     setLoading(true)
@@ -78,7 +70,15 @@ const MCPSettings = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    void loadMCPData()
+  }, [loadMCPData, navigate, user])
 
   const generateMCPConfig = async () => {
     if (!user) return

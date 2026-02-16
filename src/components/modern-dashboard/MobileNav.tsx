@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Bell, BookOpen, List, Map, Plus, Shield, Tag, User } from 'lucide-react'
+import { BookOpen, List, Map, Plus, Shield, Tag, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
@@ -17,7 +17,6 @@ const MobileNav = () => {
     { icon: BookOpen, label: '卡册', to: '/app/card-album' },
     { icon: Tag, label: 'Brands', to: '/app/brands' },
     ...(permissions.isAdmin ? [{ icon: Shield, label: '管理', to: '/app/management' }] : []),
-    { icon: Bell, label: 'Notify', to: '/app/notifications' },
     { icon: User, label: 'Profile', to: '/app/profile' },
   ]
 

@@ -13,8 +13,7 @@ import {
   Shield,
   Archive,
   Users,
-  User,
-  Zap
+  User
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -22,7 +21,6 @@ import Button from '@/components/ui/Button'
 import Loading from '@/components/ui/Loading'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import Input from '@/components/ui/Input'
-import { BetaActivationModal } from '@/components/BetaActivationModal'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 import { listDrafts } from '@/lib/drafts'
 import { getErrorDetails, notify } from '@/lib/notify'
@@ -76,7 +74,6 @@ const Profile = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editForm, setEditForm] = useState({ display_name: '', bio: '' })
   const [updating, setUpdating] = useState(false)
-  const [showActivationModal, setShowActivationModal] = useState(false)
   const [draftCount, setDraftCount] = useState(0)
 
   const loadUserData = useCallback(async () => {
@@ -235,11 +232,6 @@ const Profile = () => {
       console.error('退出登录失败:', error)
       notify.error('退出失败，请重试')
     }
-  }
-
-  const handleActivationSuccess = async () => {
-    await loadUserData()
-    window.location.reload()
   }
 
   const removeFavorite = async (favoriteId: string) => {
@@ -472,17 +464,6 @@ const Profile = () => {
               </div>
             </div>
 
-            {!permissions.isLoading && permissions.role === 'regular' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-blue-600 border-blue-200 hover:bg-blue-50 w-fit"
-                onClick={() => setShowActivationModal(true)}
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                激活 Beta 权益
-              </Button>
-            )}
           </div>
         </section>
 
@@ -733,12 +714,6 @@ const Profile = () => {
           </div>
         </div>
       </AnimatedModal>
-
-      <BetaActivationModal
-        isOpen={showActivationModal}
-        onClose={() => setShowActivationModal(false)}
-        onSuccess={handleActivationSuccess}
-      />
     </div>
   )
 }
