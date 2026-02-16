@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '@/lib/supabase'
-import { POSMachine } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
 import { useMapStore } from '@/stores/useMapStore'
@@ -30,6 +29,8 @@ import { exportToHTML, exportToJSON, exportToPDF, getFormatDisplayName, getStyle
 import { feeUtils } from '@/types/fees'
 import type { CardAlbumItem } from '@/stores/useCardAlbumStore'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import type { POSMachine } from '@/types'
+import { posService } from '@/services/posService'
 
 interface Review {
   id: string
@@ -1375,28 +1376,13 @@ const POSDetail = () => {
     if (!user || !id || favoritesUnavailable) return
     
     try {
-      // 从Supabase数据库查询用户收藏状态
-      const { data, error } = await supabase
-        .from('user_favorites')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('pos_machine_id', id)
-        .single()
-      
-      if (error) {
-        if (error.code === 'PGRST205' || error.code === '406') {
-          console.warn('收藏功能未启用或表不存在，已忽略:', error.message)
-          setFavoritesUnavailable(true)
-          return
-        }
-        if (error.code !== 'PGRST116') {
-          // PGRST116 表示没有找到记录，这是正常的
-          console.error('查询收藏状态失败:', error)
-          return
-        }
+      const { isFavorite, featureAvailable } = await posService.getFavoriteStatus(user.id, id)
+      if (!featureAvailable) {
+        console.warn('收藏功能未启用或表不存在，已忽略')
+        setFavoritesUnavailable(true)
+        return
       }
-      
-      setIsFavorite(!!data)
+      setIsFavorite(isFavorite)
     } catch (error) {
       console.error('查询收藏状态失败:', error)
     }
@@ -1406,16 +1392,7 @@ const POSDetail = () => {
     if (!user || !id) return
     
     try {
-      // 调用upsert函数记录访问历史
-      const { error } = await supabase
-        .rpc('upsert_user_history', {
-          p_user_id: user.id,
-          p_pos_machine_id: id
-        })
-      
-      if (error) {
-        console.error('记录访问历史失败:', error)
-      }
+      await posService.recordUserHistoryVisit(user.id, id)
     } catch (error) {
       console.error('记录访问历史失败:', error)
     }
@@ -1434,46 +1411,21 @@ const POSDetail = () => {
 
     try {
       if (isFavorite) {
-        // 取消收藏 - 从数据库删除记录
-        const { error } = await supabase
-          .from('user_favorites')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('pos_machine_id', id)
-        
-        if (error) {
-          if (error.code === 'PGRST205' || error.code === '406') {
-            setFavoritesUnavailable(true)
-            notify.error('收藏功能当前不可用')
-            return
-          }
-          console.error('取消收藏失败:', error)
-          notify.error('取消收藏失败，请重试')
+        const { featureAvailable } = await posService.removeFavorite(user.id, id)
+        if (!featureAvailable) {
+          setFavoritesUnavailable(true)
+          notify.error('收藏功能当前不可用')
           return
         }
-        
         setIsFavorite(false)
         notify.success('已取消收藏')
       } else {
-        // 添加收藏 - 向数据库插入记录
-        const { error } = await supabase
-          .from('user_favorites')
-          .insert({
-            user_id: user.id,
-            pos_machine_id: id
-          })
-        
-        if (error) {
-          if (error.code === 'PGRST205' || error.code === '406') {
-            setFavoritesUnavailable(true)
-            notify.error('收藏功能当前不可用')
-            return
-          }
-          console.error('添加收藏失败:', error)
-          notify.error('添加收藏失败，请重试')
+        const { featureAvailable } = await posService.addFavorite(user.id, id)
+        if (!featureAvailable) {
+          setFavoritesUnavailable(true)
+          notify.error('收藏功能当前不可用')
           return
         }
-        
         setIsFavorite(true)
         notify.success('已添加到收藏')
       }

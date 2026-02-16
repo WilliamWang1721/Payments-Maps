@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { startRegistration } from '@simplewebauthn/browser'
 import { supabase } from '@/lib/supabase'
+import { withCsrfHeaders } from '@/lib/csrf'
 
 export interface PasskeyRecord {
   id: string
@@ -31,13 +32,13 @@ const request = async (
   body?: unknown
 ) => {
   const token = await getAccessToken()
-  const headers: Record<string, string> = {
+  const headers = withCsrfHeaders({
     Authorization: `Bearer ${token}`
-  }
+  })
   let payload: BodyInit | undefined
 
   if (body !== undefined) {
-    headers['Content-Type'] = 'application/json'
+    headers.set('Content-Type', 'application/json')
     payload = JSON.stringify(body)
   }
 

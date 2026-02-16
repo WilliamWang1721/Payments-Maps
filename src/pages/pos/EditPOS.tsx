@@ -14,13 +14,14 @@ import AnimatedModal from '@/components/ui/AnimatedModal'
 import MultiSelect from '@/components/ui/MultiSelect'
 import BrandSelector from '@/components/BrandSelector'
 import { CARD_NETWORKS, CardNetwork, getCardNetworkLabel } from '@/lib/cardNetworks'
-import { POSMachine, supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import RadioGroup from '@/components/ui/RadioGroup'
 import Checkbox from '@/components/ui/Checkbox'
 import Select from '@/components/ui/Select'
 import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType, CardNetworkFee, feeUtils } from '@/types/fees'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import type { POSMachine } from '@/types'
 
 const EditPOS = () => {
   const { id } = useParams<{ id: string }>()

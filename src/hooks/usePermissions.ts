@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -119,19 +119,19 @@ export const usePermissions = () => {
   }, [user]);
 
   // 检查是否可以编辑特定项目
-  const canEditItem = (createdBy: string) => {
+  const canEditItem = useCallback((createdBy: string) => {
     if (!user) return false;
     return permissions.canEditAll || (permissions.canEdit && createdBy === user.id);
-  };
+  }, [user, permissions.canEditAll, permissions.canEdit]);
 
   // 检查是否可以删除特定项目
-  const canDeleteItem = (createdBy: string) => {
+  const canDeleteItem = useCallback((createdBy: string) => {
     if (!user) return false;
     return permissions.canDeleteAll || (permissions.canDelete && createdBy === user.id);
-  };
+  }, [user, permissions.canDeleteAll, permissions.canDelete]);
 
   // 更新用户角色（仅超级管理员可用）
-  const updateUserRole = async (targetUserId: string, newRole: UserRole) => {
+  const updateUserRole = useCallback(async (targetUserId: string, newRole: UserRole) => {
     if (!permissions.canManageRoles) {
       throw new Error('Only super administrators can update user roles');
     }
@@ -151,14 +151,14 @@ export const usePermissions = () => {
       console.error('Error updating user role:', error);
       throw error;
     }
-  };
+  }, [permissions.canManageRoles]);
 
-  return {
+  return useMemo(() => ({
     ...permissions,
     canEditItem,
     canDeleteItem,
     updateUserRole,
-  };
+  }), [permissions, canEditItem, canDeleteItem, updateUserRole]);
 };
 
 export default usePermissions;

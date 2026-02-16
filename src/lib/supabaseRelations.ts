@@ -8,7 +8,7 @@ export const unwrapSupabaseRelation = <T>(value: MaybeArray<T>): T | null => {
 }
 
 export const normalizeSupabaseRelation = <
-  T extends Record<string, unknown>,
+  T extends object,
   K extends keyof T
 >(
   rows: readonly T[] | null | undefined,

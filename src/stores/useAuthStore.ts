@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { type User, supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { loginWithLinuxDO, getCurrentLinuxDOUser, logoutLinuxDO, refreshLinuxDOUser } from '@/lib/linuxdo-auth'
+import type { User } from '@/types'
 
 interface AuthState {
   user: User | null

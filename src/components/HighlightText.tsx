@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 
 interface HighlightTextProps {
   text: string
@@ -11,18 +11,20 @@ export const HighlightText: React.FC<HighlightTextProps> = ({
   searchKeyword,
   className = ''
 }) => {
-  if (!searchKeyword || !text) {
+  const keyword = useMemo(() => searchKeyword.trim().toLowerCase(), [searchKeyword])
+
+  const parts = useMemo(() => {
+    if (!text || !keyword) {
+      return null
+    }
+
+    const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    return text.split(regex)
+  }, [keyword, text])
+
+  if (!keyword || !text || !parts) {
     return <span className={className}>{text}</span>
   }
-
-  const keyword = searchKeyword.trim().toLowerCase()
-  if (!keyword) {
-    return <span className={className}>{text}</span>
-  }
-
-  // 使用正则表达式进行不区分大小写的匹配
-  const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-  const parts = text.split(regex)
 
   return (
     <span className={className}>
@@ -42,3 +44,5 @@ export const HighlightText: React.FC<HighlightTextProps> = ({
     </span>
   )
 }
+
+export default memo(HighlightText)

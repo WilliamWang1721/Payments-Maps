@@ -1,8 +1,8 @@
-import { POSMachine } from '@/lib/supabase'
 import { FeesConfiguration } from '@/types/fees'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
+import type { POSMachine } from '@/types'
 
 // 导出格式类型
 export type ExportFormat = 'json' | 'html' | 'pdf'

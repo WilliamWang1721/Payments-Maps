@@ -31,7 +31,7 @@ import SimpleMapPicker from '@/components/SimpleMapPicker'
 import { CARD_NETWORKS } from '@/lib/cardNetworks'
 import { getCardNetworkValue } from '@/lib/cardMetadata'
 import { locationUtils } from '@/lib/amap'
-import { POSMachine, supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { FeeType, FeesConfiguration, DEFAULT_FEES_CONFIG, CardNetworkFee } from '@/types/fees'
 import { formatFeeDisplay } from '@/utils/feeUtils'
 import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
@@ -41,6 +41,7 @@ import { type CardAlbumItem, getAlbumScopeLabel, useCardAlbumStore } from '@/sto
 import { getErrorDetails, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import type { POSMachine } from '@/types'
 
 interface FormData {
   merchant_name: string

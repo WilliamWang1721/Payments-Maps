@@ -7,6 +7,19 @@ import { useNavigate } from 'react-router-dom'
 
 const DETAIL_VIEW_ZOOM = 15
 const CLUSTER_GRID_SIZE = 72
+const DEFAULT_MAP_ZOOM = 12
+const CLUSTER_COUNT_DISPLAY_LIMIT = 999
+const DETAIL_MARKER_OFFSET_Y = -8
+const CLUSTER_BUCKET_COORDINATE_PRECISION = 3
+const CLUSTER_Z_INDEX_BASE = 120
+const CLUSTER_Z_INDEX_BONUS_CAP = 50
+const CLUSTER_ZOOM_LARGE_BUCKET_COUNT = 20
+const CLUSTER_ZOOM_MEDIUM_BUCKET_COUNT = 6
+const CLUSTER_ZOOM_STEP_SMALL = 1
+const CLUSTER_ZOOM_STEP_MEDIUM = 2
+const CLUSTER_ZOOM_STEP_LARGE = 3
+const MAP_ZOOM_IN_DELTA = 1
+const MAP_ZOOM_OUT_DELTA = -1
 
 const escapeLabel = (label: string) =>
   label.replace(/[&<>"']/g, (char) => {
@@ -66,7 +79,7 @@ const createMarkerContent = (color: string, label: string, showLabel: boolean) =
 }
 
 const createClusterContent = (count: number) => {
-  const safeCount = count > 999 ? '999+' : String(count)
+  const safeCount = count > CLUSTER_COUNT_DISPLAY_LIMIT ? `${CLUSTER_COUNT_DISPLAY_LIMIT}+` : String(count)
   return `
     <div style="display:flex;align-items:center;justify-content:center;">
       <div style="
@@ -122,7 +135,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
         localMap = new AMap.Map(mapContainerRef.current, {
           ...DEFAULT_MAP_CONFIG,
-          zoom: 12,
+          zoom: DEFAULT_MAP_ZOOM,
         })
 
         // 禁用默认双击缩放，避免和快速添加位置的交互冲突
@@ -221,7 +234,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
           position: [pos.longitude, pos.latitude],
           title: pos.merchant_name,
           anchor: 'bottom-center',
-          offset: new AMap.Pixel(0, -8),
+          offset: new AMap.Pixel(0, DETAIL_MARKER_OFFSET_Y),
           content: createMarkerContent(statusColor, pos.merchant_name, showLabels),
         })
 
@@ -248,7 +261,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       posMachines.forEach((pos) => {
         if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
 
-        let bucketKey = `${pos.longitude.toFixed(3)}_${pos.latitude.toFixed(3)}`
+        let bucketKey = `${pos.longitude.toFixed(CLUSTER_BUCKET_COORDINATE_PRECISION)}_${pos.latitude.toFixed(CLUSTER_BUCKET_COORDINATE_PRECISION)}`
         try {
           const pixel = mapInstance.lngLatToContainer([pos.longitude, pos.latitude])
           const pixelX = typeof pixel?.getX === 'function' ? pixel.getX() : Number.NaN
@@ -276,12 +289,17 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
           title: `${bucket.count} 台 POS 机`,
           anchor: 'center',
           content: createClusterContent(bucket.count),
-          zIndex: 120 + Math.min(bucket.count, 50),
+          zIndex: CLUSTER_Z_INDEX_BASE + Math.min(bucket.count, CLUSTER_Z_INDEX_BONUS_CAP),
         })
 
         marker.on('click', () => {
           const currentZoom = mapInstance.getZoom()
-          const zoomStep = bucket.count > 20 ? 3 : bucket.count > 6 ? 2 : 1
+          const zoomStep =
+            bucket.count > CLUSTER_ZOOM_LARGE_BUCKET_COUNT
+              ? CLUSTER_ZOOM_STEP_LARGE
+              : bucket.count > CLUSTER_ZOOM_MEDIUM_BUCKET_COUNT
+                ? CLUSTER_ZOOM_STEP_MEDIUM
+                : CLUSTER_ZOOM_STEP_SMALL
 
           mapInstance.setCenter(center)
           mapInstance.setZoom(Math.min(DETAIL_VIEW_ZOOM, currentZoom + zoomStep))
@@ -385,7 +403,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
         <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm p-2 rounded-2xl shadow-soft border border-white/50 dark:border-slate-800 flex gap-1.5 sm:flex-col">
           <button
             type="button"
-            onClick={() => handleZoom(1)}
+            onClick={() => handleZoom(MAP_ZOOM_IN_DELTA)}
             className="w-12 h-12 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-accent-yellow hover:bg-blue-50 dark:hover:bg-slate-800 transition-all"
           >
             <span className="text-xl font-bold">+</span>
@@ -393,7 +411,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
           <div className="w-px h-full bg-gray-100 dark:bg-slate-800 sm:w-full sm:h-px" />
           <button
             type="button"
-            onClick={() => handleZoom(-1)}
+            onClick={() => handleZoom(MAP_ZOOM_OUT_DELTA)}
             className="w-12 h-12 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-accent-yellow hover:bg-blue-50 dark:hover:bg-slate-800 transition-all"
           >
             <span className="text-xl font-bold">-</span>

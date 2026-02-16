@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
-import { type User } from './supabase'
 import { type GoogleUser } from './google'
+import type { User } from '@/types'
 
 // Supabase认证相关的工具函数
 
