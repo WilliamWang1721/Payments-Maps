@@ -1,8 +1,9 @@
 import { create } from 'zustand'
-import { type POSMachine, supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { locationUtils } from '@/lib/amap'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { parseSearchInput, type GlobalSearchQuery } from '@/utils/searchParser'
+import type { POSMachine } from '@/types'
 
 const ADD_POS_IDEMPOTENCY_STORAGE_KEY = 'pos_add_idempotency_v1'
 const ADD_POS_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000
@@ -214,7 +215,7 @@ export interface MapState {
     
     // 创建时间筛选
     createdAfter?: string
-  createdBefore?: string
+    createdBefore?: string
   }
   
   // 视图模式
@@ -237,6 +238,175 @@ export interface MapState {
   addPOSMachine: (posMachine: Omit<POSMachine, 'id' | 'created_at' | 'updated_at'>) => Promise<POSMachine>
   updatePOSMachine: (id: string, updates: Partial<POSMachine>) => Promise<void>
   deletePOSMachine: (id: string) => Promise<void>
+}
+
+type MapFilters = MapState['filters']
+type POSMachineWithMetrics = POSMachine & {
+  avgRating: number
+  distance: number
+  reviewCount: number
+}
+type ReviewStatsMap = Record<string, { ratingTotal: number; reviewCount: number }>
+
+const BOOLEAN_FILTER_COLUMNS: ReadonlyArray<[keyof MapFilters, string]> = [
+  ['supportsApplePay', 'basic_info->>supports_apple_pay'],
+  ['supportsGooglePay', 'basic_info->>supports_google_pay'],
+  ['supportsContactless', 'basic_info->>supports_contactless'],
+  ['supportsHCE', 'basic_info->>supports_hce'],
+  ['supportsVisa', 'basic_info->>supports_visa'],
+  ['supportsMastercard', 'basic_info->>supports_mastercard'],
+  ['supportsUnionPay', 'basic_info->>supports_unionpay'],
+  ['supportsAmex', 'basic_info->>supports_amex'],
+  ['supportsJCB', 'basic_info->>supports_jcb'],
+  ['supportsDiners', 'basic_info->>supports_diners'],
+  ['supportsDiscover', 'basic_info->>supports_discover'],
+  ['supportsSmallAmountExemption', 'basic_info->>supports_small_amount_exemption'],
+  ['supportsPinVerification', 'basic_info->>supports_pin_verification'],
+  ['supportsSignatureVerification', 'basic_info->>supports_signature_verification'],
+  ['supportsDCC', 'basic_info->>supports_dcc'],
+  ['supportsEDC', 'basic_info->>supports_edc'],
+]
+
+const LIKE_FILTER_COLUMNS: ReadonlyArray<['acquiringInstitution' | 'posModel', string]> = [
+  ['acquiringInstitution', 'basic_info->>acquiring_institution'],
+  ['posModel', 'basic_info->>model'],
+]
+
+const EXACT_FILTER_COLUMNS: ReadonlyArray<['status' | 'checkoutLocation' | 'merchantType', string]> = [
+  ['status', 'status'],
+  ['checkoutLocation', 'basic_info->>checkout_location'],
+  ['merchantType', 'merchant_info->>transaction_type'],
+]
+
+const applyParsedQueryFilters = (query: any, parsedQuery: GlobalSearchQuery, keyword: string) => {
+  let nextQuery = query
+
+  if (keyword) {
+    const normalizedKeyword = keyword.toLowerCase()
+    nextQuery = nextQuery.or(
+      `merchant_name.ilike.%${normalizedKeyword}%,` +
+      `address.ilike.%${normalizedKeyword}%,` +
+      `basic_info->>model.ilike.%${normalizedKeyword}%,` +
+      `basic_info->>acquiring_institution.ilike.%${normalizedKeyword}%`
+    )
+  }
+
+  if (parsedQuery.coordinates) {
+    const { lat, lng } = parsedQuery.coordinates
+    const delta = 0.02 // 约 2km 范围
+    nextQuery = nextQuery
+      .gte('latitude', lat - delta)
+      .lte('latitude', lat + delta)
+      .gte('longitude', lng - delta)
+      .lte('longitude', lng + delta)
+  }
+
+  if (parsedQuery.acquiringInstitution) {
+    nextQuery = nextQuery.ilike('basic_info->>acquiring_institution', `%${parsedQuery.acquiringInstitution}%`)
+  }
+
+  if (parsedQuery.dateRange?.from) {
+    nextQuery = nextQuery.gte('created_at', parsedQuery.dateRange.from)
+  }
+  if (parsedQuery.dateRange?.to) {
+    nextQuery = nextQuery.lte('created_at', parsedQuery.dateRange.to)
+  }
+
+  return nextQuery
+}
+
+const applyServerFilters = (query: any, filters: MapFilters) => {
+  let nextQuery = BOOLEAN_FILTER_COLUMNS.reduce((current, [filterKey, column]) => {
+    return filters[filterKey] ? current.eq(column, true) : current
+  }, query)
+
+  for (const [filterKey, column] of LIKE_FILTER_COLUMNS) {
+    const value = filters[filterKey]?.toString().trim()
+    if (value) {
+      nextQuery = nextQuery.ilike(column, `%${value}%`)
+    }
+  }
+
+  for (const [filterKey, column] of EXACT_FILTER_COLUMNS) {
+    const value = filters[filterKey]
+    if (value) {
+      nextQuery = nextQuery.eq(column, value)
+    }
+  }
+
+  if (filters.minAmountNoPin !== undefined) {
+    nextQuery = nextQuery.gte('basic_info->>min_amount_no_pin', filters.minAmountNoPin)
+  }
+  if (filters.maxAmountNoPin !== undefined) {
+    nextQuery = nextQuery.lte('basic_info->>min_amount_no_pin', filters.maxAmountNoPin)
+  }
+
+  if (filters.hasRemarks !== undefined) {
+    nextQuery = filters.hasRemarks
+      ? nextQuery.not('remarks', 'is', null).neq('remarks', '')
+      : nextQuery.or('remarks.is.null,remarks.eq.')
+  }
+
+  if (filters.createdAfter) {
+    nextQuery = nextQuery.gte('created_at', new Date(filters.createdAfter).toISOString())
+  }
+  if (filters.createdBefore) {
+    nextQuery = nextQuery.lte('created_at', new Date(filters.createdBefore).toISOString())
+  }
+
+  return nextQuery
+}
+
+const buildReviewStats = (reviews: Array<{ pos_machine_id: string; rating: number }>): ReviewStatsMap => {
+  return reviews.reduce((stats, review) => {
+    const current = stats[review.pos_machine_id] || { ratingTotal: 0, reviewCount: 0 }
+    current.ratingTotal += review.rating
+    current.reviewCount += 1
+    stats[review.pos_machine_id] = current
+    return stats
+  }, {} as ReviewStatsMap)
+}
+
+const toMachineWithMetrics = (
+  machine: POSMachine,
+  reviewStats: ReviewStatsMap,
+  currentLocation: { longitude: number; latitude: number } | null
+): POSMachineWithMetrics => {
+  const stats = reviewStats[machine.id] || { ratingTotal: 0, reviewCount: 0 }
+  const avgRating = stats.reviewCount > 0 ? stats.ratingTotal / stats.reviewCount : 0
+
+  let distance = 0
+  if (currentLocation) {
+    distance = locationUtils.calculateDistance(
+      currentLocation,
+      { longitude: Number(machine.longitude), latitude: Number(machine.latitude) }
+    )
+  }
+
+  return {
+    ...machine,
+    longitude: Number(machine.longitude),
+    latitude: Number(machine.latitude),
+    avgRating,
+    distance,
+    reviewCount: stats.reviewCount,
+  }
+}
+
+const matchesClientFilters = (machine: POSMachineWithMetrics, filters: MapFilters) => {
+  if (filters.minRating !== undefined && machine.avgRating < filters.minRating) {
+    return false
+  }
+
+  if (filters.maxDistance !== undefined && machine.distance > filters.maxDistance) {
+    return false
+  }
+
+  if (filters.hasReviews === undefined) {
+    return true
+  }
+
+  return filters.hasReviews ? machine.reviewCount > 0 : machine.reviewCount === 0
 }
 
 export const useMapStore = create<MapState>((set, get) => ({
@@ -293,146 +463,8 @@ export const useMapStore = create<MapState>((set, get) => ({
       let query = supabase
         .from('pos_machines')
         .select('*')
-      
-      // 如果有搜索关键词，添加搜索条件（仅使用存在的字段，避免 400）
-      if (keyword) {
-        const normalized = keyword.toLowerCase()
-        query = query.or(
-          `merchant_name.ilike.%${normalized}%,` +
-          `address.ilike.%${normalized}%,` +
-          `basic_info->>model.ilike.%${normalized}%,` +
-          `basic_info->>acquiring_institution.ilike.%${normalized}%`
-        )
-      }
-
-      // 经纬度搜索（近似范围）
-      if (parsedQuery.coordinates) {
-        const { lat, lng } = parsedQuery.coordinates
-        const delta = 0.02 // 约 2km 范围
-        query = query
-          .gte('latitude', lat - delta)
-          .lte('latitude', lat + delta)
-          .gte('longitude', lng - delta)
-          .lte('longitude', lng + delta)
-      }
-
-      // 收单机构
-      if (parsedQuery.acquiringInstitution) {
-        query = query.ilike('basic_info->>acquiring_institution', `%${parsedQuery.acquiringInstitution}%`)
-      }
-
-      // 添加时间
-      if (parsedQuery.dateRange?.from) {
-        query = query.gte('created_at', parsedQuery.dateRange.from)
-      }
-      if (parsedQuery.dateRange?.to) {
-        query = query.lte('created_at', parsedQuery.dateRange.to)
-      }
-      
-      // 添加筛选条件
-      // 支付方式筛选
-      if (filters.supportsApplePay) {
-        query = query.eq('basic_info->>supports_apple_pay', true)
-      }
-      if (filters.supportsGooglePay) {
-        query = query.eq('basic_info->>supports_google_pay', true)
-      }
-      if (filters.supportsContactless) {
-        query = query.eq('basic_info->>supports_contactless', true)
-      }
-      if (filters.supportsHCE) {
-        query = query.eq('basic_info->>supports_hce', true)
-      }
-      
-      // 卡组织筛选
-      if (filters.supportsVisa) {
-        query = query.eq('basic_info->>supports_visa', true)
-      }
-      if (filters.supportsMastercard) {
-        query = query.eq('basic_info->>supports_mastercard', true)
-      }
-      if (filters.supportsUnionPay) {
-        query = query.eq('basic_info->>supports_unionpay', true)
-      }
-      if (filters.supportsAmex) {
-        query = query.eq('basic_info->>supports_amex', true)
-      }
-      if (filters.supportsJCB) {
-        query = query.eq('basic_info->>supports_jcb', true)
-      }
-      if (filters.supportsDiners) {
-        query = query.eq('basic_info->>supports_diners', true)
-      }
-      if (filters.supportsDiscover) {
-        query = query.eq('basic_info->>supports_discover', true)
-      }
-      
-      // 验证模式筛选
-      if (filters.supportsSmallAmountExemption) {
-        query = query.eq('basic_info->>supports_small_amount_exemption', true)
-      }
-      if (filters.supportsPinVerification) {
-        query = query.eq('basic_info->>supports_pin_verification', true)
-      }
-      if (filters.supportsSignatureVerification) {
-        query = query.eq('basic_info->>supports_signature_verification', true)
-      }
-      
-      // 收单模式筛选
-      if (filters.supportsDCC) {
-        query = query.eq('basic_info->>supports_dcc', true)
-      }
-      if (filters.supportsEDC) {
-        query = query.eq('basic_info->>supports_edc', true)
-      }
-      
-      // 其他筛选
-      if (filters.acquiringInstitution) {
-        query = query.ilike('basic_info->>acquiring_institution', `%${filters.acquiringInstitution}%`)
-      }
-      if (filters.posModel) {
-        query = query.ilike('basic_info->>model', `%${filters.posModel}%`)
-      }
-      
-      // 状态筛选
-      if (filters.status) {
-        query = query.eq('status', filters.status)
-      }
-      
-      // 收银位置筛选
-      if (filters.checkoutLocation) {
-        query = query.eq('basic_info->>checkout_location', filters.checkoutLocation)
-      }
-      
-      // 商户类型筛选
-      if (filters.merchantType) {
-        query = query.eq('merchant_info->>transaction_type', filters.merchantType)
-      }
-      
-      // 最低免密金额筛选
-      if (filters.minAmountNoPin !== undefined) {
-        query = query.gte('basic_info->>min_amount_no_pin', filters.minAmountNoPin)
-      }
-      if (filters.maxAmountNoPin !== undefined) {
-        query = query.lte('basic_info->>min_amount_no_pin', filters.maxAmountNoPin)
-      }
-      
-      // 是否有备注信息筛选
-      if (filters.hasRemarks !== undefined) {
-        if (filters.hasRemarks) {
-          query = query.not('remarks', 'is', null).neq('remarks', '')
-        } else {
-          query = query.or('remarks.is.null,remarks.eq.')
-        }
-      }
-      
-      // 创建时间筛选
-      if (filters.createdAfter) {
-        query = query.gte('created_at', new Date(filters.createdAfter).toISOString())
-      }
-      if (filters.createdBefore) {
-        query = query.lte('created_at', new Date(filters.createdBefore).toISOString())
-      }
+      query = applyParsedQueryFilters(query, parsedQuery, keyword)
+      query = applyServerFilters(query, filters)
       
       const { data: posMachines, error } = await query.order('created_at', { ascending: false })
 
@@ -449,64 +481,10 @@ export const useMapStore = create<MapState>((set, get) => ({
         .from('reviews')
         .select('pos_machine_id, rating')
       
-      // 计算每个POS机的平均评分和评价数量
-      const reviewStats = (reviewsData || []).reduce((acc, review) => {
-        if (!acc[review.pos_machine_id]) {
-          acc[review.pos_machine_id] = { ratings: [], count: 0 }
-        }
-        acc[review.pos_machine_id].ratings.push(review.rating)
-        acc[review.pos_machine_id].count++
-        return acc
-      }, {} as Record<string, { ratings: number[], count: number }>)
-      
-      const processedData = (posMachines || []).map(machine => {
-        const stats = reviewStats[machine.id] || { ratings: [], count: 0 }
-        const avgRating = stats.ratings.length > 0 
-          ? stats.ratings.reduce((sum, rating) => sum + rating, 0) / stats.ratings.length
-          : 0
-        const reviewCount = stats.count
-        
-        let distance = 0
-        if (currentLocation) {
-          distance = locationUtils.calculateDistance(
-            currentLocation,
-            { longitude: Number(machine.longitude), latitude: Number(machine.latitude) }
-          )
-        }
-        
-        return {
-          ...machine,
-          longitude: Number(machine.longitude),
-          latitude: Number(machine.latitude),
-          avgRating,
-          distance,
-          reviewCount,
-        }
-      }).filter(machine => {
-        // 应用客户端筛选（评分、距离、是否有评价）
-        
-        // 评分筛选
-        if (filters.minRating !== undefined && machine.avgRating < filters.minRating) {
-          return false
-        }
-        
-        // 距离筛选
-        if (filters.maxDistance !== undefined && machine.distance > filters.maxDistance) {
-          return false
-        }
-        
-        // 是否有评价筛选
-        if (filters.hasReviews !== undefined) {
-          if (filters.hasReviews && machine.reviewCount === 0) {
-            return false
-          }
-          if (!filters.hasReviews && machine.reviewCount > 0) {
-            return false
-          }
-        }
-        
-        return true
-      })
+      const reviewStats = buildReviewStats((reviewsData || []) as Array<{ pos_machine_id: string; rating: number }>)
+      const processedData = (posMachines || [])
+        .map((machine) => toMachineWithMetrics(machine as POSMachine, reviewStats, currentLocation))
+        .filter((machine) => matchesClientFilters(machine, filters))
       
       set({ posMachines: processedData })
     } catch (error) {

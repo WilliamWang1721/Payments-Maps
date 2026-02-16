@@ -3,90 +3,38 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Clock, MapPin, Sparkles, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { supabase } from '@/lib/supabase'
 import Loading from '@/components/ui/Loading'
-import { getErrorDetails, notify } from '@/lib/notify'
+import { notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { getPOSStatusMeta } from '@/lib/posStatus'
+import { posService, type HistoryWithPOS } from '@/services/posService'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
-interface HistoryWithPOS {
-  id: string
-  user_id: string
-  pos_machine_id: string
-  visited_at: string
-  created_at: string
-  pos_machines: {
-    id: string
-    merchant_name: string
-    address: string
-    latitude: number
-    longitude: number
-    basic_info: any
-    status: string
-    created_at: string
-  } | null
-}
+const HISTORY_FETCH_LIMIT = 100
 
 const History: React.FC = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const [history, setHistory] = useState<HistoryWithPOS[]>([])
-  const [loading, setLoading] = useState(true)
   const [showClearModal, setShowClearModal] = useState(false)
-  const [clearing, setClearing] = useState(false)
+  const { loading, run: runLoadHistory } = useAsyncAction(true)
+  const { loading: clearing, run: runClearHistory } = useAsyncAction()
+  const { loading: removingHistory, run: runRemoveHistory } = useAsyncAction()
 
   const loadHistory = useCallback(async () => {
     if (!user) return
 
-    try {
-      const { data, error } = await supabase
-        .from('user_history')
-        .select(`
-          id,
-          user_id,
-          pos_machine_id,
-          visited_at,
-          created_at,
-          pos_machines (
-            id,
-            merchant_name,
-            address,
-            latitude,
-            longitude,
-            basic_info,
-            status,
-            created_at
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('visited_at', { ascending: false })
-        .limit(100) // 限制显示最近100条记录
+    const historyData = await runLoadHistory(() => posService.listUserHistory(user.id, HISTORY_FETCH_LIMIT), {
+      logLabel: '加载浏览历史失败',
+      feedback: 'critical',
+      errorMessage: '加载失败，请重试',
+      errorTitle: '加载浏览历史失败',
+    })
 
-      if (error) {
-        console.error('加载浏览历史失败:', error)
-        notify.critical('加载失败，请重试', {
-          title: '加载浏览历史失败',
-          details: getErrorDetails(error),
-        })
-        return
-      }
-
-      // 处理数据结构，pos_machines可能是数组
-      const processedData = (data || []).map(item => ({
-        ...item,
-        pos_machines: Array.isArray(item.pos_machines) ? item.pos_machines[0] : item.pos_machines
-      }))
-      setHistory(processedData as HistoryWithPOS[])
-    } catch (error) {
-      console.error('加载浏览历史失败:', error)
-      notify.critical('加载失败，请重试', {
-        title: '加载浏览历史失败',
-        details: getErrorDetails(error),
-      })
-    } finally {
-      setLoading(false)
+    if (historyData !== null) {
+      setHistory(historyData)
     }
-  }, [user])
+  }, [runLoadHistory, user])
 
   useEffect(() => {
     if (user) {
@@ -101,49 +49,28 @@ const History: React.FC = () => {
   const clearAllHistory = async () => {
     if (!user) return
 
-    setClearing(true)
-    try {
-      const { error } = await supabase
-        .from('user_history')
-        .delete()
-        .eq('user_id', user.id)
+    const cleared = await runClearHistory(() => posService.clearUserHistory(user.id), {
+      logLabel: '清空历史记录失败',
+      feedback: 'error',
+      errorMessage: '清空失败，请重试',
+    })
+    if (cleared === null) return
 
-      if (error) {
-        console.error('清空历史记录失败:', error)
-        notify.error('清空失败，请重试')
-        return
-      }
-
-      notify.success('历史记录已清空')
-      setHistory([])
-      setShowClearModal(false)
-    } catch (error) {
-      console.error('清空历史记录失败:', error)
-      notify.error('清空失败，请重试')
-    } finally {
-      setClearing(false)
-    }
+    notify.success('历史记录已清空')
+    setHistory([])
+    setShowClearModal(false)
   }
 
   const removeHistoryItem = async (historyId: string, posName: string) => {
-    try {
-      const { error } = await supabase
-        .from('user_history')
-        .delete()
-        .eq('id', historyId)
+    const removed = await runRemoveHistory(() => posService.removeHistoryById(historyId), {
+      logLabel: '删除历史记录失败',
+      feedback: 'error',
+      errorMessage: '删除失败，请重试',
+    })
+    if (removed === null) return
 
-      if (error) {
-        console.error('删除历史记录失败:', error)
-        notify.error('删除失败，请重试')
-        return
-      }
-
-      notify.success(`已删除 "${posName}" 的访问记录`)
-      await loadHistory()
-    } catch (error) {
-      console.error('删除历史记录失败:', error)
-      notify.error('删除失败，请重试')
-    }
+    notify.success(`已删除 "${posName}" 的访问记录`)
+    await loadHistory()
   }
 
   const formatVisitTime = (visitedAt: string) => {
@@ -334,6 +261,7 @@ const History: React.FC = () => {
                       <div className="flex items-center gap-2 self-end sm:self-start">
                         <button
                           onClick={() => removeHistoryItem(historyItem.id, pos.merchant_name)}
+                          disabled={removingHistory}
                           className="h-11 w-11 rounded-xl border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all"
                           title="删除记录"
                         >

@@ -4,6 +4,7 @@ import { startAuthentication } from '@simplewebauthn/browser'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { signInWithGoogleSupabase, signInWithGitHubSupabase, signInWithMicrosoftSupabase } from '@/lib/supabase-auth'
+import { withCsrfHeaders } from '@/lib/csrf'
 import Button from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { getErrorDetails, notify } from '@/lib/notify'
@@ -102,7 +103,7 @@ const Login = () => {
       const email = passkeyEmail.trim().toLowerCase()
       const optionsRes = await fetch('/api/passkey/auth/options', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email })
       })
       const optionsData = await optionsRes.json().catch(() => ({}))
@@ -114,7 +115,7 @@ const Login = () => {
 
       const verifyRes = await fetch('/api/passkey/auth/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email, assertionResponse })
       })
       const verifyData = await verifyRes.json().catch(() => ({}))

@@ -7,6 +7,7 @@ import {
 } from '../_utils.js'
 import {
   applyApiSecurityHeaders,
+  ensureCsrfProtection,
   enforceRateLimit,
   ensureAllowedOrigin,
   getClientIp,
@@ -60,6 +61,10 @@ export default async function handler(req, res) {
   }
 
   if (!ensureAllowedOrigin(req, res, { allowNoOrigin: !isProduction })) {
+    return
+  }
+
+  if (!ensureCsrfProtection(req, res)) {
     return
   }
 

@@ -1,4 +1,58 @@
+import { timingSafeEqual } from 'node:crypto'
+
 const isProduction = process.env.NODE_ENV === 'production'
+const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+const SAME_SITE_FETCH_VALUES = new Set(['same-origin', 'same-site', 'none'])
+const DEFAULT_CSRF_COOKIE_NAME = 'payments_maps_csrf'
+const DEFAULT_CSRF_HEADER_NAME = 'x-csrf-token'
+
+const readHeader = (headers, name) => {
+  if (!headers) return ''
+  const direct = headers[name]
+  const fallback = headers[name.toLowerCase()]
+  const value = direct ?? fallback
+  if (Array.isArray(value)) {
+    return value[0] || ''
+  }
+  return typeof value === 'string' ? value : ''
+}
+
+const parseCookies = (cookieHeader) => {
+  if (typeof cookieHeader !== 'string' || !cookieHeader.trim()) {
+    return {}
+  }
+
+  return cookieHeader.split(';').reduce((acc, item) => {
+    const separatorIndex = item.indexOf('=')
+    if (separatorIndex <= 0) return acc
+    const key = item.slice(0, separatorIndex).trim()
+    if (!key) return acc
+    const rawValue = item.slice(separatorIndex + 1).trim()
+    try {
+      acc[key] = decodeURIComponent(rawValue)
+    } catch {
+      acc[key] = rawValue
+    }
+    return acc
+  }, {})
+}
+
+const safeCompare = (left, right) => {
+  if (typeof left !== 'string' || typeof right !== 'string') return false
+  if (!left || !right) return false
+
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false
+  }
+
+  try {
+    return timingSafeEqual(leftBuffer, rightBuffer)
+  } catch {
+    return false
+  }
+}
 
 const normalizeOrigin = (value) => {
   if (typeof value !== 'string' || !value.trim()) return null
@@ -94,6 +148,35 @@ export const ensureAllowedOrigin = (req, res, options = {}) => {
 
   res.status(403).json({ error: 'Origin is not allowed' })
   return false
+}
+
+export const ensureCsrfProtection = (req, res, options = {}) => {
+  const {
+    cookieName = DEFAULT_CSRF_COOKIE_NAME,
+    headerName = DEFAULT_CSRF_HEADER_NAME
+  } = options
+
+  const method = String(req.method || 'GET').toUpperCase()
+  if (SAFE_HTTP_METHODS.has(method)) {
+    return true
+  }
+
+  const secFetchSite = readHeader(req.headers, 'sec-fetch-site').toLowerCase()
+  if (secFetchSite && !SAME_SITE_FETCH_VALUES.has(secFetchSite)) {
+    res.status(403).json({ error: 'CSRF validation failed' })
+    return false
+  }
+
+  const cookies = parseCookies(readHeader(req.headers, 'cookie'))
+  const headerToken = readHeader(req.headers, headerName).trim()
+  const cookieToken = typeof cookies[cookieName] === 'string' ? cookies[cookieName].trim() : ''
+
+  if (!safeCompare(cookieToken, headerToken)) {
+    res.status(403).json({ error: 'CSRF token validation failed' })
+    return false
+  }
+
+  return true
 }
 
 const getGlobalRateLimitStore = () => {

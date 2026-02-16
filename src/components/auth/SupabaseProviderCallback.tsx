@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase, type User } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { useAuthStore } from '@/stores/useAuthStore'
 import FullScreenLoading from '@/components/ui/FullScreenLoading'
+import type { User } from '@/types'
 
 interface SupabaseProviderCallbackProps {
   providerName: string

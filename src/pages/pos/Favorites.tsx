@@ -1,113 +1,41 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Star, Heart, Clock } from 'lucide-react'
+import { ArrowLeft, MapPin, Heart, Clock } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { supabase, type POSMachine } from '@/lib/supabase'
-import { getErrorDetails, notify } from '@/lib/notify'
+import { notify } from '@/lib/notify'
 import { getPOSStatusDotClass, getPOSStatusLabel } from '@/lib/posStatus'
 import FullScreenLoading from '@/components/ui/FullScreenLoading'
-
-interface FavoriteWithPOS {
-  id: string
-  user_id: string
-  pos_id: string
-  created_at: string
-  pos_machines: {
-    id: string
-    merchant_name: string
-    address: string
-    latitude: number
-    longitude: number
-    basic_info: any
-    status: string
-    created_at: string
-  } | null
-}
+import { useUserPOSStore } from '@/stores/useUserPOSStore'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 const Favorites: React.FC = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const [favorites, setFavorites] = useState<FavoriteWithPOS[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const loadFavorites = useCallback(async () => {
-    if (!user) return
-
-    try {
-      const { data, error } = await supabase
-        .from('user_favorites')
-        .select(`
-          id,
-          user_id,
-          pos_id,
-          created_at,
-          pos_machines (
-            id,
-            merchant_name,
-            address,
-            latitude,
-            longitude,
-            basic_info,
-            status,
-            created_at
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('加载收藏列表失败:', error)
-        notify.critical('加载失败，请重试', {
-          title: '加载收藏列表失败',
-          details: getErrorDetails(error),
-        })
-        return
-      }
-
-      // 处理数据结构，pos_machines可能是数组
-      const processedData = (data || []).map(item => ({
-        ...item,
-        pos_machines: Array.isArray(item.pos_machines) ? item.pos_machines[0] : item.pos_machines
-      }))
-      setFavorites(processedData as FavoriteWithPOS[])
-    } catch (error) {
-      console.error('加载收藏列表失败:', error)
-      notify.critical('加载失败，请重试', {
-        title: '加载收藏列表失败',
-        details: getErrorDetails(error),
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [user])
+  const favorites = useUserPOSStore((state) => state.favorites)
+  const loading = useUserPOSStore((state) => state.favoritesLoading)
+  const loadFavorites = useUserPOSStore((state) => state.loadFavorites)
+  const removeFavoriteById = useUserPOSStore((state) => state.removeFavorite)
+  const resetUserPOSState = useUserPOSStore((state) => state.reset)
+  const { loading: removingFavorite, run: runRemoveFavorite } = useAsyncAction()
 
   useEffect(() => {
     if (user) {
-      void loadFavorites()
+      void loadFavorites(user.id)
     } else {
+      resetUserPOSState()
       navigate('/login')
     }
-  }, [loadFavorites, navigate, user])
+  }, [loadFavorites, navigate, resetUserPOSState, user])
 
   const removeFavorite = async (favoriteId: string, posName: string) => {
-    try {
-      const { error } = await supabase
-        .from('user_favorites')
-        .delete()
-        .eq('id', favoriteId)
-
-      if (error) {
-        console.error('取消收藏失败:', error)
-        notify.error('取消收藏失败，请重试')
-        return
-      }
-
-      notify.success(`已取消收藏 "${posName}"`)
-      await loadFavorites()
-    } catch (error) {
-      console.error('取消收藏失败:', error)
-      notify.error('取消收藏失败，请重试')
-    }
+    const removed = await runRemoveFavorite(() => removeFavoriteById(favoriteId), {
+      logLabel: '取消收藏失败',
+      feedback: 'critical',
+      errorMessage: '取消收藏失败，请重试',
+      errorTitle: '取消收藏失败',
+    })
+    if (removed === null) return
+    notify.success(`已取消收藏 "${posName}"`)
   }
 
   if (loading) {
@@ -153,6 +81,7 @@ const Favorites: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {favorites.map((favorite) => {
               const pos = favorite.pos_machines
+              if (!pos) return null
               return (
                 <div key={favorite.id} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                   <div className="p-6">
@@ -164,6 +93,7 @@ const Favorites: React.FC = () => {
                       </div>
                       <button
                         onClick={() => removeFavorite(favorite.id, pos.merchant_name)}
+                        disabled={removingFavorite}
                         className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="取消收藏"
                       >

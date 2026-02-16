@@ -1,15 +1,15 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Filter, Grid, List, Globe, Calendar, Plus, Trash2, User, FileText, Building, Tag, Settings } from 'lucide-react';
-import { Brand, BrandCategory, BrandBusinessType, BrandFilterOptions } from '../types/brands';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../stores/useAuthStore';
-import AnimatedCard from '../components/ui/AnimatedCard';
-import AnimatedInput from '../components/ui/AnimatedInput';
-import Checkbox from '../components/ui/Checkbox';
-import AnimatedModal from '../components/ui/AnimatedModal';
-import PageTransition from '../components/PageTransition';
-import AddBrandModal from '../components/AddBrandModal';
-import { getErrorDetails, notify } from '../lib/notify';
+import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { Search, Filter, Grid, List, Globe, Calendar, Plus, Trash2, User, FileText, Building, Tag, Settings } from 'lucide-react'
+import { Brand, BrandCategory, BrandBusinessType, BrandFilterOptions } from '@/types/brands'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/useAuthStore'
+import AnimatedCard from '@/components/ui/AnimatedCard'
+import AnimatedInput from '@/components/ui/AnimatedInput'
+import Checkbox from '@/components/ui/Checkbox'
+import AnimatedModal from '@/components/ui/AnimatedModal'
+import PageTransition from '@/components/PageTransition'
+import AddBrandModal from '@/components/AddBrandModal'
+import { getErrorDetails, notify } from '@/lib/notify'
 
 const Brands: React.FC = () => {
   const { user } = useAuthStore();

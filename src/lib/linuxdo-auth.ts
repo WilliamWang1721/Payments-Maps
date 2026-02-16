@@ -3,7 +3,7 @@
 
 import { completeLinuxDOAuth, startLinuxDOAuth, type LinuxDOUserInfo } from './linuxdo-oauth'
 import { syncLinuxDOUserToSupabase } from './supabase-auth'
-import { type User } from './supabase'
+import type { User } from '@/types'
 
 // Convert LinuxDO user to application user format
 export function convertLinuxDOUserToAppUser(linuxdoUser: LinuxDOUserInfo): User {

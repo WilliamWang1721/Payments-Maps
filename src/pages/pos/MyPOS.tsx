@@ -1,90 +1,53 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Star, Clock, Edit, Trash2, Plus } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Edit, Trash2, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { supabase, type POSMachine } from '@/lib/supabase'
-import { getErrorDetails, notify } from '@/lib/notify'
+import { notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { getPOSStatusDotClass, getPOSStatusLabel } from '@/lib/posStatus'
 import FullScreenLoading from '@/components/ui/FullScreenLoading'
+import type { POSMachine } from '@/types'
+import { useUserPOSStore } from '@/stores/useUserPOSStore'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 const MyPOS: React.FC = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const [posMachines, setPOSMachines] = useState<POSMachine[]>([])
-  const [loading, setLoading] = useState(true)
+  const posMachines = useUserPOSStore((state) => state.myPOSMachines)
+  const loading = useUserPOSStore((state) => state.myPOSLoading)
+  const loadMyPOSMachines = useUserPOSStore((state) => state.loadMyPOSMachines)
+  const removeMyPOSMachine = useUserPOSStore((state) => state.removeMyPOSMachine)
+  const resetUserPOSState = useUserPOSStore((state) => state.reset)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedPOS, setSelectedPOS] = useState<POSMachine | null>(null)
-  const [deleting, setDeleting] = useState(false)
-
-  const loadMyPOSMachines = useCallback(async () => {
-    if (!user) return
-
-    try {
-      const { data, error } = await supabase
-        .from('pos_machines')
-        .select('*')
-        .eq('created_by', user.id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('加载我的POS机失败:', error)
-        notify.critical('加载失败，请重试', {
-          title: '加载我的 POS 机失败',
-          details: getErrorDetails(error),
-        })
-        return
-      }
-
-      setPOSMachines(data || [])
-    } catch (error) {
-      console.error('加载我的POS机失败:', error)
-      notify.critical('加载失败，请重试', {
-        title: '加载我的 POS 机失败',
-        details: getErrorDetails(error),
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [user])
+  const { loading: deleting, run: runDeletePOS } = useAsyncAction()
 
   useEffect(() => {
     if (user) {
-      void loadMyPOSMachines()
+      void loadMyPOSMachines(user.id)
     } else {
+      resetUserPOSState()
       navigate('/login')
     }
-  }, [loadMyPOSMachines, navigate, user])
+  }, [loadMyPOSMachines, navigate, resetUserPOSState, user])
 
   useBodyScrollLock(showDeleteModal, { includeHtml: true })
 
   const handleDelete = async () => {
     if (!selectedPOS) return
 
-    setDeleting(true)
-    try {
-      const { error } = await supabase
-        .from('pos_machines')
-        .delete()
-        .eq('id', selectedPOS.id)
+    const removed = await runDeletePOS(() => removeMyPOSMachine(selectedPOS.id), {
+      logLabel: '删除POS机失败',
+      feedback: 'critical',
+      errorMessage: '删除失败，请重试',
+      errorTitle: '删除 POS 机失败',
+    })
+    if (removed === null) return
 
-      if (error) {
-        console.error('删除POS机失败:', error)
-        notify.error('删除失败，请重试')
-        return
-      }
-
-      notify.success('POS机已删除')
-      setShowDeleteModal(false)
-      setSelectedPOS(null)
-      await loadMyPOSMachines()
-    } catch (error) {
-      console.error('删除POS机失败:', error)
-      notify.error('删除失败，请重试')
-    } finally {
-      setDeleting(false)
-    }
+    notify.success('POS机已删除')
+    setShowDeleteModal(false)
+    setSelectedPOS(null)
   }
 
   if (loading) {

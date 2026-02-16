@@ -1,4 +1,4 @@
-import type { POSMachine } from '@/lib/supabase'
+import type { POSMachine } from '@/types'
 
 export interface AttemptRefreshSource {
   id: string

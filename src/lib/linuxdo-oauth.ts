@@ -1,5 +1,6 @@
 // LinuxDO OAuth 2.0 Authentication
 // Based on https://connect.linux.do documentation
+import { withCsrfHeaders } from '@/lib/csrf'
 
 export interface LinuxDOUserInfo {
   id: number
@@ -67,10 +68,10 @@ export async function getLinuxDOAccessToken(code: string): Promise<LinuxDOTokenR
     // 使用我们的API代理端点而不是直接调用LinuxDO API
     const response = await fetch('/api/linuxdo/token', {
       method: 'POST',
-      headers: {
+      headers: withCsrfHeaders({
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-      },
+      }),
       body: JSON.stringify({
         code: code,
         clientId: linuxdoConfig.clientId,
@@ -100,10 +101,10 @@ export async function getLinuxDOUserInfo(accessToken: string): Promise<LinuxDOUs
     // 使用我们的API代理端点
     const response = await fetch('/api/linuxdo/userinfo', {
       method: 'GET',
-      headers: {
+      headers: withCsrfHeaders({
         'Authorization': `Bearer ${accessToken}`,
         'Accept': 'application/json'
-      }
+      })
     })
 
     if (!response.ok) {
