@@ -2,14 +2,21 @@ import { handleError, requireAuth } from './_utils.js'
 import {
   applyApiSecurityHeaders,
   enforceRateLimit,
+  ensureAllowedOrigin,
   getClientIp
 } from '../_security.js'
+
+const isProduction = process.env.NODE_ENV === 'production'
 
 export default async function handler(req, res) {
   applyApiSecurityHeaders(req, res)
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!ensureAllowedOrigin(req, res, { allowNoOrigin: !isProduction })) {
+    return
   }
 
   const authContext = await requireAuth(req, res)
