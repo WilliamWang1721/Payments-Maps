@@ -1,10 +1,9 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import React, { Suspense } from 'react'
+import { createBrowserRouter, Navigate, redirect } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import React, { Suspense } from 'react'
 import RouteError from '@/components/RouteError'
 
-// Dynamically import pages
 const Home = React.lazy(() => import('@/pages/Home'))
 const Map = React.lazy(() => import('@/pages/Map'))
 const List = React.lazy(() => import('@/pages/List'))
@@ -17,33 +16,32 @@ const GoogleCallback = React.lazy(() => import('@/components/GoogleCallback'))
 const GitHubCallback = React.lazy(() => import('@/pages/auth/GitHubCallback'))
 const MicrosoftCallback = React.lazy(() => import('@/pages/auth/MicrosoftCallback'))
 const LinuxDOCallback = React.lazy(() => import('@/pages/auth/LinuxDOCallback'))
-// const GoogleTest = React.lazy(() => import('@/pages/GoogleTest'))  // 文件不存在，暂时注释
 const AddPOS = React.lazy(() => import('@/pages/AddPOS'))
 const EditPOS = React.lazy(() => import('@/pages/EditPOS'))
 const Brands = React.lazy(() => import('@/pages/Brands'))
 const RoleManagement = React.lazy(() => import('@/pages/RoleManagement'))
-// const DebugRole = React.lazy(() => import('@/pages/DebugRole'))  // 文件不存在，暂时注释
-// const SupabaseTest = React.lazy(() => import('@/pages/SupabaseTest'))  // 文件不存在，暂时注释
 const MyPOS = React.lazy(() => import('@/pages/MyPOS'))
 const Favorites = React.lazy(() => import('@/pages/Favorites'))
 const Notifications = React.lazy(() => import('@/pages/Notifications'))
 const History = React.lazy(() => import('@/pages/History'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
-const Management = React.lazy(() => import('@/pages/Management'))
 const OnboardingFlow = React.lazy(() => import('@/components/OnboardingFlow'))
 const Drafts = React.lazy(() => import('@/pages/Drafts'))
-// const SmartWelcome = React.lazy(() => import('@/components/SmartWelcome')) // removed
 const HelpCenter = React.lazy(() => import('@/pages/HelpCenter'))
 const LandingPage = React.lazy(() => import('@/pages/LandingPage'))
 const MCPSettings = React.lazy(() => import('@/pages/MCPSettings'))
-// Fallback component for Suspense
-const Loading = () => <div>Loading...</div>
+
+const loadingFallback = <div>Loading...</div>
+
+const withSuspense = (element: React.ReactElement) => {
+  return <Suspense fallback={loadingFallback}>{element}</Suspense>
+}
 
 export const router = createBrowserRouter([
   {
     path: '/',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><LandingPage /></Suspense>,
+    element: withSuspense(<LandingPage />),
   },
   {
     path: '/app',
@@ -60,136 +58,119 @@ export const router = createBrowserRouter([
       },
       {
         path: 'home',
-        element: <Suspense fallback={<Loading />}><Home /></Suspense>,
+        element: withSuspense(<Home />),
       },
       {
         path: 'map',
-        element: <Suspense fallback={<Loading />}><Map /></Suspense>,
+        element: withSuspense(<Map />),
       },
       {
         path: 'list',
-        element: <Suspense fallback={<Loading />}><List /></Suspense>,
+        element: withSuspense(<List />),
       },
       {
         path: 'card-album',
-        element: <Suspense fallback={<Loading />}><CardAlbum /></Suspense>,
+        element: withSuspense(<CardAlbum />),
       },
       {
         path: 'brands',
-        element: <Suspense fallback={<Loading />}><Brands /></Suspense>,
+        element: withSuspense(<Brands />),
       },
       {
         path: 'pos/:id',
-        element: <Suspense fallback={<Loading />}><POSDetail /></Suspense>,
+        element: withSuspense(<POSDetail />),
       },
       {
         path: 'pos-detail/:id',
-        element: <Suspense fallback={<Loading />}><POSDetail /></Suspense>,
+        loader: ({ params }) => redirect(params.id ? `/app/pos/${params.id}` : '/app/map'),
       },
       {
         path: 'add-pos',
-        element: <Suspense fallback={<Loading />}><AddPOS /></Suspense>,
+        element: withSuspense(<AddPOS />),
       },
       {
         path: 'edit-pos/:id',
-        element: <Suspense fallback={<Loading />}><EditPOS /></Suspense>,
+        element: withSuspense(<EditPOS />),
       },
       {
         path: 'profile',
-        element: <Suspense fallback={<Loading />}><Profile /></Suspense>,
+        element: withSuspense(<Profile />),
       },
       {
         path: 'mcp-settings',
-        element: <Suspense fallback={<Loading />}><MCPSettings /></Suspense>,
+        element: withSuspense(<MCPSettings />),
       },
       {
         path: 'management',
-        element: <Suspense fallback={<Loading />}><RoleManagement /></Suspense>,
+        element: withSuspense(<RoleManagement />),
       },
       {
         path: 'role-management',
-        element: <Navigate to="/app/management" replace />,
+        loader: () => redirect('/app/management'),
       },
-      // {
-      //   path: 'debug-role',
-      //   element: <Suspense fallback={<Loading />}><DebugRole /></Suspense>,
-      // },
-      // {
-      //   path: 'supabase-test',
-      //   element: <Suspense fallback={<Loading />}><SupabaseTest /></Suspense>,
-      // },
       {
         path: 'my-pos',
-        element: <Suspense fallback={<Loading />}><MyPOS /></Suspense>,
+        element: withSuspense(<MyPOS />),
       },
       {
         path: 'favorites',
-        element: <Suspense fallback={<Loading />}><Favorites /></Suspense>,
+        element: withSuspense(<Favorites />),
       },
       {
         path: 'drafts',
-        element: <Suspense fallback={<Loading />}><Drafts /></Suspense>,
+        element: withSuspense(<Drafts />),
       },
       {
         path: 'history',
-        element: <Suspense fallback={<Loading />}><History /></Suspense>,
+        element: withSuspense(<History />),
       },
       {
         path: 'notifications',
-        element: <Suspense fallback={<Loading />}><Notifications /></Suspense>,
+        element: withSuspense(<Notifications />),
       },
       {
         path: 'settings',
-        element: <Suspense fallback={<Loading />}><Settings /></Suspense>,
-      },
-      {
-        path: 'management',
-        element: <Suspense fallback={<Loading />}><Management /></Suspense>,
+        element: withSuspense(<Settings />),
       },
       {
         path: 'help',
-        element: <Suspense fallback={<Loading />}><HelpCenter /></Suspense>,
+        element: withSuspense(<HelpCenter />),
       },
     ],
   },
   {
     path: '/onboarding',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><OnboardingFlow /></Suspense>,
+    element: withSuspense(<OnboardingFlow />),
   },
-  // removed: /welcome route for SmartWelcome
   {
     path: '/login',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><Login /></Suspense>,
+    element: withSuspense(<Login />),
   },
   {
     path: '/auth/callback',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><AuthCallback /></Suspense>,
+    element: withSuspense(<AuthCallback />),
   },
   {
     path: '/auth/google/callback',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><GoogleCallback /></Suspense>,
+    element: withSuspense(<GoogleCallback />),
   },
   {
     path: '/auth/github/callback',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><GitHubCallback /></Suspense>,
+    element: withSuspense(<GitHubCallback />),
   },
   {
     path: '/auth/microsoft/callback',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><MicrosoftCallback /></Suspense>,
+    element: withSuspense(<MicrosoftCallback />),
   },
   {
     path: '/auth/linuxdo/callback',
     errorElement: <RouteError />,
-    element: <Suspense fallback={<Loading />}><LinuxDOCallback /></Suspense>,
+    element: withSuspense(<LinuxDOCallback />),
   },
-  // {
-  //   path: '/google-test',
-  //   element: <Suspense fallback={<Loading />}><GoogleTest /></Suspense>,
-  // },
 ])

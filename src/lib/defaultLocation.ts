@@ -21,7 +21,7 @@ export const DEFAULT_LOCATION_OPTIONS: DefaultLocationOption[] = [
   { key: 'beijing', label: '北京', longitude: 116.407387, latitude: 39.904179 },
 ]
 
-const FALLBACK_LOCATION_KEY = 'guangzhou'
+const FALLBACK_LOCATION_KEY = 'beijing'
 const STORAGE_KEY = 'payments_maps_default_location_by_user_v1'
 
 const getStorage = () => {
