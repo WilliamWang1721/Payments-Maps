@@ -18,10 +18,10 @@
     "previous": "上一步",
     "close": "关闭",
     "open": "打开",
-    "view": "查看",
+    "view": "视图",
     "download": "下载",
     "upload": "上传",
-    "share": "分享",
+    "share": "份额",
     "copy": "复制",
     "paste": "粘贴",
     "cut": "剪切",
@@ -41,7 +41,7 @@
     "settings": "设置",
     "help": "帮助",
     "about": "关于",
-    "contact": "联系",
+    "contact": "联系人",
     "feedback": "反馈",
     "report": "报告",
     "support": "支持",
@@ -74,17 +74,17 @@
     "user": "用户",
     "admin": "管理员",
     "guest": "访客",
-    "member": "会员",
+    "member": "成员",
     "premium": "高级",
-    "free": "免费",
+    "free": "空闲",
     "paid": "付费",
-    "trial": "试用",
+    "trial": "试验",
     "demo": "演示",
     "beta": "测试版",
     "alpha": "内测版",
     "stable": "稳定版",
     "latest": "最新",
-    "new": "新建",
+    "new": "新",
     "old": "旧的",
     "recent": "最近",
     "popular": "热门",
@@ -129,11 +129,11 @@
     "private": "私有",
     "shared": "共享",
     "personal": "个人",
-    "business": "商务",
+    "business": "业务",
     "enterprise": "企业",
     "organization": "组织",
     "team": "团队",
-    "group": "群组",
+    "group": "组",
     "individual": "个人",
     "custom": "自定义",
     "default": "默认",
@@ -175,20 +175,19 @@
     "heading": "标题",
     "text": "文本",
     "message": "消息",
-    "notification": "通知",
     "alert": "警告",
     "warning": "警告",
     "info": "信息",
     "tip": "提示",
     "note": "注意",
     "comment": "评论",
-    "review": "评价",
+    "review": "回顾",
     "rating": "评分",
     "score": "分数",
     "rank": "排名",
     "level": "级别",
     "status": "状态",
-    "state": "状态",
+    "state": "州/省",
     "condition": "条件",
     "mode": "模式",
     "type": "类型",
@@ -210,13 +209,11 @@
     "quota": "配额",
     "usage": "使用量",
     "remaining": "剩余",
-    "available": "可用",
     "used": "已使用",
-    "free": "空闲",
     "busy": "忙碌",
     "idle": "空闲",
     "working": "工作中",
-    "processing": "处理中",
+    "processing": "处理",
     "pending": "待处理",
     "completed": "已完成",
     "failed": "失败",
@@ -226,7 +223,6 @@
     "invalid": "无效",
     "required": "必需",
     "optional": "可选",
-    "recommended": "推荐",
     "suggested": "建议",
     "preferred": "首选",
     "alternative": "替代",
@@ -272,11 +268,10 @@
     "address": "地址",
     "location": "位置",
     "position": "位置",
-    "place": "地点",
+    "place": "地方",
     "region": "地区",
     "country": "国家",
     "city": "城市",
-    "state": "州/省",
     "zip": "邮编",
     "postal": "邮政",
     "date": "日期",
@@ -314,7 +309,7 @@
     "percent": "百分比",
     "percentage": "百分比",
     "ratio": "比率",
-    "rate": "比率",
+    "rate": "费率",
     "speed": "速度",
     "frequency": "频率",
     "interval": "间隔",
@@ -339,7 +334,7 @@
     "job": "工作",
     "project": "项目",
     "workflow": "工作流",
-    "process": "流程",
+    "process": "过程",
     "procedure": "程序",
     "step": "步骤",
     "stage": "阶段",
@@ -373,12 +368,10 @@
     "answer": "答案",
     "response": "响应",
     "reply": "回复",
-    "feedback": "反馈",
     "input": "输入",
     "output": "输出",
     "data": "数据",
     "information": "信息",
-    "content": "内容",
     "value": "值",
     "parameter": "参数",
     "argument": "参数",
@@ -397,10 +390,9 @@
     "reboot": "重启",
     "maintenance": "维护",
     "service": "服务",
-    "support": "支持",
     "assistance": "协助",
     "guidance": "指导",
-    "instruction": "指令",
+    "instruction": "指导",
     "command": "命令",
     "control": "控制",
     "management": "管理",
@@ -409,7 +401,7 @@
     "function": "功能",
     "feature": "特性",
     "capability": "能力",
-    "performance": "性能",
+    "performance": "表现",
     "efficiency": "效率",
     "productivity": "生产力",
     "quality": "质量",
@@ -418,7 +410,6 @@
     "security": "安全",
     "safety": "安全",
     "protection": "保护",
-    "privacy": "隐私",
     "confidentiality": "机密性",
     "integrity": "完整性",
     "availability": "可用性",
@@ -432,11 +423,10 @@
     "portability": "可移植性",
     "maintainability": "可维护性",
     "testability": "可测试性",
-    "documentation": "文档",
     "specification": "规范",
-    "requirement": "需求",
+    "requirement": "要求",
     "design": "设计",
-    "architecture": "架构",
+    "architecture": "建筑",
     "structure": "结构",
     "framework": "框架",
     "library": "库",
@@ -454,12 +444,11 @@
     "wizard": "向导",
     "template": "模板",
     "theme": "主题",
-    "style": "样式",
+    "style": "风格",
     "layout": "布局",
     "format": "格式",
     "pattern": "模式",
     "protocol": "协议",
-    "standard": "标准",
     "convention": "约定",
     "guideline": "指南",
     "policy": "政策",
@@ -468,7 +457,6 @@
     "law": "法律",
     "compliance": "合规",
     "audit": "审计",
-    "review": "审查",
     "inspection": "检查",
     "validation": "验证",
     "verification": "验证",
@@ -497,13 +485,12 @@
     "enhancement": "增强",
     "optimization": "优化",
     "refinement": "改进",
-    "evolution": "演进",
-    "development": "开发",
+    "evolution": "演化",
+    "development": "发展",
     "progress": "进展",
     "advancement": "进步",
     "growth": "增长",
     "expansion": "扩展",
-    "extension": "扩展",
     "addition": "添加",
     "inclusion": "包含",
     "integration": "集成",
@@ -513,7 +500,6 @@
     "unification": "统一",
     "standardization": "标准化",
     "normalization": "规范化",
-    "organization": "组织",
     "arrangement": "安排",
     "coordination": "协调",
     "collaboration": "协作",
@@ -550,27 +536,22 @@
     "assertion": "断言",
     "confirmation": "确认",
     "acknowledgment": "确认",
-    "recognition": "识别",
+    "recognition": "认识",
     "identification": "识别",
     "detection": "检测",
-    "discovery": "发现",
     "finding": "发现",
     "observation": "观察",
-    "monitoring": "监控",
     "surveillance": "监视",
     "supervision": "监督",
     "oversight": "监督",
-    "management": "管理",
     "leadership": "领导",
     "direction": "方向",
-    "guidance": "指导",
     "coaching": "指导",
     "mentoring": "指导",
     "training": "培训",
     "education": "教育",
     "learning": "学习",
     "teaching": "教学",
-    "instruction": "指导",
     "demonstration": "演示",
     "presentation": "演示",
     "exhibition": "展示",
@@ -585,7 +566,7 @@
     "draft": "草稿",
     "sketch": "草图",
     "outline": "大纲",
-    "summary": "摘要",
+    "summary": "总结",
     "overview": "概述",
     "introduction": "介绍",
     "preface": "前言",
@@ -593,13 +574,11 @@
     "prologue": "序言",
     "epilogue": "结语",
     "conclusion": "结论",
-    "summary": "总结",
     "recap": "回顾",
-    "review": "回顾",
     "retrospective": "回顾",
     "reflection": "反思",
     "consideration": "考虑",
-    "thought": "思考",
+    "thought": "思想",
     "idea": "想法",
     "concept": "概念",
     "notion": "概念",
@@ -615,31 +594,23 @@
     "origin": "起源",
     "source": "来源",
     "beginning": "开始",
-    "start": "开始",
     "initiation": "启动",
     "commencement": "开始",
-    "launch": "启动",
     "kickoff": "启动",
-    "startup": "启动",
     "bootstrap": "引导",
     "initialization": "初始化",
-    "setup": "设置",
     "preparation": "准备",
     "planning": "规划",
     "strategy": "策略",
     "approach": "方法",
     "method": "方法",
     "technique": "技术",
-    "procedure": "程序",
-    "process": "过程",
-    "workflow": "工作流",
     "pipeline": "管道",
     "chain": "链",
     "sequence": "序列",
     "series": "系列",
     "set": "集合",
     "collection": "集合",
-    "group": "组",
     "cluster": "集群",
     "bundle": "捆绑",
     "package": "包",
@@ -649,22 +620,11 @@
     "enclosure": "附件",
     "attachment": "附件",
     "supplement": "补充",
-    "addition": "添加",
     "appendix": "附录",
     "annex": "附件",
-    "extension": "扩展",
-    "expansion": "扩展",
     "enlargement": "扩大",
     "increase": "增加",
-    "growth": "增长",
     "rise": "上升",
-    "improvement": "改进",
-    "enhancement": "增强",
-    "upgrade": "升级",
-    "advancement": "进步",
-    "progress": "进展",
-    "development": "发展",
-    "evolution": "演化",
     "transformation": "转换",
     "change": "变化",
     "modification": "修改",
@@ -675,25 +635,19 @@
     "personalization": "个性化",
     "individualization": "个性化",
     "specialization": "专业化",
-    "optimization": "优化",
-    "refinement": "精炼",
     "polishing": "抛光",
     "finishing": "完成",
     "completion": "完成",
     "finalization": "最终确定",
-    "conclusion": "结论",
     "termination": "终止",
     "ending": "结束",
     "closure": "关闭",
-    "shutdown": "关闭",
     "discontinuation": "停止",
     "cessation": "停止",
     "suspension": "暂停",
     "interruption": "中断",
     "break": "中断",
-    "pause": "暂停",
     "halt": "停止",
-    "stop": "停止",
     "freeze": "冻结",
     "lock": "锁定",
     "block": "阻止",
@@ -716,21 +670,20 @@
     "remind": "提醒",
     "notify": "通知",
     "inform": "通知",
-    "alert": "警告",
     "warn": "警告",
     "caution": "小心",
     "advise": "建议",
     "recommend": "推荐",
     "suggest": "建议",
     "propose": "提议",
-    "offer": "提供",
+    "offer": "优惠",
     "provide": "提供",
     "supply": "供应",
     "deliver": "交付",
     "give": "给予",
     "grant": "授予",
     "award": "奖励",
-    "present": "呈现",
+    "present": "现在",
     "gift": "礼物",
     "bonus": "奖金",
     "reward": "奖励",
@@ -739,7 +692,7 @@
     "medal": "奖章",
     "certificate": "证书",
     "diploma": "文凭",
-    "degree": "学位",
+    "degree": "程度",
     "qualification": "资格",
     "credential": "凭证",
     "authorization": "授权",
@@ -750,15 +703,11 @@
     "contract": "合同",
     "deal": "交易",
     "transaction": "交易",
-    "exchange": "交换",
     "trade": "贸易",
     "commerce": "商业",
-    "business": "业务",
-    "enterprise": "企业",
     "company": "公司",
     "corporation": "公司",
     "firm": "公司",
-    "organization": "组织",
     "institution": "机构",
     "establishment": "机构",
     "agency": "机构",
@@ -767,8 +716,6 @@
     "division": "部门",
     "section": "部分",
     "unit": "单位",
-    "team": "团队",
-    "group": "组",
     "squad": "小组",
     "crew": "团队",
     "staff": "员工",
@@ -776,11 +723,9 @@
     "workforce": "劳动力",
     "employee": "员工",
     "worker": "工人",
-    "member": "成员",
     "participant": "参与者",
     "contributor": "贡献者",
     "volunteer": "志愿者",
-    "helper": "助手",
     "supporter": "支持者",
     "advocate": "倡导者",
     "champion": "冠军",
@@ -807,7 +752,6 @@
     "professional": "专业人士",
     "technician": "技术员",
     "operator": "操作员",
-    "user": "用户",
     "client": "客户",
     "customer": "客户",
     "consumer": "消费者",
@@ -825,90 +769,57 @@
     "delegate": "代表",
     "ambassador": "大使",
     "spokesperson": "发言人",
-    "contact": "联系人",
     "reference": "参考",
-    "source": "来源",
     "resource": "资源",
     "asset": "资产",
     "property": "属性",
     "attribute": "属性",
     "characteristic": "特征",
-    "feature": "特性",
-    "quality": "质量",
     "trait": "特征",
     "aspect": "方面",
     "dimension": "维度",
     "factor": "因素",
-    "element": "元素",
-    "component": "组件",
     "part": "部分",
     "piece": "片段",
     "fragment": "片段",
     "segment": "段",
     "portion": "部分",
-    "share": "份额",
-    "percentage": "百分比",
     "proportion": "比例",
-    "ratio": "比率",
     "fraction": "分数",
     "decimal": "小数",
-    "number": "数字",
     "digit": "数字",
     "figure": "数字",
     "amount": "数量",
     "quantity": "数量",
     "volume": "体积",
-    "capacity": "容量",
+    "capacity": "能力",
     "size": "大小",
-    "scale": "规模",
+    "scale": "比例",
     "magnitude": "大小",
     "extent": "程度",
-    "degree": "程度",
-    "level": "级别",
     "grade": "等级",
-    "rank": "排名",
-    "position": "位置",
-    "place": "地方",
     "spot": "地点",
-    "location": "位置",
     "site": "站点",
     "venue": "场所",
     "facility": "设施",
     "building": "建筑",
-    "structure": "结构",
     "construction": "建设",
-    "architecture": "建筑",
-    "design": "设计",
-    "layout": "布局",
-    "arrangement": "安排",
-    "organization": "组织",
-    "order": "顺序",
-    "sequence": "序列",
-    "pattern": "模式",
-    "structure": "结构",
-    "format": "格式",
-    "style": "风格",
+    "order": "订单",
     "appearance": "外观",
     "look": "外观",
-    "view": "视图",
     "perspective": "视角",
     "angle": "角度",
-    "direction": "方向",
     "orientation": "方向",
     "alignment": "对齐",
     "balance": "平衡",
     "harmony": "和谐",
     "symmetry": "对称",
-    "proportion": "比例",
-    "scale": "比例",
     "contrast": "对比",
-    "comparison": "比较",
     "difference": "差异",
     "distinction": "区别",
     "variation": "变化",
     "diversity": "多样性",
     "variety": "多样性",
-    "range": "范围",
     "spectrum": "光谱",
     "scope": "范围",
     "coverage": "覆盖",
@@ -922,7 +833,6 @@
     "distance": "距离",
     "space": "空间",
     "area": "区域",
-    "region": "地区",
     "zone": "区域",
     "territory": "领土",
     "domain": "域",
@@ -936,10 +846,8 @@
     "currency": "货币",
     "cash": "现金",
     "payment": "付款",
-    "transaction": "交易",
     "purchase": "购买",
     "sale": "销售",
-    "order": "订单",
     "invoice": "发票",
     "receipt": "收据",
     "bill": "账单",
@@ -947,21 +855,15 @@
     "price": "价格",
     "fee": "费用",
     "charge": "收费",
-    "rate": "费率",
     "tax": "税",
     "discount": "折扣",
-    "offer": "优惠",
-    "deal": "交易",
     "promotion": "促销",
     "campaign": "活动",
     "event": "事件",
     "occasion": "场合",
-    "opportunity": "机会",
     "chance": "机会",
     "possibility": "可能性",
     "potential": "潜力",
-    "capability": "能力",
-    "capacity": "能力",
     "skill": "技能",
     "talent": "才能",
     "ability": "能力",
@@ -972,11 +874,9 @@
     "comprehension": "理解",
     "awareness": "意识",
     "consciousness": "意识",
-    "recognition": "认识",
     "realization": "实现",
     "achievement": "成就",
     "accomplishment": "成就",
-    "success": "成功",
     "victory": "胜利",
     "win": "赢",
     "triumph": "胜利",
@@ -985,7 +885,6 @@
     "loss": "损失",
     "failure": "失败",
     "mistake": "错误",
-    "error": "错误",
     "fault": "故障",
     "defect": "缺陷",
     "flaw": "缺陷",
@@ -997,8 +896,6 @@
     "effort": "努力",
     "work": "工作",
     "labor": "劳动",
-    "task": "任务",
-    "job": "工作",
     "duty": "职责",
     "responsibility": "责任",
     "obligation": "义务",
@@ -1008,9 +905,6 @@
     "warranty": "保修",
     "assurance": "保证",
     "insurance": "保险",
-    "protection": "保护",
-    "security": "安全",
-    "safety": "安全",
     "defense": "防御",
     "shield": "盾牌",
     "guard": "守卫",
@@ -1021,17 +915,13 @@
     "inspect": "检查",
     "examine": "检查",
     "test": "测试",
-    "trial": "试验",
     "experiment": "实验",
-    "research": "研究",
     "study": "研究",
-    "investigation": "调查",
     "inquiry": "询问",
     "question": "问题",
     "query": "查询",
     "request": "请求",
     "demand": "需求",
-    "requirement": "要求",
     "need": "需要",
     "want": "想要",
     "desire": "愿望",
@@ -1045,78 +935,32 @@
     "estimate": "估计",
     "calculation": "计算",
     "computation": "计算",
-    "processing": "处理",
-    "operation": "操作",
     "action": "行动",
     "activity": "活动",
     "behavior": "行为",
     "conduct": "行为",
-    "performance": "表现",
     "execution": "执行",
     "implementation": "实施",
-    "deployment": "部署",
-    "installation": "安装",
-    "setup": "设置",
-    "configuration": "配置",
-    "customization": "定制",
-    "adaptation": "适应",
-    "modification": "修改",
-    "adjustment": "调整",
-    "change": "变化",
-    "update": "更新",
-    "upgrade": "升级",
-    "improvement": "改进",
-    "enhancement": "增强",
-    "optimization": "优化",
-    "refinement": "改进",
-    "development": "发展",
-    "progress": "进展",
-    "advancement": "进步",
-    "evolution": "演化",
-    "growth": "增长",
-    "expansion": "扩展",
-    "extension": "扩展",
-    "addition": "添加",
-    "supplement": "补充",
     "complement": "补充",
-    "completion": "完成",
     "finish": "完成",
-    "end": "结束",
-    "conclusion": "结论",
-    "result": "结果",
-    "outcome": "结果",
-    "consequence": "后果",
-    "effect": "效果",
-    "impact": "影响",
     "influence": "影响",
     "significance": "重要性",
     "importance": "重要性",
     "relevance": "相关性",
-    "connection": "连接",
-    "relationship": "关系",
-    "association": "关联",
     "correlation": "相关性",
     "dependency": "依赖",
     "independence": "独立",
     "autonomy": "自主",
     "freedom": "自由",
     "liberty": "自由",
-    "choice": "选择",
-    "option": "选项",
-    "alternative": "替代",
-    "possibility": "可能性",
-    "opportunity": "机会",
-    "chance": "机会",
     "luck": "运气",
     "fortune": "财富",
     "fate": "命运",
     "destiny": "命运",
     "future": "未来",
     "past": "过去",
-    "present": "现在",
     "current": "当前",
     "existing": "现有",
-    "available": "可用",
     "accessible": "可访问",
     "reachable": "可达到",
     "obtainable": "可获得",
@@ -1145,11 +989,9 @@
     "crucial": "关键",
     "essential": "必要",
     "necessary": "必要",
-    "required": "必需",
     "mandatory": "强制",
     "compulsory": "强制",
     "obligatory": "义务",
-    "optional": "可选",
     "voluntary": "自愿",
     "automatic": "自动",
     "manual": "手动",
@@ -1161,7 +1003,7 @@
     "actual": "实际",
     "genuine": "真正",
     "authentic": "真实",
-    "original": "原始",
+    "original": "原创",
     "unique": "独特",
     "special": "特殊",
     "particular": "特定",
@@ -1170,7 +1012,6 @@
     "common": "常见",
     "ordinary": "普通",
     "normal": "正常",
-    "standard": "标准",
     "regular": "常规",
     "typical": "典型",
     "usual": "通常",
@@ -1205,34 +1046,18 @@
     "trendy": "时尚",
     "modern": "现代",
     "contemporary": "当代",
-    "current": "当前",
-    "recent": "最近",
-    "latest": "最新",
-    "new": "新",
     "fresh": "新鲜",
     "novel": "新颖",
     "innovative": "创新",
     "creative": "创造性",
-    "original": "原创",
     "inventive": "发明",
     "imaginative": "富有想象力",
     "artistic": "艺术",
     "aesthetic": "美学",
     "visual": "视觉",
     "graphic": "图形",
-    "design": "设计",
-    "style": "风格",
-    "theme": "主题",
-    "concept": "概念",
-    "idea": "想法",
-    "thought": "思想",
-    "notion": "概念",
     "impression": "印象",
     "perception": "感知",
-    "understanding": "理解",
-    "knowledge": "知识",
-    "information": "信息",
-    "data": "数据",
     "facts": "事实",
     "details": "详细信息",
     "specifics": "具体信息",
@@ -1301,284 +1126,296 @@
     "locating": "定位中…"
   },
   "smartWelcome": {
-      "title": "智能欢迎",
-      "subtitle": "为您提供个性化的支付体验",
-      "userType": {
-        "tourist": "游客",
-        "business": "商务人士",
-        "student": "学生",
-        "resident": "居民",
-        "unknown": "未知"
-      },
-      "location": {
-        "detected": "检测到位置",
-        "unknown": "位置未知",
-        "china": "中国"
-      },
-      "status": {
-        "firstTime": "首次使用",
-        "returning": "回访用户",
-        "experienced": "经验用户"
-      },
-      "recommendations": {
-        "title": "为您推荐",
-        "paymentMethods": "推荐支付方式",
-        "tutorials": "相关教程",
-        "tips": "实用提示"
-      },
-      "actions": {
-        "startOnboarding": "开始引导",
-        "skipToApp": "直接使用",
-        "viewHelp": "查看帮助",
-        "changeLanguage": "切换语言",
-        "exploreNow": "立即探索"
-      },
-      "languageSelection": {
-        "title": "选择您的语言",
-        "subtitle": "请选择您偏好的语言以获得最佳体验",
-        "continue": "继续"
-      },
-      "skipMessage": "您可以稍后在设置中更改这些选项"
+    "title": "智能欢迎",
+    "subtitle": "为您提供个性化的支付体验",
+    "userType": {
+      "tourist": "游客",
+      "business": "商务人士",
+      "student": "学生",
+      "resident": "居民",
+      "unknown": "未知"
     },
-    "onboardingFlow": {
-      "welcome": "欢迎使用支付地图",
-      "subtitle": "让我们帮助您快速上手中国的移动支付",
-      "steps": {
-        "language": "语言选择",
-        "userType": "用户类型",
-        "paymentIntro": "支付介绍",
-        "complete": "完成设置"
-      },
-      "languageSelection": {
-        "title": "选择您的语言",
-        "subtitle": "请选择您偏好的语言以获得最佳体验",
-        "languages": {
-          "en": "English",
-          "zh": "中文",
-          "ru": "Русский",
-          "de": "Deutsch"
-        }
-      },
-      "userTypeSelection": {
-        "title": "您是？",
-        "subtitle": "告诉我们您的身份，我们将为您提供个性化建议",
-        "types": {
-          "tourist": {
-            "title": "游客",
-            "description": "短期访问中国的旅行者"
-          },
-          "business": {
-            "title": "商务人士",
-            "description": "因商务目的访问中国"
-          },
-          "student": {
-            "title": "学生",
-            "description": "在中国学习的国际学生"
-          },
-          "resident": {
-            "title": "居民",
-            "description": "在中国长期居住"
-          }
-        }
-      },
-      "paymentIntroduction": {
-        "title": "中国移动支付介绍",
-        "subtitle": "了解在中国最常用的支付方式",
-        "methods": {
-          "alipay": {
-            "title": "支付宝",
-            "description": "中国最受欢迎的移动支付平台之一",
-            "features": ["扫码支付", "转账功能", "生活服务"]
-          },
-          "wechatPay": {
-            "title": "微信支付",
-            "description": "集成在微信中的便捷支付方式",
-            "features": ["社交支付", "红包功能", "小程序支付"]
-          },
-          "unionPay": {
-            "title": "银联",
-            "description": "中国的银行卡支付网络",
-            "features": ["银行卡支付", "国际通用", "ATM取现"]
-          }
-        },
-        "tips": {
-          "title": "支付小贴士",
-          "items": [
-            "大多数商店都接受移动支付",
-            "准备一些现金作为备用",
-            "下载官方应用程序",
-            "绑定您的银行卡或信用卡"
-          ]
-        }
-      },
-      "completion": {
-        "title": "设置完成！",
-        "subtitle": "您已准备好开始使用支付地图",
-        "summary": "您的设置摘要",
-        "nextSteps": {
-          "title": "接下来您可以：",
-          "items": [
-            "探索附近的支付友好商店",
-            "查看支付教程和指南",
-            "获取实时支付帮助",
-            "加入我们的用户社区"
-          ]
-        }
-      },
-      "navigation": {
-        "next": "下一步",
-        "previous": "上一步",
-        "skip": "跳过",
-        "finish": "完成",
-        "getStarted": "开始使用"
+    "location": {
+      "detected": "检测到位置",
+      "unknown": "位置未知",
+      "china": "中国"
+    },
+    "status": {
+      "firstTime": "首次使用",
+      "returning": "回访用户",
+      "experienced": "经验用户"
+    },
+    "recommendations": {
+      "title": "为您推荐",
+      "paymentMethods": "推荐支付方式",
+      "tutorials": "相关教程",
+      "tips": "实用提示"
+    },
+    "actions": {
+      "startOnboarding": "开始引导",
+      "skipToApp": "直接使用",
+      "viewHelp": "查看帮助",
+      "changeLanguage": "切换语言",
+      "exploreNow": "立即探索"
+    },
+    "languageSelection": {
+      "title": "选择您的语言",
+      "subtitle": "请选择您偏好的语言以获得最佳体验",
+      "continue": "继续"
+    },
+    "skipMessage": "您可以稍后在设置中更改这些选项"
+  },
+  "onboardingFlow": {
+    "welcome": "欢迎使用支付地图",
+    "subtitle": "让我们帮助您快速上手中国的移动支付",
+    "steps": {
+      "language": "语言选择",
+      "userType": "用户类型",
+      "paymentIntro": "支付介绍",
+      "complete": "完成设置"
+    },
+    "languageSelection": {
+      "title": "选择您的语言",
+      "subtitle": "请选择您偏好的语言以获得最佳体验",
+      "languages": {
+        "en": "English",
+        "zh": "中文",
+        "ru": "Русский",
+        "de": "Deutsch"
       }
     },
-    "helpCenter": {
-      "title": "帮助中心",
-      "search": {
-        "placeholder": "搜索帮助内容..."
-      },
-      "categories": {
-        "all": "全部",
-        "account": "账户设置",
-        "payment": "支付方式",
-        "app": "应用使用",
-        "security": "安全相关",
-        "troubleshooting": "问题排查",
-        "travel": "出行购物"
-      },
-      "quickActions": {
-        "onboarding": "新手引导",
-        "onboardingDesc": "从下载到完成实名认证的全流程教程",
-        "contact": "联系客服",
-        "contactDesc": "获取人工帮助与多语言支持",
-        "guides": "图文教程",
-        "guidesDesc": "按场景查看操作步骤与贴士",
-        "community": "用户社区",
-        "communityDesc": "分享使用经验"
-      },
-      "guides": {
-        "title": "图文教程",
-        "stepsTitle": "操作步骤",
-        "tipsTitle": "贴心提示",
-        "firstSteps": {
-          "title": "初次使用中国移动支付的四个步骤",
-          "description": "专为初到中国的外国用户设计，帮助您快速完成支付宝和微信支付的核心设置。",
-          "steps": [
-            "下载并安装支付宝与微信，使用常用邮箱或手机号注册账户。",
-            "准备护照、入境签证页以及中国手机号，用于完成实名认证。",
-            "在应用中绑定境内银行卡，或使用境外卡渠道完成绑定与换汇。",
-            "在支付地图中搜索常用商户，加入收藏并开启位置提醒。"
-          ],
-          "tips": [
-            "实名认证时请确保护照信息与填写内容完全一致，避免审核被退回。",
-            "若暂时没有中国银行卡，可优先开通支付宝国际钱包或微信旅行卡。"
-          ],
-          "estimatedTime": "预计完成时间：20-30分钟"
+    "userTypeSelection": {
+      "title": "您是？",
+      "subtitle": "告诉我们您的身份，我们将为您提供个性化建议",
+      "types": {
+        "tourist": {
+          "title": "游客",
+          "description": "短期访问中国的旅行者"
         },
-        "linkCard": {
-          "title": "境外银行卡绑定与支付限额说明",
-          "description": "了解常见境外卡绑定路径、费用结构与常见失败原因，确保顺利完成支付。",
-          "steps": [
-            "在支付宝或微信支付中选择“添加银行卡”，输入卡号与持卡人姓名。",
-            "按页面提示填写账单地址，建议与发卡行预留信息保持一致。",
-            "收到银行验证短信后输入验证码，完成双重验证。",
-            "查看每日与每笔支付限额，合理规划大额消费或提前充值。"
-          ],
-          "tips": [
-            "部分境外卡需要开通线上交易或跨境支付功能，请提前联系发卡行确认。",
-            "如多次验证失败，可尝试更换网络环境或避开高峰时段。"
-          ],
-          "estimatedTime": "预计完成时间：10-15分钟"
+        "business": {
+          "title": "商务人士",
+          "description": "因商务目的访问中国"
         },
-        "cityLife": {
-          "title": "在城市出行与消费中的支付技巧",
-          "description": "覆盖交通出行、餐饮购物等高频场景，帮助您灵活选择最合适的支付方式。",
-          "steps": [
-            "在支付地图中开启“交通出行”“连锁餐饮”等筛选标签，快速定位推荐商户。",
-            "提前在支付宝或微信中充值交通卡，或绑定公交码以免高峰期排队。",
-            "留意商户页面的“支持卡组织”提示，根据优惠选择 Visa、Mastercard 等卡片。",
-            "收藏常用线路与商户，开启到店提醒获取实时优惠。"
-          ],
-          "tips": [
-            "部分小型商户仍只收现金，建议随身准备少量人民币备用。",
-            "夜间乘坐出租车可使用支付宝“打车”或微信“出行服务”减少沟通成本。"
-          ],
-          "estimatedTime": "预计阅读时间：5分钟"
+        "student": {
+          "title": "学生",
+          "description": "在中国学习的国际学生"
+        },
+        "resident": {
+          "title": "居民",
+          "description": "在中国长期居住"
         }
-      },
-      "videos": {
-        "title": "视频教程",
-        "alipayGuide": {
-          "title": "支付宝完整使用指南",
-          "description": "从注册到日常使用的完整教程"
-        },
-        "wechatGuide": {
-          "title": "微信支付使用教程",
-          "description": "学习如何在微信中设置和使用支付功能"
-        },
-        "appGuide": {
-          "title": "支付地图应用使用指南",
-          "description": "了解如何使用我们的应用找到支付友好的商店"
-        },
-        "cityTravel": {
-          "title": "城市出行支付攻略",
-          "description": "掌握乘车码、地铁闸机与出租车场景的支付技巧"
-        }
-      },
-      "faq": {
-        "title": "常见问题",
-        "alipaySetup": {
-          "question": "如何设置支付宝？",
-          "answer": "下载支付宝应用后，使用手机号注册账户，按照页面提示上传护照信息完成实名认证，再绑定银行卡或选择国际钱包即可开始使用。"
+      }
+    },
+    "paymentIntroduction": {
+      "title": "中国移动支付介绍",
+      "subtitle": "了解在中国最常用的支付方式",
+      "methods": {
+        "alipay": {
+          "title": "支付宝",
+          "description": "中国最受欢迎的移动支付平台之一",
+          "features": [
+            "扫码支付",
+            "转账功能",
+            "生活服务"
+          ]
         },
         "wechatPay": {
-          "question": "微信支付如何使用？",
-          "answer": "在微信中进入“我”-“支付”，添加银行卡并设置支付密码，即可在支持微信支付的商户扫码付款。"
+          "title": "微信支付",
+          "description": "集成在微信中的便捷支付方式",
+          "features": [
+            "社交支付",
+            "红包功能",
+            "小程序支付"
+          ]
         },
-        "findStores": {
-          "question": "如何找到支持移动支付的商店？",
-          "answer": "使用地图功能查看附近支持支付宝、微信支付等移动支付方式的商店，以及它们的位置和详细信息。"
-        },
-        "security": {
-          "question": "移动支付安全吗？",
-          "answer": "移动支付采用多重安全措施，包括密码保护、指纹识别、人脸识别等，比现金支付更加安全。"
-        },
-        "realName": {
-          "question": "护照实名认证失败怎么办？",
-          "answer": "请确认上传的护照照片清晰、未被遮挡，并使用本人持有的中国大陆手机号。如仍未通过，可联系平台人工客服进行复核。"
-        },
-        "cardLimit": {
-          "question": "境外银行卡如何设置支付限额？",
-          "answer": "在绑定境外卡后，可在“卡片管理”页面查看平台与发卡行的限额说明。若需提高限额，请联系发卡行开通更高的线上交易额度，或选择提前充值到余额。"
-        },
-        "filter": {
-          "question": "如何在地图中筛选支持特定卡组织的商户？",
-          "answer": "在地图页面打开筛选面板，勾选“卡组织”标签（如 Visa、Mastercard 或 American Express），并可结合“优惠活动”等条件共同筛选。"
-        },
-        "failedPayment": {
-          "question": "支付失败常见原因有哪些？",
-          "answer": "请检查网络连接是否稳定、账户余额是否充足、卡片是否在有效期内。若出现“风控限制”，可尝试更换网络或联系发卡行确认跨境交易权限。"
-        },
-        "transport": {
-          "question": "在公共交通场景中如何使用移动支付？",
-          "answer": "可在支付宝开通“乘车码”或在微信进入“出行服务”，按照城市提示选择交通卡。进站前提前打开二维码或刷 NFC，支持扫码过闸的城市可直接出示二维码。"
+        "unionPay": {
+          "title": "银联",
+          "description": "中国的银行卡支付网络",
+          "features": [
+            "银行卡支付",
+            "国际通用",
+            "ATM取现"
+          ]
         }
       },
-      "feedback": {
-        "helpful": "这个回答对您有帮助吗？",
-        "thanks": "感谢您的反馈！"
-      },
-      "contact": {
-        "message": "客服功能即将上线，敬请期待！"
-      },
-      "noResults": {
-        "title": "没有找到相关内容",
-        "description": "尝试使用不同的关键词搜索，或联系客服获取帮助",
-        "contact": "联系客服"
+      "tips": {
+        "title": "支付小贴士",
+        "items": [
+          "大多数商店都接受移动支付",
+          "准备一些现金作为备用",
+          "下载官方应用程序",
+          "绑定您的银行卡或信用卡"
+        ]
+      }
+    },
+    "completion": {
+      "title": "设置完成！",
+      "subtitle": "您已准备好开始使用支付地图",
+      "summary": "您的设置摘要",
+      "nextSteps": {
+        "title": "接下来您可以：",
+        "items": [
+          "探索附近的支付友好商店",
+          "查看支付教程和指南",
+          "获取实时支付帮助",
+          "加入我们的用户社区"
+        ]
       }
     },
     "navigation": {
+      "next": "下一步",
+      "previous": "上一步",
+      "skip": "跳过",
+      "finish": "完成",
+      "getStarted": "开始使用"
+    }
+  },
+  "helpCenter": {
+    "title": "帮助中心",
+    "search": {
+      "placeholder": "搜索帮助内容..."
+    },
+    "categories": {
+      "all": "全部",
+      "account": "账户设置",
+      "payment": "支付方式",
+      "app": "应用使用",
+      "security": "安全相关",
+      "troubleshooting": "问题排查",
+      "travel": "出行购物"
+    },
+    "quickActions": {
+      "onboarding": "新手引导",
+      "onboardingDesc": "从下载到完成实名认证的全流程教程",
+      "contact": "联系客服",
+      "contactDesc": "获取人工帮助与多语言支持",
+      "guides": "图文教程",
+      "guidesDesc": "按场景查看操作步骤与贴士",
+      "community": "用户社区",
+      "communityDesc": "分享使用经验"
+    },
+    "guides": {
+      "title": "图文教程",
+      "stepsTitle": "操作步骤",
+      "tipsTitle": "贴心提示",
+      "firstSteps": {
+        "title": "初次使用中国移动支付的四个步骤",
+        "description": "专为初到中国的外国用户设计，帮助您快速完成支付宝和微信支付的核心设置。",
+        "steps": [
+          "下载并安装支付宝与微信，使用常用邮箱或手机号注册账户。",
+          "准备护照、入境签证页以及中国手机号，用于完成实名认证。",
+          "在应用中绑定境内银行卡，或使用境外卡渠道完成绑定与换汇。",
+          "在支付地图中搜索常用商户，加入收藏并开启位置提醒。"
+        ],
+        "tips": [
+          "实名认证时请确保护照信息与填写内容完全一致，避免审核被退回。",
+          "若暂时没有中国银行卡，可优先开通支付宝国际钱包或微信旅行卡。"
+        ],
+        "estimatedTime": "预计完成时间：20-30分钟"
+      },
+      "linkCard": {
+        "title": "境外银行卡绑定与支付限额说明",
+        "description": "了解常见境外卡绑定路径、费用结构与常见失败原因，确保顺利完成支付。",
+        "steps": [
+          "在支付宝或微信支付中选择“添加银行卡”，输入卡号与持卡人姓名。",
+          "按页面提示填写账单地址，建议与发卡行预留信息保持一致。",
+          "收到银行验证短信后输入验证码，完成双重验证。",
+          "查看每日与每笔支付限额，合理规划大额消费或提前充值。"
+        ],
+        "tips": [
+          "部分境外卡需要开通线上交易或跨境支付功能，请提前联系发卡行确认。",
+          "如多次验证失败，可尝试更换网络环境或避开高峰时段。"
+        ],
+        "estimatedTime": "预计完成时间：10-15分钟"
+      },
+      "cityLife": {
+        "title": "在城市出行与消费中的支付技巧",
+        "description": "覆盖交通出行、餐饮购物等高频场景，帮助您灵活选择最合适的支付方式。",
+        "steps": [
+          "在支付地图中开启“交通出行”“连锁餐饮”等筛选标签，快速定位推荐商户。",
+          "提前在支付宝或微信中充值交通卡，或绑定公交码以免高峰期排队。",
+          "留意商户页面的“支持卡组织”提示，根据优惠选择 Visa、Mastercard 等卡片。",
+          "收藏常用线路与商户，开启到店提醒获取实时优惠。"
+        ],
+        "tips": [
+          "部分小型商户仍只收现金，建议随身准备少量人民币备用。",
+          "夜间乘坐出租车可使用支付宝“打车”或微信“出行服务”减少沟通成本。"
+        ],
+        "estimatedTime": "预计阅读时间：5分钟"
+      }
+    },
+    "videos": {
+      "title": "视频教程",
+      "alipayGuide": {
+        "title": "支付宝完整使用指南",
+        "description": "从注册到日常使用的完整教程"
+      },
+      "wechatGuide": {
+        "title": "微信支付使用教程",
+        "description": "学习如何在微信中设置和使用支付功能"
+      },
+      "appGuide": {
+        "title": "支付地图应用使用指南",
+        "description": "了解如何使用我们的应用找到支付友好的商店"
+      },
+      "cityTravel": {
+        "title": "城市出行支付攻略",
+        "description": "掌握乘车码、地铁闸机与出租车场景的支付技巧"
+      }
+    },
+    "faq": {
+      "title": "常见问题",
+      "alipaySetup": {
+        "question": "如何设置支付宝？",
+        "answer": "下载支付宝应用后，使用手机号注册账户，按照页面提示上传护照信息完成实名认证，再绑定银行卡或选择国际钱包即可开始使用。"
+      },
+      "wechatPay": {
+        "question": "微信支付如何使用？",
+        "answer": "在微信中进入“我”-“支付”，添加银行卡并设置支付密码，即可在支持微信支付的商户扫码付款。"
+      },
+      "findStores": {
+        "question": "如何找到支持移动支付的商店？",
+        "answer": "使用地图功能查看附近支持支付宝、微信支付等移动支付方式的商店，以及它们的位置和详细信息。"
+      },
+      "security": {
+        "question": "移动支付安全吗？",
+        "answer": "移动支付采用多重安全措施，包括密码保护、指纹识别、人脸识别等，比现金支付更加安全。"
+      },
+      "realName": {
+        "question": "护照实名认证失败怎么办？",
+        "answer": "请确认上传的护照照片清晰、未被遮挡，并使用本人持有的中国大陆手机号。如仍未通过，可联系平台人工客服进行复核。"
+      },
+      "cardLimit": {
+        "question": "境外银行卡如何设置支付限额？",
+        "answer": "在绑定境外卡后，可在“卡片管理”页面查看平台与发卡行的限额说明。若需提高限额，请联系发卡行开通更高的线上交易额度，或选择提前充值到余额。"
+      },
+      "filter": {
+        "question": "如何在地图中筛选支持特定卡组织的商户？",
+        "answer": "在地图页面打开筛选面板，勾选“卡组织”标签（如 Visa、Mastercard 或 American Express），并可结合“优惠活动”等条件共同筛选。"
+      },
+      "failedPayment": {
+        "question": "支付失败常见原因有哪些？",
+        "answer": "请检查网络连接是否稳定、账户余额是否充足、卡片是否在有效期内。若出现“风控限制”，可尝试更换网络或联系发卡行确认跨境交易权限。"
+      },
+      "transport": {
+        "question": "在公共交通场景中如何使用移动支付？",
+        "answer": "可在支付宝开通“乘车码”或在微信进入“出行服务”，按照城市提示选择交通卡。进站前提前打开二维码或刷 NFC，支持扫码过闸的城市可直接出示二维码。"
+      }
+    },
+    "feedback": {
+      "helpful": "这个回答对您有帮助吗？",
+      "thanks": "感谢您的反馈！"
+    },
+    "contact": {
+      "message": "客服功能即将上线，敬请期待！"
+    },
+    "noResults": {
+      "title": "没有找到相关内容",
+      "description": "尝试使用不同的关键词搜索，或联系客服获取帮助",
+      "contact": "联系客服"
+    }
+  },
+  "navigation": {
     "home": "首页",
     "map": "地图",
     "list": "列表",
@@ -1592,217 +1429,149 @@
     "my_pos": "我的POS",
     "help": "帮助中心"
   },
-    "onboarding": {
-      "welcome": "欢迎使用支付地图",
-      "subtitle": "让我们帮助您快速上手",
-      "languageSelection": {
-        "title": "选择您的语言",
-        "subtitle": "请选择您偏好的语言以获得最佳体验",
-        "continue": "继续"
-      },
-      "userTypeSelection": {
-        "title": "您是哪种类型的用户？",
-        "subtitle": "这将帮助我们为您提供个性化的体验",
-        "tourist": "游客",
-        "student": "学生",
-        "business": "商务人士",
-        "resident": "本地居民",
-        "continue": "继续"
-      },
-      "paymentIntro": {
-        "title": "支付方式介绍",
-        "subtitle": "了解中国常用的支付方式",
-        "methods": {
-          "creditCard": {
-            "title": "信用卡",
-            "description": "Visa、MasterCard 和 American Express 广泛接受"
-          },
-          "digitalWallet": {
-            "title": "数字钱包",
-            "description": "PayLah!、GrabPay 和 Apple Pay 等移动支付"
-          },
-          "bankTransfer": {
-            "title": "银行转账",
-            "description": "PayNow 和网上银行转账"
-          },
-          "cash": {
-            "title": "现金",
-            "description": "人民币现金支付"
-          }
+  "onboarding": {
+    "welcome": "欢迎使用支付地图",
+    "subtitle": "让我们帮助您快速上手",
+    "languageSelection": {
+      "title": "选择您的语言",
+      "subtitle": "请选择您偏好的语言以获得最佳体验",
+      "continue": "继续"
+    },
+    "userTypeSelection": {
+      "title": "您是哪种类型的用户？",
+      "subtitle": "这将帮助我们为您提供个性化的体验",
+      "tourist": "游客",
+      "student": "学生",
+      "business": "商务人士",
+      "resident": "本地居民",
+      "continue": "继续"
+    },
+    "paymentIntro": {
+      "title": "支付方式介绍",
+      "subtitle": "了解中国常用的支付方式",
+      "methods": {
+        "creditCard": {
+          "title": "信用卡",
+          "description": "Visa、MasterCard 和 American Express 广泛接受"
         },
-        "continue": "继续",
-        "skip": "跳过"
+        "digitalWallet": {
+          "title": "数字钱包",
+          "description": "PayLah!、GrabPay 和 Apple Pay 等移动支付"
+        },
+        "bankTransfer": {
+          "title": "银行转账",
+          "description": "PayNow 和网上银行转账"
+        },
+        "cash": {
+          "title": "现金",
+          "description": "人民币现金支付"
+        }
       },
-      "completion": {
-        "title": "设置完成！",
-        "subtitle": "您已准备好开始使用支付地图",
-        "startExploring": "开始探索",
-        "goToMap": "前往地图"
-      }
+      "continue": "继续",
+      "skip": "跳过"
     },
-    "settings": {
-      "title": "设置",
-      "general": "通用",
-      "appearance": "外观",
-      "notifications": "通知",
-      "privacy": "隐私",
-      "about": "关于",
-      "language": "语言",
-      "theme": "主题",
-      "theme_light": "浅色",
-      "theme_dark": "深色",
-      "theme_system": "跟随系统",
-      "units": "单位",
-      "distance_unit": "距离单位",
-      "kilometers": "公里",
-      "miles": "英里",
-      "currency": "货币",
-      "location_services": "位置服务",
-      "auto_location": "自动检测位置",
-      "save_searches": "保存搜索历史",
-      "analytics": "分析",
-      "crash_reports": "崩溃报告",
-      "version": "版本",
-      "build": "构建",
-      "contact_support": "联系支持",
-      "rate_app": "评价应用",
-      "share_app": "分享应用",
-      "terms_of_service": "服务条款",
-      "privacy_policy": "隐私政策",
-      "licenses": "开源许可证",
-      "interface": "界面",
-      "lightMode": "浅色模式",
-      "darkMode": "深色模式",
-      "autoMode": "自动模式",
-      "loading": "加载中...",
-      "saving": "保存中...",
-      "saveSettings": "保存设置",
-      "accountInfo": "账户信息",
-      "email": "邮箱",
-      "userId": "用户ID",
-      "passwordChange": "密码修改",
-      "newPassword": "新密码",
-      "confirmPassword": "确认新密码",
-      "newPasswordPlaceholder": "输入新密码（至少6个字符）",
-      "confirmPasswordPlaceholder": "再次输入新密码",
-      "changePassword": "修改密码",
-      "changing": "修改中...",
-      "notificationSettings": "通知设置",
-      "enableNotifications": "启用通知",
-      "notificationDescription": "接收关于POS状态变化的重要通知",
-      "mapSettings": "地图设置",
-      "defaultSearchRadius": "默认搜索半径（米）",
-      "enableLocationTracking": "启用位置跟踪",
-      "locationDescription": "自动获取您的位置以获得更好的搜索结果",
-      "showPosStatus": "显示POS状态",
-      "posStatusDescription": "在地图上显示POS机状态",
-      "autoRefreshInterval": "自动刷新间隔（秒）",
-      "disableAutoRefresh": "禁用自动刷新",
-      "accountActions": "账户操作",
-      "signOut": "退出登录",
-      "deleteAccount": "删除账户",
-      "confirmDeleteAccount": "确认删除账户",
-      "deleteAccountWarning": "删除账户将永久删除您的所有数据，包括收藏、历史记录、添加的POS机等。此操作无法撤销。",
-      "cancel": "取消",
-      "confirmDelete": "确认删除",
-      "deleting": "删除中...",
-      "privacyCenter": "隐私中心",
-      "privacyCenterDescription": "集中管理 Payments Maps 如何使用您的数据及授权偏好。",
-      "privacyLocationHistory": "位置历史记录",
-      "privacyLocationHistoryDescription": "保存访问过的区域，以改进附近POS推荐和导航连贯性。",
-      "privacyUsageAnalytics": "使用分析",
-      "privacyUsageAnalyticsDescription": "分享匿名的产品使用数据，帮助我们发现问题并优化功能。",
-      "privacyPersonalization": "个性化体验",
-      "privacyPersonalizationDescription": "根据您的操作调整推荐品牌、筛选器和帮助中心内容。",
-      "privacyMarketing": "营销通知",
-      "privacyMarketingDescription": "接收关于新功能、覆盖区域和学习资料的偶尔更新。",
-      "privacyDataSharing": "合作伙伴数据共享",
-      "privacyDataSharingDescription": "允许与受信任的合作伙伴共享汇总洞察，以拓展覆盖范围。",
-      "privacyRetentionTitle": "数据保留",
-      "privacyRetentionDescription": "选择我们保留搜索历史、访问记录及客服互动的时长。",
-      "privacyRetentionPeriod": "数据保留时长",
-      "privacyRetentionOption3": "3个月",
-      "privacyRetentionOption6": "6个月",
-      "privacyRetentionOption12": "12个月",
-      "privacyRetentionOption24": "24个月",
-      "privacyDownloadReport": "下载隐私报告",
-      "privacyDownloadPreparing": "正在生成报告...",
-      "privacyDownloadReady": "隐私报告已就绪",
-      "privacyDownloadReportDescription": "生成包含个人资料、活动与授权信息的详细概览。",
-      "privacyRevokeAll": "撤回全部授权",
-      "privacyRevokeAllDescription": "立即重置所有可选数据授权，身份验证所需的数据仍会保留。",
-      "privacyRevokeSuccess": "已撤回所有可选授权",
-      "privacyPreferenceUpdated": "隐私偏好已更新",
-      "privacyLastUpdated": "上次审核：{{date}}",
-      "privacyConsentHistory": "最近授权活动",
-      "privacyConsentHistoryEmpty": "暂时没有授权变更记录。",
-      "privacyConsentGranted": "已授权",
-      "privacyConsentRevoked": "已撤回",
-      "privacyAllConsents": "全部隐私偏好"
-    },
-  "notificationsPage": {
-    "title": "消息中心",
-    "unread": "您有 {{count}} 条未读消息",
-    "caughtUp": "暂无新的通知",
-    "markAll": "全部标记为已读",
-    "markingAll": "标记中...",
-    "markAllSuccess": "已全部标记为已读",
-    "markAllError": "批量标记失败",
-    "markReadError": "标记已读失败",
-    "loadError": "加载通知失败",
-    "loading": "加载通知中...",
-    "newSection": "最新",
-    "earlierSection": "更早",
-    "empty": "暂无通知",
-    "markAsRead": "标记为已读",
-    "openLink": "打开相关链接",
-    "sentBy": "发送人",
-    "close": "关闭",
-    "audience": {
-      "all": "所有用户",
-      "role": "面向角色：{{role}}",
-      "roleShort": "指定角色",
-      "user": "指定用户"
-    },
-    "types": {
-      "message": "消息",
-      "promo": "公告",
-      "alert": "警报",
-      "success": "成功",
-      "system": "系统"
-    },
-    "time": {
-      "justNow": "刚刚",
-      "minutesAgo": "{{count}} 分钟前",
-      "hoursAgo": "{{count}} 小时前",
-      "daysAgo": "{{count}} 天前"
-    },
-    "form": {
-      "admin": "管理员广播",
-      "title": "发送通知",
-      "subtitle": "向全体用户、指定角色或用户推送更新。",
-      "role": "当前角色：{{role}}",
-      "fields": {
-        "title": "标题",
-        "type": "类型",
-        "content": "正文",
-        "audience": "受众",
-        "role": "目标角色",
-        "email": "目标用户邮箱",
-        "link": "相关链接（可选）"
-      },
-      "placeholders": {
-        "title": "今晚维护窗口",
-        "content": "告诉用户需要注意的事项..."
-      },
-      "reset": "重置",
-      "send": "发送",
-      "sending": "发送中...",
-      "sent": "通知已发送",
-      "failed": "发送失败",
-      "required": "标题和正文不能为空",
-      "userRequired": "请填写目标用户邮箱"
+    "completion": {
+      "title": "设置完成！",
+      "subtitle": "您已准备好开始使用支付地图",
+      "startExploring": "开始探索",
+      "goToMap": "前往地图"
     }
+  },
+  "settings": {
+    "title": "设置",
+    "general": "通用",
+    "appearance": "外观",
+    "privacy": "隐私",
+    "about": "关于",
+    "language": "语言",
+    "theme": "主题",
+    "theme_light": "浅色",
+    "theme_dark": "深色",
+    "theme_system": "跟随系统",
+    "units": "单位",
+    "distance_unit": "距离单位",
+    "kilometers": "公里",
+    "miles": "英里",
+    "currency": "货币",
+    "location_services": "位置服务",
+    "auto_location": "自动检测位置",
+    "save_searches": "保存搜索历史",
+    "analytics": "分析",
+    "crash_reports": "崩溃报告",
+    "version": "版本",
+    "build": "构建",
+    "contact_support": "联系支持",
+    "rate_app": "评价应用",
+    "share_app": "分享应用",
+    "terms_of_service": "服务条款",
+    "privacy_policy": "隐私政策",
+    "licenses": "开源许可证",
+    "interface": "界面",
+    "lightMode": "浅色模式",
+    "darkMode": "深色模式",
+    "autoMode": "自动模式",
+    "loading": "加载中...",
+    "saving": "保存中...",
+    "saveSettings": "保存设置",
+    "accountInfo": "账户信息",
+    "email": "邮箱",
+    "userId": "用户ID",
+    "passwordChange": "密码修改",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "newPasswordPlaceholder": "输入新密码（至少6个字符）",
+    "confirmPasswordPlaceholder": "再次输入新密码",
+    "changePassword": "修改密码",
+    "changing": "修改中...",
+    "mapSettings": "地图设置",
+    "defaultSearchRadius": "默认搜索半径（米）",
+    "enableLocationTracking": "启用位置跟踪",
+    "locationDescription": "自动获取您的位置以获得更好的搜索结果",
+    "showPosStatus": "显示POS状态",
+    "posStatusDescription": "在地图上显示POS机状态",
+    "autoRefreshInterval": "自动刷新间隔（秒）",
+    "disableAutoRefresh": "禁用自动刷新",
+    "accountActions": "账户操作",
+    "signOut": "退出登录",
+    "deleteAccount": "删除账户",
+    "confirmDeleteAccount": "确认删除账户",
+    "deleteAccountWarning": "删除账户将永久删除您的所有数据，包括收藏、历史记录、添加的POS机等。此操作无法撤销。",
+    "cancel": "取消",
+    "confirmDelete": "确认删除",
+    "deleting": "删除中...",
+    "privacyCenter": "隐私中心",
+    "privacyCenterDescription": "集中管理 Payments Maps 如何使用您的数据及授权偏好。",
+    "privacyLocationHistory": "位置历史记录",
+    "privacyLocationHistoryDescription": "保存访问过的区域，以改进附近POS推荐和导航连贯性。",
+    "privacyUsageAnalytics": "使用分析",
+    "privacyUsageAnalyticsDescription": "分享匿名的产品使用数据，帮助我们发现问题并优化功能。",
+    "privacyPersonalization": "个性化体验",
+    "privacyPersonalizationDescription": "根据您的操作调整推荐品牌、筛选器和帮助中心内容。",
+    "privacyMarketing": "营销通知",
+    "privacyMarketingDescription": "接收关于新功能、覆盖区域和学习资料的偶尔更新。",
+    "privacyDataSharing": "合作伙伴数据共享",
+    "privacyDataSharingDescription": "允许与受信任的合作伙伴共享汇总洞察，以拓展覆盖范围。",
+    "privacyRetentionTitle": "数据保留",
+    "privacyRetentionDescription": "选择我们保留搜索历史、访问记录及客服互动的时长。",
+    "privacyRetentionPeriod": "数据保留时长",
+    "privacyRetentionOption3": "3个月",
+    "privacyRetentionOption6": "6个月",
+    "privacyRetentionOption12": "12个月",
+    "privacyRetentionOption24": "24个月",
+    "privacyDownloadReport": "下载隐私报告",
+    "privacyDownloadPreparing": "正在生成报告...",
+    "privacyDownloadReady": "隐私报告已就绪",
+    "privacyDownloadReportDescription": "生成包含个人资料、活动与授权信息的详细概览。",
+    "privacyRevokeAll": "撤回全部授权",
+    "privacyRevokeAllDescription": "立即重置所有可选数据授权，身份验证所需的数据仍会保留。",
+    "privacyRevokeSuccess": "已撤回所有可选授权",
+    "privacyPreferenceUpdated": "隐私偏好已更新",
+    "privacyLastUpdated": "上次审核：{{date}}",
+    "privacyConsentHistory": "最近授权活动",
+    "privacyConsentHistoryEmpty": "暂时没有授权变更记录。",
+    "privacyConsentGranted": "已授权",
+    "privacyConsentRevoked": "已撤回",
+    "privacyAllConsents": "全部隐私偏好"
   },
   "landingPage": {
     "title": "Payments Maps",
