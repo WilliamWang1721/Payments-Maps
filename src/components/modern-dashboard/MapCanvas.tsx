@@ -1,26 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
+import { getPOSStatusMapColor } from '@/lib/posStatus'
 import { useMapStore } from '@/stores/useMapStore'
 import { useNavigate } from 'react-router-dom'
 
 const DETAIL_VIEW_ZOOM = 15
 const CLUSTER_GRID_SIZE = 72
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'active':
-      return '#4318FF'
-    case 'inactive':
-      return '#94A3B8'
-    case 'maintenance':
-      return '#FBBF24'
-    case 'disabled':
-      return '#EF4444'
-    default:
-      return '#05CD99'
-  }
-}
 
 const escapeLabel = (label: string) =>
   label.replace(/[&<>"']/g, (char) => {
@@ -230,7 +216,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       posMachines.forEach((pos) => {
         if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
 
-        const statusColor = getStatusColor(pos.status || 'active')
+        const statusColor = getPOSStatusMapColor(pos.status)
         const marker = new AMap.Marker({
           position: [pos.longitude, pos.latitude],
           title: pos.merchant_name,

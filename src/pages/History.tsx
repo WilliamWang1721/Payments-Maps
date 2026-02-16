@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import Loading from '@/components/ui/Loading'
 import { getErrorDetails, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import { getPOSStatusMeta } from '@/lib/posStatus'
 
 interface HistoryWithPOS {
   id: string
@@ -145,41 +146,6 @@ const History: React.FC = () => {
     }
   }
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'active':
-        return {
-          label: '正常运行',
-          badge: 'bg-green-50 text-green-700 border-green-100',
-          dot: 'bg-green-500'
-        }
-      case 'inactive':
-        return {
-          label: '暂时不可用',
-          badge: 'bg-gray-50 text-gray-700 border-gray-100',
-          dot: 'bg-gray-500'
-        }
-      case 'maintenance':
-        return {
-          label: '维修中',
-          badge: 'bg-orange-50 text-orange-700 border-orange-100',
-          dot: 'bg-orange-500'
-        }
-      case 'disabled':
-        return {
-          label: '已停用',
-          badge: 'bg-red-50 text-red-700 border-red-100',
-          dot: 'bg-red-500'
-        }
-      default:
-        return {
-          label: '未知状态',
-          badge: 'bg-blue-50 text-blue-700 border-blue-100',
-          dot: 'bg-blue-500'
-        }
-    }
-  }
-
   const formatVisitTime = (visitedAt: string) => {
     const date = new Date(visitedAt)
     if (Number.isNaN(date.getTime())) return '未知时间'
@@ -305,7 +271,7 @@ const History: React.FC = () => {
               {validHistory.map((historyItem, index) => {
                 const pos = historyItem.pos_machines
                 if (!pos) return null
-                const statusMeta = getStatusStyle(pos.status || 'active')
+                const statusMeta = getPOSStatusMeta(pos.status)
 
                 return (
                   <article
@@ -330,8 +296,8 @@ const History: React.FC = () => {
                             <h3 className="text-lg font-semibold text-soft-black leading-tight">
                               {pos.merchant_name}
                             </h3>
-                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${statusMeta.badge}`}>
-                              <span className={`w-2 h-2 rounded-full ${statusMeta.dot}`} />
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${statusMeta.badgeClass}`}>
+                              <span className={`w-2 h-2 rounded-full ${statusMeta.dotClass}`} />
                               {statusMeta.label}
                             </span>
                           </div>

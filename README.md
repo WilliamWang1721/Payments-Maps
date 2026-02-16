@@ -119,6 +119,8 @@ cp .env.example .env
 # Supabase 配置
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 # 高德地图配置
 VITE_AMAP_KEY=your_amap_api_key
@@ -127,7 +129,20 @@ VITE_AMAP_SECURITY_JS_CODE=your_amap_security_js_code
 # 第三方登录配置 (可选)
 VITE_GITHUB_CLIENT_ID=your_github_client_id
 VITE_GOOGLE_CLIENT_ID=your_google_client_id
+VITE_MICROSOFT_CLIENT_ID=your_microsoft_client_id
+VITE_LINUXDO_CLIENT_ID=your_linuxdo_client_id
+
+# LinuxDO 仅服务端密钥（禁止放到 VITE_ 前缀）
+LINUXDO_CLIENT_ID=your_linuxdo_client_id
+LINUXDO_CLIENT_SECRET=your_linuxdo_client_secret
+LINUXDO_REDIRECT_URI=https://your-domain.com/auth/linuxdo/callback
+
+# API 安全配置
+APP_ORIGIN=https://your-domain.com
+ALLOWED_ORIGINS=https://your-domain.com
+PASSKEY_ORIGIN=https://your-domain.com
 ```
+⚠️ `VITE_*` 变量会被打包到浏览器端，任何密钥（如 OAuth client secret / Supabase service role key）都必须使用非 `VITE_` 变量并只在服务端配置。
 
 ### 4. 启动开发服务器
 ```bash

@@ -23,24 +23,18 @@ export interface LinuxDOTokenResponse {
 
 export interface LinuxDOConfig {
   clientId: string
-  clientSecret: string
   redirectUri: string
   authUrl: string
-  tokenUrl: string
-  userInfoUrl: string
 }
 
 // LinuxDO OAuth configuration
 export const linuxdoConfig: LinuxDOConfig = {
   clientId: import.meta.env.VITE_LINUXDO_CLIENT_ID,
-  clientSecret: import.meta.env.VITE_LINUXDO_CLIENT_SECRET,
   redirectUri: import.meta.env.VITE_LINUXDO_REDIRECT_URI || 
     (window.location.hostname === 'localhost' 
       ? 'http://localhost:5173/auth/linuxdo/callback'
       : `${window.location.origin}/auth/linuxdo/callback`),
   authUrl: 'https://connect.linux.do/oauth2/authorize',
-  tokenUrl: 'https://connect.linux.do/oauth2/token',
-  userInfoUrl: 'https://connect.linux.do/oauth2/userinfo'
 }
 
 // Generate LinuxDO OAuth authorization URL
@@ -64,21 +58,12 @@ export function getLinuxDOAuthUrl(): string {
     state: state
   })
 
-  const authUrl = `${linuxdoConfig.authUrl}?${params.toString()}`
-  console.log('生成LinuxDO授权URL:', authUrl)
-  return authUrl
+  return `${linuxdoConfig.authUrl}?${params.toString()}`
 }
 
 // Exchange authorization code for access token
 export async function getLinuxDOAccessToken(code: string): Promise<LinuxDOTokenResponse> {
   try {
-    console.log('正在获取LinuxDO访问令牌...')
-    console.log('使用的配置:', {
-      clientId: linuxdoConfig.clientId,
-      redirectUri: linuxdoConfig.redirectUri,
-      code: code
-    })
-
     // 使用我们的API代理端点而不是直接调用LinuxDO API
     const response = await fetch('/api/linuxdo/token', {
       method: 'POST',
@@ -89,34 +74,20 @@ export async function getLinuxDOAccessToken(code: string): Promise<LinuxDOTokenR
       body: JSON.stringify({
         code: code,
         clientId: linuxdoConfig.clientId,
-        clientSecret: linuxdoConfig.clientSecret,
         redirectUri: linuxdoConfig.redirectUri
       })
     })
 
-    console.log('Token响应状态:', response.status)
-    
-    const responseText = await response.text()
-    console.log('Token响应内容:', responseText)
-
     if (!response.ok) {
-      let errorMsg = `获取访问令牌失败: ${response.status}`
-      try {
-        const errorData = JSON.parse(responseText)
-        errorMsg += ` - ${errorData.error || errorData.message || responseText}`
-      } catch {
-        errorMsg += ` - ${responseText}`
-      }
-      throw new Error(errorMsg)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData?.error || `获取访问令牌失败: ${response.status}`)
     }
 
-    try {
-      const tokenData: LinuxDOTokenResponse = JSON.parse(responseText)
-      return tokenData
-    } catch (parseError) {
-      console.error('解析令牌响应失败:', parseError)
-      throw new Error(`令牌响应格式错误: ${responseText}`)
+    const tokenData: LinuxDOTokenResponse = await response.json().catch(() => ({} as LinuxDOTokenResponse))
+    if (!tokenData?.access_token) {
+      throw new Error('令牌响应格式错误')
     }
+    return tokenData
   } catch (error) {
     console.error('获取LinuxDO访问令牌失败:', error)
     throw error
@@ -126,9 +97,6 @@ export async function getLinuxDOAccessToken(code: string): Promise<LinuxDOTokenR
 // Get user information using access token
 export async function getLinuxDOUserInfo(accessToken: string): Promise<LinuxDOUserInfo> {
   try {
-    console.log('正在获取LinuxDO用户信息...')
-    console.log('使用访问令牌:', accessToken ? '已提供' : '未提供')
-
     // 使用我们的API代理端点
     const response = await fetch('/api/linuxdo/userinfo', {
       method: 'GET',
@@ -138,30 +106,16 @@ export async function getLinuxDOUserInfo(accessToken: string): Promise<LinuxDOUs
       }
     })
 
-    console.log('用户信息响应状态:', response.status)
-
-    const responseText = await response.text()
-    console.log('用户信息响应内容:', responseText)
-
     if (!response.ok) {
-      let errorMsg = `获取用户信息失败: ${response.status}`
-      try {
-        const errorData = JSON.parse(responseText)
-        errorMsg += ` - ${errorData.error || errorData.message || responseText}`
-      } catch {
-        errorMsg += ` - ${responseText}`
-      }
-      throw new Error(errorMsg)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData?.error || `获取用户信息失败: ${response.status}`)
     }
 
-    try {
-      const userInfo: LinuxDOUserInfo = JSON.parse(responseText)
-      console.log('解析后的用户信息:', userInfo)
-      return userInfo
-    } catch (parseError) {
-      console.error('解析用户信息响应失败:', parseError)
-      throw new Error(`用户信息响应格式错误: ${responseText}`)
+    const userInfo: LinuxDOUserInfo = await response.json().catch(() => ({} as LinuxDOUserInfo))
+    if (!userInfo?.id || !userInfo?.username) {
+      throw new Error('用户信息响应格式错误')
     }
+    return userInfo
   } catch (error) {
     console.error('获取LinuxDO用户信息失败:', error)
     throw error
@@ -196,7 +150,12 @@ export function startLinuxDOAuth(): void {
 
 // Generate random state parameter for CSRF protection
 export function generateState(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  if (!globalThis.crypto?.getRandomValues) {
+    return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`
+  }
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 // Store state in sessionStorage for verification

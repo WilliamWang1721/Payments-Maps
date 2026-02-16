@@ -4,6 +4,8 @@ import { ArrowLeft, MapPin, Star, Heart, Clock } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase, type POSMachine } from '@/lib/supabase'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { getPOSStatusDotClass, getPOSStatusLabel } from '@/lib/posStatus'
+import FullScreenLoading from '@/components/ui/FullScreenLoading'
 
 interface FavoriteWithPOS {
   id: string
@@ -108,45 +110,8 @@ const Favorites: React.FC = () => {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-500'
-      case 'inactive':
-        return 'bg-gray-500'
-      case 'maintenance':
-        return 'bg-orange-500'
-      case 'disabled':
-        return 'bg-red-500'
-      default:
-        return 'bg-blue-500'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active':
-        return '正常运行'
-      case 'inactive':
-        return '暂时不可用'
-      case 'maintenance':
-        return '维修中'
-      case 'disabled':
-        return '已停用'
-      default:
-        return '未知状态'
-    }
-  }
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
-        </div>
-      </div>
-    )
+    return <FullScreenLoading message="加载中..." />
   }
 
   return (
@@ -194,8 +159,8 @@ const Favorites: React.FC = () => {
                     {/* Status and Remove Button */}
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-2">
-                        <div className={`w-3 h-3 rounded-full ${getStatusColor(pos.status || 'active')}`}></div>
-                        <span className="text-sm text-gray-600">{getStatusText(pos.status || 'active')}</span>
+                        <div className={`w-3 h-3 rounded-full ${getPOSStatusDotClass(pos.status)}`}></div>
+                        <span className="text-sm text-gray-600">{getPOSStatusLabel(pos.status)}</span>
                       </div>
                       <button
                         onClick={() => removeFavorite(favorite.id, pos.merchant_name)}

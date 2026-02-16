@@ -1,78 +1,125 @@
+import {
+  applyApiSecurityHeaders,
+  enforceRateLimit,
+  ensureAllowedOrigin,
+  getClientIp,
+  getSafeErrorMessage,
+  parseJsonBody
+} from '../_security.js'
+
+const isProduction = process.env.NODE_ENV === 'production'
+const LINUXDO_TOKEN_ENDPOINT = 'https://connect.linux.do/oauth2/token'
+
+const normalizeUri = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    return new URL(value.trim()).toString()
+  } catch {
+    return null
+  }
+}
+
+const resolveRedirectUri = (req, body) => {
+  const configured = normalizeUri(process.env.LINUXDO_REDIRECT_URI)
+  if (configured) return configured
+
+  const fromRequest = normalizeUri(body?.redirectUri)
+  if (fromRequest && !isProduction) {
+    return fromRequest
+  }
+
+  const host = req.headers?.host || req.headers?.['x-forwarded-host']
+  if (!host) return null
+  const protocol = isProduction ? 'https' : 'http'
+  return `${protocol}://${host}/auth/linuxdo/callback`
+}
+
+const resolveClientId = (body) => {
+  const envClientId = (process.env.LINUXDO_CLIENT_ID || '').trim()
+  if (envClientId) return envClientId
+  const requestClientId = (body?.clientId || '').trim()
+  if (!isProduction) return requestClientId
+  return ''
+}
+
+const resolveClientSecret = () => {
+  return (process.env.LINUXDO_CLIENT_SECRET || '').trim()
+}
+
 export default async function handler(req, res) {
-  // 只允许 POST 请求
+  applyApiSecurityHeaders(req, res)
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!ensureAllowedOrigin(req, res, { allowNoOrigin: !isProduction })) {
+    return
+  }
+
+  if (
+    !enforceRateLimit(req, res, {
+      prefix: 'linuxdo-token-ip',
+      identifier: getClientIp(req),
+      limit: 20,
+      windowMs: 60_000
+    })
+  ) {
+    return
   }
 
   try {
-    const { code, clientId, clientSecret, redirectUri } = req.body;
+    const body = parseJsonBody(req)
+    const code = typeof body?.code === 'string' ? body.code.trim() : ''
+    const clientId = resolveClientId(body)
+    const clientSecret = resolveClientSecret()
+    const redirectUri = resolveRedirectUri(req, body)
 
-    // 验证必需参数
     if (!code || !clientId || !clientSecret || !redirectUri) {
-      return res.status(400).json({ 
-        error: 'Missing required parameters: code, clientId, clientSecret, redirectUri' 
-      });
+      return res.status(400).json({
+        error: 'LinuxDO OAuth server configuration is incomplete'
+      })
     }
 
-    console.log('LinuxDO token request:', { 
-      code: code.substring(0, 10) + '...',
-      clientId,
-      redirectUri
-    });
+    if (code.length > 2048) {
+      return res.status(400).json({ error: 'Invalid authorization code' })
+    }
 
-    // 向 LinuxDO API 发送请求
-    const tokenResponse = await fetch('https://connect.linux.do/oauth2/token', {
+    const tokenResponse = await fetch(LINUXDO_TOKEN_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'User-Agent': 'PaymentsMaps/1.0.0'
       },
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
-        code: code,
+        code,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code'
       }).toString()
-    });
+    })
 
-    console.log('LinuxDO token response status:', tokenResponse.status);
-    console.log('LinuxDO token response headers:', Object.fromEntries(tokenResponse.headers.entries()));
-
-    const responseText = await tokenResponse.text();
-    console.log('LinuxDO token response body:', responseText);
+    const payload = await tokenResponse.json().catch(() => ({}))
 
     if (!tokenResponse.ok) {
-      console.error('LinuxDO token error:', tokenResponse.status, responseText);
-      return res.status(tokenResponse.status).json({ 
-        error: 'Failed to get access token',
-        details: responseText,
-        linuxdo_status: tokenResponse.status
-      });
+      const upstreamStatus = Number(tokenResponse.status) || 502
+      const status = upstreamStatus >= 500 ? 502 : 400
+      return res.status(status).json({
+        error: 'Failed to exchange LinuxDO authorization code'
+      })
     }
 
-    // 解析并返回响应
-    try {
-      const tokenData = JSON.parse(responseText);
-      console.log('Token data received:', {
-        ...tokenData,
-        access_token: tokenData.access_token ? tokenData.access_token.substring(0, 10) + '...' : 'none'
-      });
-      return res.status(200).json(tokenData);
-    } catch (parseError) {
-      console.error('Parse error:', parseError);
-      return res.status(500).json({ 
-        error: 'Invalid response format',
-        details: responseText
-      });
-    }
-
+    return res.status(200).json({
+      access_token: payload.access_token,
+      token_type: payload.token_type,
+      expires_in: payload.expires_in,
+      refresh_token: payload.refresh_token,
+      scope: payload.scope
+    })
   } catch (error) {
-    console.error('Token proxy error:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message
-    });
+    console.error('LinuxDO token proxy error:', getSafeErrorMessage(error))
+    return res.status(500).json({ error: 'Internal server error' })
   }
 }

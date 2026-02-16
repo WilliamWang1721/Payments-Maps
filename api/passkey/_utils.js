@@ -1,12 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
+import { applyApiSecurityHeaders, getSafeErrorMessage } from '../_security.js'
 
 let cachedAdminClient = null
 
 export const handleError = (res, error, defaultMessage = 'Server error') => {
   console.error(defaultMessage, error)
-  res
-    .status(500)
-    .json({ error: defaultMessage, detail: error?.message || String(error) })
+  const payload = { error: defaultMessage }
+  if (process.env.NODE_ENV !== 'production') {
+    payload.detail = getSafeErrorMessage(error)
+  }
+  res.status(500).json(payload)
 }
 
 export const getSupabaseAdminClient = () => {
@@ -37,6 +40,8 @@ const extractToken = (req) => {
 }
 
 export const requireAuth = async (req, res) => {
+  applyApiSecurityHeaders(req, res)
+
   const token = extractToken(req)
   if (!token) {
     res.status(401).json({ error: 'Missing Authorization token' })

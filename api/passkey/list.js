@@ -1,6 +1,13 @@
 import { handleError, requireAuth } from './_utils.js'
+import {
+  applyApiSecurityHeaders,
+  enforceRateLimit,
+  getClientIp
+} from '../_security.js'
 
 export default async function handler(req, res) {
+  applyApiSecurityHeaders(req, res)
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -9,6 +16,18 @@ export default async function handler(req, res) {
   if (!authContext) return
 
   const { user, supabaseAdmin } = authContext
+
+  const identity = `${getClientIp(req)}:${user.id}`
+  if (
+    !enforceRateLimit(req, res, {
+      prefix: 'passkey-list',
+      identifier: identity,
+      limit: 60,
+      windowMs: 60_000
+    })
+  ) {
+    return
+  }
 
   try {
     const { data, error } = await supabaseAdmin

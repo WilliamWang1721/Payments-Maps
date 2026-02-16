@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { supabase } from '@/lib/supabase'
 import { syncMicrosoftUserToSupabase } from '@/lib/supabase-auth'
 import { getErrorDetails, notify } from '@/lib/notify'
+import FullScreenLoading from '@/components/ui/FullScreenLoading'
 
 const MicrosoftCallback = () => {
   const navigate = useNavigate()
@@ -58,14 +59,7 @@ const MicrosoftCallback = () => {
   }, [navigate, setUser])
 
   if (isProcessing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">正在处理Microsoft登录...</p>
-        </div>
-      </div>
-    )
+    return <FullScreenLoading message="正在处理Microsoft登录..." />
   }
 
   return null
