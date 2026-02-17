@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Building, CheckCircle, ChevronRight, Clock, CreditCard, Download, Edit, ExternalLink, FileText, Heart, HelpCircle, MapPin, MessageCircle, RefreshCcw, Settings, Shield, Smartphone, Star, Trash2, X, XCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -21,7 +21,7 @@ import { AnimatedTabBar } from '@/components/AnimatedNavigation'
 import { CARD_NETWORKS, getCardNetworkLabel } from '@/lib/cardNetworks'
 import { getCardNetworkValue } from '@/lib/cardMetadata'
 import { getPaymentMethodLabel } from '@/lib/utils'
-import { getErrorDetails, notify } from '@/lib/notify'
+import { getErrorDetails, getFriendlyErrorMessage, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { checkAndUpdatePOSStatus, calculatePOSSuccessRate, POSStatus, refreshMapData, updatePOSStatus } from '@/utils/posStatusUtils'
 import { buildRefreshedExtendedFields, derivePOSFromAttempts, readPOSAttemptRefreshMeta } from '@/utils/posRefreshLogic'
@@ -255,6 +255,8 @@ const POSDetail = () => {
   const [activeTab, setActiveTab] = useState('overview')
   const [supportDetailTarget, setSupportDetailTarget] = useState<SupportDetailTarget | null>(null)
   const [attemptUserNames, setAttemptUserNames] = useState<Record<string, string>>({})
+  const favoriteStatusWarningShownRef = useRef(false)
+  const historyRecordWarningShownRef = useRef(false)
 
   const attemptResultOptions = [
     {
@@ -1273,8 +1275,7 @@ const POSDetail = () => {
         .order('created_at', { ascending: false })
       
       if (error) {
-        console.error('加载评价失败:', error)
-        return
+        throw error
       }
       
       // 转换数据格式
@@ -1293,6 +1294,8 @@ const POSDetail = () => {
       setReviews(formattedReviews)
     } catch (error) {
       console.error('加载评价失败:', error)
+      setReviews([])
+      notify.warning(getFriendlyErrorMessage(error, '评价加载失败，暂时显示为空', '网络异常，评价暂时不可用'))
     }
   }
 
@@ -1321,8 +1324,7 @@ const POSDetail = () => {
         .order('created_at', { ascending: false })
 
       if (linksError) {
-        console.error('加载外部链接失败:', linksError)
-        setExternalLinks([])
+        throw linksError
       } else {
         const links: ExternalLinkType[] = (externalLinksData || []).map(link => ({
           id: link.id,
@@ -1335,6 +1337,8 @@ const POSDetail = () => {
       }
     } catch (error) {
       console.error('加载外部链接失败:', error)
+      setExternalLinks([])
+      notify.warning(getFriendlyErrorMessage(error, '外部链接加载失败，暂时显示为空', '网络异常，外部链接暂时不可用'))
     }
   }
 
@@ -1384,8 +1388,7 @@ const POSDetail = () => {
         .order('created_at', { ascending: false })
       
       if (error) {
-        console.error('加载尝试记录失败:', error)
-        return
+        throw error
       }
       
       const nextAttempts = (attemptsData || []) as Attempt[]
@@ -1393,6 +1396,8 @@ const POSDetail = () => {
       void loadAttemptUserNames(nextAttempts)
     } catch (error) {
       console.error('加载尝试记录失败:', error)
+      setAttempts([])
+      notify.warning(getFriendlyErrorMessage(error, '尝试记录加载失败，暂时显示为空', '网络异常，尝试记录暂时不可用'))
     }
   }
 
@@ -1407,8 +1412,19 @@ const POSDetail = () => {
         return
       }
       setIsFavorite(isFavorite)
+      favoriteStatusWarningShownRef.current = false
     } catch (error) {
       console.error('查询收藏状态失败:', error)
+      if (!favoriteStatusWarningShownRef.current) {
+        favoriteStatusWarningShownRef.current = true
+        notify.warning(
+          getFriendlyErrorMessage(
+            error,
+            '收藏状态同步失败，请稍后重试',
+            '网络异常，暂时无法同步收藏状态'
+          )
+        )
+      }
     }
   }
 
@@ -1417,8 +1433,19 @@ const POSDetail = () => {
     
     try {
       await posService.recordUserHistoryVisit(user.id, id)
+      historyRecordWarningShownRef.current = false
     } catch (error) {
       console.error('记录访问历史失败:', error)
+      if (!historyRecordWarningShownRef.current) {
+        historyRecordWarningShownRef.current = true
+        notify.warning(
+          getFriendlyErrorMessage(
+            error,
+            '浏览历史记录失败，已跳过本次记录',
+            '网络异常，本次浏览历史未能保存'
+          )
+        )
+      }
     }
   }
 

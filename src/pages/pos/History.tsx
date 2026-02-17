@@ -3,74 +3,80 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Clock, MapPin, Sparkles, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import Loading from '@/components/ui/Loading'
-import { notify } from '@/lib/notify'
+import { getErrorDetails, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { getPOSStatusMeta } from '@/lib/posStatus'
-import { posService, type HistoryWithPOS } from '@/services/posService'
+import { useUserPOSStore } from '@/stores/useUserPOSStore'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import FullScreenLoading from '@/components/ui/FullScreenLoading'
 
 const HISTORY_FETCH_LIMIT = 100
 
 const History: React.FC = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const [history, setHistory] = useState<HistoryWithPOS[]>([])
+  const history = useUserPOSStore((state) => state.history)
+  const loading = useUserPOSStore((state) => state.historyLoading)
+  const loaded = useUserPOSStore((state) => state.historyLoaded)
+  const historyError = useUserPOSStore((state) => state.historyError)
+  const loadHistory = useUserPOSStore((state) => state.loadHistory)
+  const clearHistoryByUser = useUserPOSStore((state) => state.clearHistory)
+  const removeHistoryById = useUserPOSStore((state) => state.removeHistoryItem)
+  const resetUserPOSState = useUserPOSStore((state) => state.reset)
   const [showClearModal, setShowClearModal] = useState(false)
-  const { loading, run: runLoadHistory } = useAsyncAction(true)
   const { loading: clearing, run: runClearHistory } = useAsyncAction()
   const { loading: removingHistory, run: runRemoveHistory } = useAsyncAction()
 
-  const loadHistory = useCallback(async () => {
+  const fetchHistory = useCallback(async () => {
     if (!user) return
 
-    const historyData = await runLoadHistory(() => posService.listUserHistory(user.id, HISTORY_FETCH_LIMIT), {
-      logLabel: '加载浏览历史失败',
-      feedback: 'critical',
-      errorMessage: '加载失败，请重试',
-      errorTitle: '加载浏览历史失败',
-    })
-
-    if (historyData !== null) {
-      setHistory(historyData)
+    try {
+      await loadHistory(user.id, HISTORY_FETCH_LIMIT)
+    } catch (error) {
+      console.error('加载浏览历史失败:', error)
+      notify.critical('加载失败，请重试', {
+        title: '加载浏览历史失败',
+        details: getErrorDetails(error),
+      })
     }
-  }, [runLoadHistory, user])
+  }, [loadHistory, user])
 
   useEffect(() => {
     if (user) {
-      void loadHistory()
+      void fetchHistory()
     } else {
+      resetUserPOSState()
       navigate('/login')
     }
-  }, [loadHistory, navigate, user])
+  }, [fetchHistory, navigate, resetUserPOSState, user])
 
   useBodyScrollLock(showClearModal, { includeHtml: true })
 
   const clearAllHistory = async () => {
     if (!user) return
 
-    const cleared = await runClearHistory(() => posService.clearUserHistory(user.id), {
+    const cleared = await runClearHistory(() => clearHistoryByUser(user.id), {
       logLabel: '清空历史记录失败',
-      feedback: 'error',
+      feedback: 'critical',
       errorMessage: '清空失败，请重试',
+      errorTitle: '清空浏览历史失败',
     })
     if (cleared === null) return
 
     notify.success('历史记录已清空')
-    setHistory([])
     setShowClearModal(false)
   }
 
   const removeHistoryItem = async (historyId: string, posName: string) => {
-    const removed = await runRemoveHistory(() => posService.removeHistoryById(historyId), {
+    const removed = await runRemoveHistory(() => removeHistoryById(historyId), {
       logLabel: '删除历史记录失败',
-      feedback: 'error',
+      feedback: 'critical',
       errorMessage: '删除失败，请重试',
+      errorTitle: '删除历史记录失败',
     })
     if (removed === null) return
 
     notify.success(`已删除 "${posName}" 的访问记录`)
-    await loadHistory()
   }
 
   const formatVisitTime = (visitedAt: string) => {
@@ -106,19 +112,15 @@ const History: React.FC = () => {
     })
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="bg-white rounded-2xl shadow-soft border border-white/60 px-6 py-5 flex items-center gap-3">
-          <Loading text="正在加载浏览历史..." />
-        </div>
-      </div>
-    )
+  if (loading || !loaded) {
+    return <FullScreenLoading message="正在加载浏览历史..." />
   }
 
   const validHistory = history.filter((item) => item.pos_machines)
-  const uniquePOSCount = new Set(history.map((item) => item.pos_machine_id)).size
-  const latestVisitedText = history[0]?.visited_at ? formatAbsoluteTime(history[0].visited_at) : '暂无记录'
+  const hasInitialLoadError = Boolean(historyError) && validHistory.length === 0
+  const hasOnlyInvalidHistory = !hasInitialLoadError && history.length > 0 && validHistory.length === 0
+  const uniquePOSCount = new Set(validHistory.map((item) => item.pos_machine_id)).size
+  const latestVisitedText = validHistory[0]?.visited_at ? formatAbsoluteTime(validHistory[0].visited_at) : '暂无记录'
 
   return (
     <div className="space-y-6 pb-24">
@@ -177,7 +179,33 @@ const History: React.FC = () => {
             </div>
           </div>
 
-          {validHistory.length === 0 ? (
+          {hasInitialLoadError ? (
+            <div className="rounded-[24px] border border-dashed border-red-200 bg-white px-8 py-12 text-center space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-soft-black">浏览历史加载失败</h3>
+                <p className="text-sm text-gray-500">{historyError}</p>
+              </div>
+              <button
+                onClick={() => void fetchHistory()}
+                className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-soft-black text-white hover:bg-accent-yellow transition-all shadow-soft text-sm font-semibold"
+              >
+                重新加载
+              </button>
+            </div>
+          ) : hasOnlyInvalidHistory ? (
+            <div className="rounded-[24px] border border-dashed border-amber-200 bg-white px-8 py-12 text-center space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-soft-black">历史记录暂不可用</h3>
+                <p className="text-sm text-gray-500">历史中关联的 POS 数据可能已失效，请刷新后重试。</p>
+              </div>
+              <button
+                onClick={() => void fetchHistory()}
+                className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-soft-black text-white hover:bg-accent-yellow transition-all shadow-soft text-sm font-semibold"
+              >
+                刷新历史
+              </button>
+            </div>
+          ) : validHistory.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-blue-200 bg-cream px-8 py-12 text-center space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-white shadow-soft flex items-center justify-center text-accent-yellow mx-auto">
                 <Clock className="w-5 h-5" />

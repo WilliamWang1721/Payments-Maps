@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Clock, Edit, Trash2, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { notify } from '@/lib/notify'
+import { getErrorDetails, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { getPOSStatusDotClass, getPOSStatusLabel } from '@/lib/posStatus'
 import FullScreenLoading from '@/components/ui/FullScreenLoading'
@@ -16,6 +16,8 @@ const MyPOS: React.FC = () => {
   const { user } = useAuthStore()
   const posMachines = useUserPOSStore((state) => state.myPOSMachines)
   const loading = useUserPOSStore((state) => state.myPOSLoading)
+  const loaded = useUserPOSStore((state) => state.myPOSLoaded)
+  const myPOSError = useUserPOSStore((state) => state.myPOSError)
   const loadMyPOSMachines = useUserPOSStore((state) => state.loadMyPOSMachines)
   const removeMyPOSMachine = useUserPOSStore((state) => state.removeMyPOSMachine)
   const resetUserPOSState = useUserPOSStore((state) => state.reset)
@@ -23,14 +25,28 @@ const MyPOS: React.FC = () => {
   const [selectedPOS, setSelectedPOS] = useState<POSMachine | null>(null)
   const { loading: deleting, run: runDeletePOS } = useAsyncAction()
 
+  const fetchMyPOS = useCallback(async () => {
+    if (!user) return
+
+    try {
+      await loadMyPOSMachines(user.id)
+    } catch (error) {
+      console.error('加载我的POS机失败:', error)
+      notify.critical('加载失败，请重试', {
+        title: '加载我的 POS 机失败',
+        details: getErrorDetails(error),
+      })
+    }
+  }, [loadMyPOSMachines, user])
+
   useEffect(() => {
     if (user) {
-      void loadMyPOSMachines(user.id)
+      void fetchMyPOS()
     } else {
       resetUserPOSState()
       navigate('/login')
     }
-  }, [loadMyPOSMachines, navigate, resetUserPOSState, user])
+  }, [fetchMyPOS, navigate, resetUserPOSState, user])
 
   useBodyScrollLock(showDeleteModal, { includeHtml: true })
 
@@ -50,8 +66,15 @@ const MyPOS: React.FC = () => {
     setSelectedPOS(null)
   }
 
-  if (loading) {
+  if (loading || !loaded) {
     return <FullScreenLoading message="加载中..." />
+  }
+
+  const hasInitialLoadError = Boolean(myPOSError) && posMachines.length === 0
+  const formatCreatedDate = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '未知日期'
+    return date.toLocaleDateString('zh-CN')
   }
 
   return (
@@ -82,7 +105,20 @@ const MyPOS: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {posMachines.length === 0 ? (
+        {hasInitialLoadError ? (
+          <div className="text-center py-12">
+            <div className="bg-white rounded-lg shadow-sm p-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">POS 列表加载失败</h3>
+              <p className="text-gray-600 mb-6">{myPOSError}</p>
+              <button
+                onClick={() => void fetchMyPOS()}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                重新加载
+              </button>
+            </div>
+          </div>
+        ) : posMachines.length === 0 ? (
           <div className="text-center py-12">
             <div className="bg-white rounded-lg shadow-sm p-8">
               <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -154,7 +190,7 @@ const MyPOS: React.FC = () => {
                   {/* Created Time */}
                   <div className="flex items-center text-sm text-gray-500 mb-4">
                     <Clock className="h-4 w-4 mr-1" />
-                    添加于 {new Date(pos.created_at).toLocaleDateString('zh-CN')}
+                    添加于 {formatCreatedDate(pos.created_at)}
                   </div>
 
                   {/* View Details Button */}

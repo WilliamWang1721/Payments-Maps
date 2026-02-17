@@ -13,8 +13,40 @@ export interface CriticalErrorOptions {
 
 export function getErrorMessage(error: unknown, fallbackMessage = '操作失败，请重试') {
   if (error instanceof Error) return error.message || fallbackMessage
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = String((error as { message?: unknown }).message || '').trim()
+    if (message) return message
+  }
   if (typeof error === 'string') return error
   return fallbackMessage
+}
+
+export function isLikelyNetworkError(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+
+  const message = getErrorMessage(error, '').toLowerCase()
+  const code = String((error as { code?: string }).code || '').toLowerCase()
+
+  return (
+    message.includes('network') ||
+    message.includes('fetch failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('timeout') ||
+    message.includes('connection') ||
+    code.includes('network') ||
+    code.includes('timeout')
+  )
+}
+
+export function getFriendlyErrorMessage(
+  error: unknown,
+  fallbackMessage = '操作失败，请重试',
+  networkFallback = '网络异常，请检查网络后重试'
+) {
+  if (isLikelyNetworkError(error)) {
+    return networkFallback
+  }
+  return getErrorMessage(error, fallbackMessage)
 }
 
 export function getErrorDetails(error: unknown) {
@@ -58,4 +90,3 @@ export const notify = {
     })
   },
 }
-

@@ -19,7 +19,7 @@ import RadioGroup from '@/components/ui/RadioGroup'
 import Checkbox from '@/components/ui/Checkbox'
 import Select from '@/components/ui/Select'
 import { FeesConfiguration, DEFAULT_FEES_CONFIG, FeeType, CardNetworkFee, feeUtils } from '@/types/fees'
-import { getErrorDetails, notify } from '@/lib/notify'
+import { getErrorDetails, getFriendlyErrorMessage, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { sanitizeExternalUrl } from '@/utils/sanitize'
 import type { POSMachine } from '@/types'
@@ -52,6 +52,7 @@ const EditPOS = () => {
   })
   const [attempts, setAttempts] = useState<any[]>([])
   const [touchedFields, setTouchedFields] = useState({ merchant_name: false })
+  const attemptsLoadWarningShownRef = useRef(false)
 
   const getAttemptPaymentMethodLabel = (method?: string | null) => {
     switch (method) {
@@ -88,7 +89,10 @@ const EditPOS = () => {
   }
 
   const loadAttempts = useCallback(async () => {
-    if (!id) return
+    if (!id) {
+      setAttempts([])
+      return
+    }
 
     try {
       const { data, error } = await supabase
@@ -98,13 +102,24 @@ const EditPOS = () => {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('加载尝试记录失败:', error)
-        return
+        throw error
       }
 
       setAttempts(data || [])
+      attemptsLoadWarningShownRef.current = false
     } catch (error) {
       console.error('加载尝试记录失败:', error)
+      setAttempts([])
+      if (!attemptsLoadWarningShownRef.current) {
+        attemptsLoadWarningShownRef.current = true
+        notify.warning(
+          getFriendlyErrorMessage(
+            error,
+            '尝试记录加载失败，暂时显示为空',
+            '网络异常，尝试记录暂时不可用'
+          )
+        )
+      }
     }
   }, [id])
 
