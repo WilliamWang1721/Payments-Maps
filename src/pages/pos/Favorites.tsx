@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Heart, Clock } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { notify } from '@/lib/notify'
+import { getErrorDetails, notify } from '@/lib/notify'
 import { getPOSStatusDotClass, getPOSStatusLabel } from '@/lib/posStatus'
 import FullScreenLoading from '@/components/ui/FullScreenLoading'
 import { useUserPOSStore } from '@/stores/useUserPOSStore'
@@ -13,19 +13,35 @@ const Favorites: React.FC = () => {
   const { user } = useAuthStore()
   const favorites = useUserPOSStore((state) => state.favorites)
   const loading = useUserPOSStore((state) => state.favoritesLoading)
+  const loaded = useUserPOSStore((state) => state.favoritesLoaded)
+  const favoritesError = useUserPOSStore((state) => state.favoritesError)
   const loadFavorites = useUserPOSStore((state) => state.loadFavorites)
   const removeFavoriteById = useUserPOSStore((state) => state.removeFavorite)
   const resetUserPOSState = useUserPOSStore((state) => state.reset)
   const { loading: removingFavorite, run: runRemoveFavorite } = useAsyncAction()
 
+  const fetchFavorites = useCallback(async () => {
+    if (!user) return
+
+    try {
+      await loadFavorites(user.id)
+    } catch (error) {
+      console.error('加载收藏列表失败:', error)
+      notify.critical('加载失败，请重试', {
+        title: '加载收藏列表失败',
+        details: getErrorDetails(error),
+      })
+    }
+  }, [loadFavorites, user])
+
   useEffect(() => {
     if (user) {
-      void loadFavorites(user.id)
+      void fetchFavorites()
     } else {
       resetUserPOSState()
       navigate('/login')
     }
-  }, [loadFavorites, navigate, resetUserPOSState, user])
+  }, [fetchFavorites, navigate, resetUserPOSState, user])
 
   const removeFavorite = async (favoriteId: string, posName: string) => {
     const removed = await runRemoveFavorite(() => removeFavoriteById(favoriteId), {
@@ -38,8 +54,18 @@ const Favorites: React.FC = () => {
     notify.success(`已取消收藏 "${posName}"`)
   }
 
-  if (loading) {
+  if (loading || !loaded) {
     return <FullScreenLoading message="加载中..." />
+  }
+
+  const validFavorites = favorites.filter((favorite) => favorite.pos_machines)
+  const hasInitialLoadError = Boolean(favoritesError) && validFavorites.length === 0
+  const hasOnlyInvalidFavorites = !hasInitialLoadError && favorites.length > 0 && validFavorites.length === 0
+
+  const formatFavoriteDate = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '未知日期'
+    return date.toLocaleDateString('zh-CN')
   }
 
   return (
@@ -63,7 +89,33 @@ const Favorites: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {favorites.length === 0 ? (
+        {hasInitialLoadError ? (
+          <div className="text-center py-12">
+            <div className="bg-white rounded-lg shadow-sm p-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">收藏列表加载失败</h3>
+              <p className="text-gray-600 mb-6">{favoritesError}</p>
+              <button
+                onClick={() => void fetchFavorites()}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                重新加载
+              </button>
+            </div>
+          </div>
+        ) : hasOnlyInvalidFavorites ? (
+          <div className="text-center py-12">
+            <div className="bg-white rounded-lg shadow-sm p-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">收藏数据暂不可用</h3>
+              <p className="text-gray-600 mb-6">部分收藏对应的 POS 记录已失效，请刷新后重试。</p>
+              <button
+                onClick={() => void fetchFavorites()}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                刷新收藏
+              </button>
+            </div>
+          </div>
+        ) : validFavorites.length === 0 ? (
           <div className="text-center py-12">
             <div className="bg-white rounded-lg shadow-sm p-8">
               <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -79,7 +131,7 @@ const Favorites: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {favorites.map((favorite) => {
+            {validFavorites.map((favorite) => {
               const pos = favorite.pos_machines
               if (!pos) return null
               return (
@@ -127,7 +179,7 @@ const Favorites: React.FC = () => {
                     {/* Favorite Time */}
                     <div className="flex items-center text-sm text-gray-500 mb-4">
                       <Clock className="h-4 w-4 mr-1" />
-                      收藏于 {new Date(favorite.created_at).toLocaleDateString('zh-CN')}
+                      收藏于 {formatFavoriteDate(favorite.created_at)}
                     </div>
 
                     {/* View Details Button */}

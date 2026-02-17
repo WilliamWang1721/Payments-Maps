@@ -84,12 +84,17 @@ const normalizeHistory = (rows: HistoryWithPOSRaw[] | null | undefined): History
   return normalizeSupabaseRelation(rows, 'pos_machines') as HistoryWithPOS[]
 }
 
+const normalizeId = (value: string | null | undefined) => value?.trim() || ''
+
 export const posService = {
   async listUserFavorites(userId: string): Promise<FavoriteWithPOS[]> {
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedUserId) return []
+
     const { data, error } = await supabase
       .from('user_favorites')
       .select(FAVORITE_POS_SELECT)
-      .eq('user_id', userId)
+      .eq('user_id', normalizedUserId)
       .order('created_at', { ascending: false })
 
     throwIfSupabaseError(error)
@@ -97,20 +102,30 @@ export const posService = {
   },
 
   async removeFavoriteById(favoriteId: string): Promise<void> {
+    const normalizedFavoriteId = normalizeId(favoriteId)
+    if (!normalizedFavoriteId) return
+
     const { error } = await supabase
       .from('user_favorites')
       .delete()
-      .eq('id', favoriteId)
+      .eq('id', normalizedFavoriteId)
 
     throwIfSupabaseError(error)
   },
 
   async getFavoriteStatus(userId: string, posMachineId: string): Promise<{ isFavorite: boolean; featureAvailable: boolean }> {
+    const normalizedUserId = normalizeId(userId)
+    const normalizedPosMachineId = normalizeId(posMachineId)
+
+    if (!normalizedUserId || !normalizedPosMachineId) {
+      return { isFavorite: false, featureAvailable: true }
+    }
+
     const { data, error } = await supabase
       .from('user_favorites')
       .select('id')
-      .eq('user_id', userId)
-      .eq('pos_machine_id', posMachineId)
+      .eq('user_id', normalizedUserId)
+      .eq('pos_machine_id', normalizedPosMachineId)
       .single()
 
     if (error) {
@@ -127,11 +142,18 @@ export const posService = {
   },
 
   async addFavorite(userId: string, posMachineId: string): Promise<{ featureAvailable: boolean }> {
+    const normalizedUserId = normalizeId(userId)
+    const normalizedPosMachineId = normalizeId(posMachineId)
+
+    if (!normalizedUserId || !normalizedPosMachineId) {
+      return { featureAvailable: true }
+    }
+
     const { error } = await supabase
       .from('user_favorites')
       .insert({
-        user_id: userId,
-        pos_machine_id: posMachineId,
+        user_id: normalizedUserId,
+        pos_machine_id: normalizedPosMachineId,
       })
 
     if (error) {
@@ -145,11 +167,18 @@ export const posService = {
   },
 
   async removeFavorite(userId: string, posMachineId: string): Promise<{ featureAvailable: boolean }> {
+    const normalizedUserId = normalizeId(userId)
+    const normalizedPosMachineId = normalizeId(posMachineId)
+
+    if (!normalizedUserId || !normalizedPosMachineId) {
+      return { featureAvailable: true }
+    }
+
     const { error } = await supabase
       .from('user_favorites')
       .delete()
-      .eq('user_id', userId)
-      .eq('pos_machine_id', posMachineId)
+      .eq('user_id', normalizedUserId)
+      .eq('pos_machine_id', normalizedPosMachineId)
 
     if (error) {
       if (error.code === 'PGRST205' || error.code === '406') {
@@ -162,49 +191,67 @@ export const posService = {
   },
 
   async listUserHistory(userId: string, limit: number = 100): Promise<HistoryWithPOS[]> {
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedUserId) return []
+
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 500)) : 100
+
     const { data, error } = await supabase
       .from('user_history')
       .select(HISTORY_POS_SELECT)
-      .eq('user_id', userId)
+      .eq('user_id', normalizedUserId)
       .order('visited_at', { ascending: false })
-      .limit(limit)
+      .limit(safeLimit)
 
     throwIfSupabaseError(error)
     return normalizeHistory(data as HistoryWithPOSRaw[] | null)
   },
 
   async clearUserHistory(userId: string): Promise<void> {
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedUserId) return
+
     const { error } = await supabase
       .from('user_history')
       .delete()
-      .eq('user_id', userId)
+      .eq('user_id', normalizedUserId)
 
     throwIfSupabaseError(error)
   },
 
   async removeHistoryById(historyId: string): Promise<void> {
+    const normalizedHistoryId = normalizeId(historyId)
+    if (!normalizedHistoryId) return
+
     const { error } = await supabase
       .from('user_history')
       .delete()
-      .eq('id', historyId)
+      .eq('id', normalizedHistoryId)
 
     throwIfSupabaseError(error)
   },
 
   async recordUserHistoryVisit(userId: string, posMachineId: string): Promise<void> {
+    const normalizedUserId = normalizeId(userId)
+    const normalizedPosMachineId = normalizeId(posMachineId)
+    if (!normalizedUserId || !normalizedPosMachineId) return
+
     const { error } = await supabase.rpc('upsert_user_history', {
-      p_user_id: userId,
-      p_pos_machine_id: posMachineId,
+      p_user_id: normalizedUserId,
+      p_pos_machine_id: normalizedPosMachineId,
     })
 
     throwIfSupabaseError(error)
   },
 
   async listUserPOSMachines(userId: string): Promise<POSMachine[]> {
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedUserId) return []
+
     const { data, error } = await supabase
       .from('pos_machines')
       .select('*')
-      .eq('created_by', userId)
+      .eq('created_by', normalizedUserId)
       .order('created_at', { ascending: false })
 
     throwIfSupabaseError(error)
@@ -284,10 +331,13 @@ export const posService = {
   },
 
   async removePOSMachineById(posId: string): Promise<void> {
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return
+
     const { error } = await supabase
       .from('pos_machines')
       .delete()
-      .eq('id', posId)
+      .eq('id', normalizedPosId)
 
     throwIfSupabaseError(error)
   },

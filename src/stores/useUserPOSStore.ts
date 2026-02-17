@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { posService, type FavoriteWithPOS, type HistoryWithPOS } from '@/services/posService'
 import type { POSMachine } from '@/types'
-import { getErrorMessage } from '@/lib/notify'
+import { getFriendlyErrorMessage } from '@/lib/notify'
 
 interface UserPOSState {
   favorites: FavoriteWithPOS[]
@@ -51,7 +51,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       set({ favorites, favoritesError: null })
     } catch (error) {
       set({
-        favoritesError: getErrorMessage(error, '加载收藏列表失败，请稍后重试'),
+        favoritesError: getFriendlyErrorMessage(
+          error,
+          '加载收藏列表失败，请稍后重试',
+          '网络异常，收藏列表暂时无法加载'
+        ),
       })
       throw error
     } finally {
@@ -68,7 +72,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       }))
     } catch (error) {
       set({
-        favoritesError: getErrorMessage(error, '取消收藏失败，请稍后重试'),
+        favoritesError: getFriendlyErrorMessage(
+          error,
+          '取消收藏失败，请稍后重试',
+          '网络异常，暂时无法取消收藏'
+        ),
       })
       throw error
     }
@@ -81,7 +89,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       set({ history, historyError: null })
     } catch (error) {
       set({
-        historyError: getErrorMessage(error, '加载浏览历史失败，请稍后重试'),
+        historyError: getFriendlyErrorMessage(
+          error,
+          '加载浏览历史失败，请稍后重试',
+          '网络异常，浏览历史暂时无法加载'
+        ),
       })
       throw error
     } finally {
@@ -95,7 +107,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       set({ history: [], historyError: null })
     } catch (error) {
       set({
-        historyError: getErrorMessage(error, '清空历史失败，请稍后重试'),
+        historyError: getFriendlyErrorMessage(
+          error,
+          '清空历史失败，请稍后重试',
+          '网络异常，暂时无法清空历史'
+        ),
       })
       throw error
     }
@@ -110,7 +126,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       }))
     } catch (error) {
       set({
-        historyError: getErrorMessage(error, '删除历史记录失败，请稍后重试'),
+        historyError: getFriendlyErrorMessage(
+          error,
+          '删除历史记录失败，请稍后重试',
+          '网络异常，暂时无法删除历史记录'
+        ),
       })
       throw error
     }
@@ -123,7 +143,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       set({ myPOSMachines, myPOSError: null })
     } catch (error) {
       set({
-        myPOSError: getErrorMessage(error, '加载我的 POS 机失败，请稍后重试'),
+        myPOSError: getFriendlyErrorMessage(
+          error,
+          '加载我的 POS 机失败，请稍后重试',
+          '网络异常，我的 POS 列表暂时无法加载'
+        ),
       })
       throw error
     } finally {
@@ -140,7 +164,11 @@ export const useUserPOSStore = create<UserPOSState>((set) => ({
       }))
     } catch (error) {
       set({
-        myPOSError: getErrorMessage(error, '删除 POS 机失败，请稍后重试'),
+        myPOSError: getFriendlyErrorMessage(
+          error,
+          '删除 POS 机失败，请稍后重试',
+          '网络异常，暂时无法删除 POS 机'
+        ),
       })
       throw error
     }

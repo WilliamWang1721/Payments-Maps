@@ -38,7 +38,7 @@ import { useAutoTranslatedTextMap } from '@/hooks/useAutoTranslation'
 import { ThreeStateValue } from '@/components/ui/ThreeStateSelector'
 import { deleteDraft, getDraft, saveDraft } from '@/lib/drafts'
 import { type CardAlbumItem, getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
-import { getErrorDetails, notify } from '@/lib/notify'
+import { getErrorDetails, getFriendlyErrorMessage, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { sanitizeExternalUrl, sanitizePlainText } from '@/utils/sanitize'
@@ -739,7 +739,22 @@ const AddPOS = () => {
       const { attempts: _attempts, ...posPayload } = payload
       const result = await Promise.race([addPOSMachine(posPayload), timeoutPromise]) as POSMachine
 
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      let authUser: { id: string } | null = null
+      if (attemptInputs.length > 0) {
+        const { data: authData, error: authUserError } = await supabase.auth.getUser()
+        if (authUserError) {
+          console.error('[AddPOS] 获取当前认证用户失败:', authUserError)
+          notify.warning(
+            getFriendlyErrorMessage(
+              authUserError,
+              '登录状态校验失败，已尝试使用本地会话继续保存',
+              '网络异常，登录状态校验失败，已尝试使用本地会话继续保存'
+            )
+          )
+        }
+        authUser = authData?.user ? { id: authData.user.id } : null
+      }
+
       const attemptUserId = authUser?.id || user?.id || result.created_by || null
 
       if (result.created_by && attemptUserId && result.created_by !== attemptUserId) {
