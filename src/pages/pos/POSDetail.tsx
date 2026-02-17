@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
-import { useMapStore } from '@/stores/useMapStore'
 import { getAlbumScopeLabel, useCardAlbumStore } from '@/stores/useCardAlbumStore'
 import { usePermissions } from '@/hooks/usePermissions'
 import AnimatedButton from '@/components/ui/AnimatedButton'
@@ -32,6 +31,7 @@ import type { CardAlbumItem } from '@/stores/useCardAlbumStore'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import type { POSMachine } from '@/types'
 import { posService } from '@/services/posService'
+import { usePOSDetailSharedState } from './hooks/usePOSPageSharedState'
 
 interface Review {
   id: string
@@ -200,7 +200,7 @@ const POSDetail = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { posMachines, deletePOSMachine, selectPOSMachine } = useMapStore()
+  const { posMachines, deletePOSMachine, selectPOSMachine } = usePOSDetailSharedState()
   const permissions = usePermissions()
   const { reports, addReport, resolveReport } = useIssueReportStore()
   const albumCards = useCardAlbumStore((state) => state.cards)
@@ -1196,18 +1196,13 @@ const POSDetail = () => {
       if (foundPOS) {
         setPOS(foundPOS as POSMachine)
       } else {
-        // 如果没找到，从数据库查询
-        const { data: posFromDb, error } = await supabase
-          .from('pos_machines')
-          .select('*')
-          .eq('id', id)
-          .single()
-        
-        if (error || !posFromDb) {
-          console.error('查询POS机失败:', error)
+        // 如果没找到，从数据层查询
+        const posFromDb = await posService.getPOSMachineById(id)
+        if (!posFromDb) {
+          console.error('查询POS机失败: 记录不存在', id)
           notify.critical('未找到对应的POS机', {
             title: '加载 POS 详情失败',
-            details: getErrorDetails(error),
+            details: `POS ID: ${id}`,
           })
           navigate(-1)
           return
@@ -1381,16 +1376,7 @@ const POSDetail = () => {
     if (!id) return
     
     try {
-      const { data: attemptsData, error } = await supabase
-        .from('pos_attempts')
-        .select('*')
-        .eq('pos_id', id)
-        .order('created_at', { ascending: false })
-      
-      if (error) {
-        throw error
-      }
-      
+      const attemptsData = await posService.listPOSAttempts(id)
       const nextAttempts = (attemptsData || []) as Attempt[]
       setAttempts(nextAttempts)
       void loadAttemptUserNames(nextAttempts)
@@ -1590,19 +1576,7 @@ const POSDetail = () => {
         return
       }
 
-      // 获取下一个 attempt_number
-      const { data: latestAttempt, error: latestAttemptError } = await supabase
-        .from('pos_attempts')
-        .select('attempt_number')
-        .eq('pos_id', id)
-        .order('attempt_number', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (latestAttemptError && latestAttemptError.code !== 'PGRST116') {
-        console.error('获取最新尝试编号失败:', latestAttemptError)
-      }
-      const nextAttemptNumber = latestAttempt?.attempt_number ? latestAttempt.attempt_number + 1 : 1
+      const nextAttemptNumber = await posService.getNextPOSAttemptNumber(id)
 
       const attemptsPayload = attemptsList.map((attempt, index) => {
         const linkedCardId = attempt.card_album_card_id?.trim() || null
@@ -1627,27 +1601,24 @@ const POSDetail = () => {
         }
       })
 
-      // 保存尝试记录到Supabase数据库
-      const { data, error } = await supabase
-        .from('pos_attempts')
-        .insert(attemptsPayload)
-        .select()
-      
-      if (error) {
+      // 保存尝试记录到数据层
+      let data: Record<string, any>[] = []
+      try {
+        data = (await posService.createPOSAttempts(attemptsPayload as Record<string, unknown>[])) as Record<string, any>[]
+      } catch (error: any) {
         console.error('提交尝试记录失败:', {
           error,
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
+          code: error?.code,
+          message: error?.message,
+          details: error?.details,
+          hint: error?.hint,
         })
-        
-        // 根据错误类型提供更具体的错误信息
-        if (error.code === '42501') {
+
+        if (error?.code === '42501') {
           notify.error('权限不足，请检查登录状态')
-        } else if (error.code === '23505') {
+        } else if (error?.code === '23505') {
           notify.error('记录已存在')
-        } else if (error.message?.includes('RLS')) {
+        } else if (error?.message?.includes('RLS')) {
           notify.error('数据访问权限错误，请重新登录')
         } else {
           const missingColumn = extractMissingColumnFromError(error)
@@ -1656,7 +1627,7 @@ const POSDetail = () => {
               title: '数据库需要升级',
             })
           } else {
-            notify.error(`提交失败: ${error.message || '未知错误'}`)
+            notify.error(`提交失败: ${error?.message || '未知错误'}`)
           }
         }
         return
@@ -1728,18 +1699,7 @@ const POSDetail = () => {
     }
 
     try {
-      // 从Supabase数据库删除尝试记录
-      const { error } = await supabase
-        .from('pos_attempts')
-        .delete()
-        .eq('id', attemptId)
-        .eq('user_id', user.id) // 确保只能删除自己的记录
-      
-      if (error) {
-        console.error('删除尝试记录失败:', error)
-        notify.error('删除失败，请重试')
-        return
-      }
+      await posService.removePOSAttemptByIdForUser(attemptId, user.id)
       
       // 从本地列表中移除
       setAttempts(prev => prev.filter(attempt => attempt.id !== attemptId))
@@ -1842,17 +1802,7 @@ const POSDetail = () => {
     const toastId = notify.loading('正在按最新尝试记录逻辑刷新 POS 记录...')
 
     try {
-      const { data: latestAttempts, error: attemptsError } = await supabase
-        .from('pos_attempts')
-        .select('*')
-        .eq('pos_id', pos.id)
-        .order('attempted_at', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-
-      if (attemptsError) {
-        throw attemptsError
-      }
-
+      const latestAttempts = await posService.listPOSAttemptsForRefresh(pos.id)
       const attemptsData = (latestAttempts || []) as Attempt[]
       if (attemptsData.length === 0) {
         notify.error('暂无尝试记录，无法刷新 POS 记录', { id: toastId })
@@ -1881,21 +1831,23 @@ const POSDetail = () => {
         updated_at: refreshedAt,
       }
 
-      let { error: updateError } = await supabase
-        .from('pos_machines')
-        .update(updatePayload)
-        .eq('id', pos.id)
+      let updateError: Error | null = null
+      try {
+        await posService.updatePOSMachineById(pos.id, updatePayload)
+      } catch (error) {
+        updateError = error as Error
+      }
 
-      if (updateError && updateError.message?.includes('verification_modes')) {
+      if (updateError && updateError.message.includes('verification_modes')) {
         const fallbackPayload = { ...updatePayload }
         delete fallbackPayload.verification_modes
 
-        const { error: fallbackError } = await supabase
-          .from('pos_machines')
-          .update(fallbackPayload)
-          .eq('id', pos.id)
-
-        updateError = fallbackError || null
+        try {
+          await posService.updatePOSMachineById(pos.id, fallbackPayload)
+          updateError = null
+        } catch (error) {
+          updateError = error as Error
+        }
       }
 
       if (updateError) {

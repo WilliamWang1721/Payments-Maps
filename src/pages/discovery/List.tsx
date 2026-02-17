@@ -1,21 +1,22 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Filter, MapPin, Star, Plus, Navigation, Trash2, CheckSquare, Square, RefreshCcw } from 'lucide-react'
-import { useMapStore } from '@/stores/useMapStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import usePermissions from '@/hooks/usePermissions'
 import Button from '@/components/ui/Button'
 import FilterPanel from '@/components/modern-dashboard/FilterPanel'
 import { AnimatedListItem } from '@/components/AnimatedListItem'
 import { SkeletonCard } from '@/components/AnimatedLoading'
-import { supabase } from '@/lib/supabase'
 import { getCardNetworkLabel } from '@/lib/cardNetworks'
 import { notify } from '@/lib/notify'
 import { locationUtils } from '@/lib/amap'
+import { posService } from '@/services/posService'
+import { usePOSListUIState, type POSListSortOption } from '@/hooks/usePOSListUIState'
 import type { POSMachine } from '@/types'
 import ActiveFiltersPanel from './list/ActiveFiltersPanel'
 import POSListCard from './list/POSListCard'
 import VirtualizedPOSGrid from './list/VirtualizedPOSGrid'
+import { usePOSListSharedState } from './list/usePOSListSharedState'
 
 interface POSMachineWithStats extends POSMachine {
   distance?: number
@@ -31,7 +32,7 @@ type POSCardRenderMeta = {
   distanceText: string
 }
 
-type SortOption = 'distance' | 'rating' | 'successRate' | 'createdAt'
+type SortOption = POSListSortOption
 
 const SORT_LABELS: Record<SortOption, string> = {
   distance: '距离优先',
@@ -150,50 +151,34 @@ const getSelectionHintText = (selectionMode: boolean, canBulkRefreshAddress: boo
 
 const List = () => {
   const navigate = useNavigate()
-  const [showFilters, setShowFilters] = useState(false)
-  const [sortBy, setSortBy] = useState<SortOption>('distance')
-  const [attemptStats, setAttemptStats] = useState<Record<string, { success: number; total: number; rate: number | null }>>({})
   const {
-    posMachines,
-    currentLocation,
-    loading,
-    searchKeyword,
-    filters,
-    loadPOSMachines,
-    setFilters,
-    resetFilters,
-  } = useMapStore()
+    showFilters,
+    setShowFilters,
+    sortBy,
+    setSortBy,
+    attemptStats,
+    setAttemptStats,
+    selectionMode,
+    setSelectionMode,
+    selectedPOSIds,
+    setSelectedPOSIds,
+    bulkDeleting,
+    setBulkDeleting,
+    bulkRefreshingAddress,
+    setBulkRefreshingAddress,
+    selectedCount,
+    clearSelection,
+    toggleSelectionMode,
+    togglePosSelection,
+  } = usePOSListUIState()
+  const { posMachines, currentLocation, loading, searchKeyword, filters, loadPOSMachines, setFilters, resetFilters } =
+    usePOSListSharedState()
   
   const { user } = useAuthStore()
   const permissions = usePermissions()
   const { canDeleteItem } = permissions
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedPOSIds, setSelectedPOSIds] = useState<Set<string>>(new Set())
-  const [bulkDeleting, setBulkDeleting] = useState(false)
-  const [bulkRefreshingAddress, setBulkRefreshingAddress] = useState(false)
   const canBulkDelete = !permissions.isLoading && (permissions.canDelete || permissions.canDeleteAll)
   const canBulkRefreshAddress = !permissions.isLoading && permissions.isAdmin
-  const selectedCount = selectedPOSIds.size
-  const toggleSelectionMode = useCallback(() => {
-    setSelectionMode((prev) => {
-      if (prev) {
-        setSelectedPOSIds(new Set())
-      }
-      return !prev
-    })
-  }, [])
-
-  const togglePosSelection = useCallback((posId: string) => {
-    setSelectedPOSIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(posId)) {
-        next.delete(posId)
-      } else {
-        next.add(posId)
-      }
-      return next
-    })
-  }, [])
 
   useEffect(() => {
     loadPOSMachines()
@@ -202,9 +187,9 @@ const List = () => {
   useEffect(() => {
     if (!canBulkDelete && selectionMode) {
       setSelectionMode(false)
-      setSelectedPOSIds(new Set())
+      clearSelection()
     }
-  }, [canBulkDelete, selectionMode])
+  }, [canBulkDelete, clearSelection, selectionMode, setSelectionMode])
 
   useEffect(() => {
     setSelectedPOSIds((prev) => {
@@ -220,7 +205,7 @@ const List = () => {
       })
       return mutated ? next : prev
     })
-  }, [posMachines])
+  }, [posMachines, setSelectedPOSIds])
 
   useEffect(() => {
     if (sortBy !== 'successRate') return
@@ -242,16 +227,8 @@ const List = () => {
 
       for (let index = 0; index < uncachedPosIds.length; index += chunkSize) {
         const chunkIds = uncachedPosIds.slice(index, index + chunkSize)
-        const { data, error } = await supabase
-          .from('pos_attempts')
-          .select('pos_id, result')
-          .in('pos_id', chunkIds)
-
-        if (error) {
-          throw error
-        }
-
-        allAttempts.push(...((data as Array<{ pos_id: string; result: string }>) || []))
+        const chunkAttempts = await posService.listPOSAttemptOutcomes(chunkIds)
+        allAttempts.push(...chunkAttempts)
       }
 
       if (cancelled) return
@@ -293,7 +270,7 @@ const List = () => {
     return () => {
       cancelled = true
     }
-  }, [attemptStats, posMachines, sortBy])
+  }, [attemptStats, posMachines, setAttemptStats, sortBy])
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     const dLat = (lat2 - lat1) * DEGREE_TO_RADIAN
@@ -372,11 +349,11 @@ const List = () => {
   const handleSelectAll = useCallback(() => {
     if (!selectionMode || !hasSelectableItems) return
     if (isAllSelected) {
-      setSelectedPOSIds(new Set())
+      clearSelection()
       return
     }
     setSelectedPOSIds(new Set(allSelectableIds))
-  }, [allSelectableIds, hasSelectableItems, isAllSelected, selectionMode])
+  }, [allSelectableIds, clearSelection, hasSelectableItems, isAllSelected, selectionMode, setSelectedPOSIds])
 
   const handleBulkDelete = async () => {
     if (!selectionMode || selectedCount === 0) return
@@ -394,17 +371,10 @@ const List = () => {
 
     setBulkDeleting(true)
     try {
-      const { error } = await supabase
-        .from('pos_machines')
-        .delete()
-        .in('id', idsToDelete)
-
-      if (error) {
-        throw error
-      }
+      await posService.removePOSMachinesByIds(idsToDelete)
 
       notify.success(`已删除 ${idsToDelete.length} 台POS机`)
-      setSelectedPOSIds(new Set())
+      clearSelection()
       setSelectionMode(false)
       await loadPOSMachines()
     } catch (error) {
@@ -464,12 +434,7 @@ const List = () => {
             throw new Error('解析结果为空')
           }
 
-          const { error } = await supabase
-            .from('pos_machines')
-            .update({ address: resolved })
-            .eq('id', pos.id)
-
-          if (error) throw error
+          await posService.updatePOSMachineAddress(pos.id, resolved)
           successCount += 1
         } catch (error) {
           failureCount += 1
@@ -487,7 +452,7 @@ const List = () => {
         notify.error(`地址刷新完成：成功 ${successCount}，失败 ${failureCount}（详情见控制台）`, { id: toastId })
       }
 
-      setSelectedPOSIds(new Set())
+      clearSelection()
       setSelectionMode(false)
       await loadPOSMachines()
     } catch (error) {
@@ -549,13 +514,13 @@ const List = () => {
   const handleApplyFilterPanel = useCallback(() => {
     loadPOSMachines().catch((error) => console.error('应用筛选失败:', error))
     setShowFilters(false)
-  }, [loadPOSMachines])
+  }, [loadPOSMachines, setShowFilters])
 
   const handleResetFilterPanel = useCallback(() => {
     resetFilters()
     loadPOSMachines().catch((error) => console.error('重置筛选失败:', error))
     setShowFilters(false)
-  }, [loadPOSMachines, resetFilters])
+  }, [loadPOSMachines, resetFilters, setShowFilters])
 
   // 监听搜索关键词变化，实现实时搜索
   useEffect(() => {

@@ -1,7 +1,14 @@
 import type { PostgrestError } from '@supabase/supabase-js'
 import { normalizeSupabaseRelation } from '@/lib/supabaseRelations'
 import { supabase } from '@/lib/supabase'
-import type { POSMachine } from '@/types'
+import {
+  posAttemptRepository,
+  type POSAttemptBatchInsertPayload,
+  type POSAttemptInsertPayload,
+  type POSAttemptOutcomeRow,
+} from '@/repositories/posAttemptRepository'
+import { posRepository, type POSContributionRecord } from '@/repositories/posRepository'
+import type { POSAttempt, POSMachine } from '@/types'
 
 type POSListItem = Pick<
   POSMachine,
@@ -248,84 +255,165 @@ export const posService = {
     const normalizedUserId = normalizeId(userId)
     if (!normalizedUserId) return []
 
-    const { data, error } = await supabase
-      .from('pos_machines')
-      .select('*')
-      .eq('created_by', normalizedUserId)
-      .order('created_at', { ascending: false })
+    const { data, error } = await posRepository.listByCreator(normalizedUserId)
 
     throwIfSupabaseError(error)
     return (data || []) as POSMachine[]
   },
 
+  async listPOSAttempts(posId: string): Promise<POSAttempt[]> {
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return []
+
+    const { data, error } = await posAttemptRepository.listByPOSId(normalizedPosId)
+    throwIfSupabaseError(error)
+    return ((data || []) as POSAttempt[])
+  },
+
+  async probePOSAttemptsColumns(columns: string): Promise<{ ok: boolean; error: PostgrestError | null }> {
+    const { error } = await posAttemptRepository.probeColumns(columns)
+    return { ok: !error, error: error || null }
+  },
+
+  async listPOSAttemptsForRefresh(posId: string): Promise<POSAttempt[]> {
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return []
+
+    const { data, error } = await posAttemptRepository.listByPOSIdForRefresh(normalizedPosId)
+    throwIfSupabaseError(error)
+    return ((data || []) as POSAttempt[])
+  },
+
+  async listPOSAttemptOutcomes(posIds: string[]): Promise<POSAttemptOutcomeRow[]> {
+    const normalizedPosIds = Array.from(new Set(posIds.map(normalizeId).filter(Boolean)))
+    if (normalizedPosIds.length === 0) return []
+
+    const { data, error } = await posAttemptRepository.listOutcomesByPOSIds(normalizedPosIds)
+    throwIfSupabaseError(error)
+    return ((data || []) as POSAttemptOutcomeRow[])
+  },
+
+  async getNextPOSAttemptNumber(posId: string): Promise<number> {
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return 1
+
+    const { data, error } = await posAttemptRepository.getLatestAttemptNumber(normalizedPosId)
+    if (error && error.code !== 'PGRST116') {
+      throw error
+    }
+    const latestAttemptNumber = data?.attempt_number || 0
+    return latestAttemptNumber + 1
+  },
+
+  async createPOSAttempt(payload: POSAttemptInsertPayload): Promise<POSAttempt> {
+    const normalizedPosId = normalizeId(payload.pos_id)
+    const normalizedUserId = normalizeId(payload.user_id)
+    if (!normalizedPosId || !normalizedUserId) {
+      throw new Error('POS ID 或用户 ID 无效')
+    }
+
+    const insertPayload: POSAttemptInsertPayload = {
+      ...payload,
+      pos_id: normalizedPosId,
+      user_id: normalizedUserId,
+      card_name: payload.card_name?.trim() || null,
+      payment_method: payload.payment_method?.trim() || null,
+      notes: payload.notes?.trim() || null,
+      attempt_number: payload.attempt_number > 0 ? payload.attempt_number : 1,
+    }
+
+    const { data, error } = await posAttemptRepository.insertOne(insertPayload)
+    throwIfSupabaseError(error)
+    return data as POSAttempt
+  },
+
+  async createPOSAttempts(payloads: POSAttemptBatchInsertPayload[]): Promise<POSAttempt[]> {
+    const normalizedPayloads = payloads
+      .map((payload) => {
+        const posId = normalizeId(String(payload.pos_id || ''))
+        const userId = normalizeId(String(payload.user_id || ''))
+        if (!posId || !userId) return null
+        return {
+          ...payload,
+          pos_id: posId,
+          user_id: userId,
+        }
+      })
+      .filter(Boolean) as POSAttemptBatchInsertPayload[]
+
+    if (normalizedPayloads.length === 0) return []
+
+    const { data, error } = await posAttemptRepository.insertMany(normalizedPayloads)
+    throwIfSupabaseError(error)
+    return ((data || []) as POSAttempt[])
+  },
+
+  async removePOSAttemptByIdForUser(attemptId: string, userId: string): Promise<void> {
+    const normalizedAttemptId = normalizeId(attemptId)
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedAttemptId || !normalizedUserId) return
+
+    const { error } = await posAttemptRepository.deleteByIdAndUser(normalizedAttemptId, normalizedUserId)
+    throwIfSupabaseError(error)
+  },
+
   async listPOSMachinesByStatus(status: POSMachine['status'] = 'active'): Promise<POSMachine[]> {
-    const { data, error } = await supabase
-      .from('pos_machines')
-      .select('*')
-      .eq('status', status)
-      .order('created_at', { ascending: false })
+    const { data, error } = await posRepository.listByStatus(status)
 
     throwIfSupabaseError(error)
     return (data || []) as POSMachine[]
   },
 
   async countUserPOSMachines(userId: string): Promise<number> {
-    const { count, error } = await supabase
-      .from('pos_machines')
-      .select('id', { count: 'exact', head: true })
-      .eq('created_by', userId)
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedUserId) return 0
+    const { count, error } = await posRepository.countByCreator(normalizedUserId)
 
     throwIfSupabaseError(error)
     return count || 0
   },
 
   async listRecentUserContributions(userId: string, limit: number = 3): Promise<POSContributionSummary[]> {
-    const { data, error } = await supabase
-      .from('pos_machines')
-      .select('id, merchant_name, address, status, created_at')
-      .eq('created_by', userId)
-      .order('created_at', { ascending: false })
-      .limit(limit)
+    const normalizedUserId = normalizeId(userId)
+    if (!normalizedUserId) return []
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 100)) : 3
+    const { data, error } = await posRepository.listRecentByCreator(normalizedUserId, safeLimit)
 
     throwIfSupabaseError(error)
-    return ((data || []) as POSContributionSummary[])
+    return (data || []) as POSContributionRecord[]
   },
 
   async getPOSMachineById(posId: string): Promise<POSMachine | null> {
-    const { data, error } = await supabase
-      .from('pos_machines')
-      .select('*')
-      .eq('id', posId)
-      .maybeSingle()
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return null
+    const { data, error } = await posRepository.findById(normalizedPosId)
 
     throwIfSupabaseError(error)
     return (data as POSMachine | null) || null
   },
 
   async updatePOSMachineById(posId: string, updates: Record<string, unknown>): Promise<void> {
-    const { error } = await supabase
-      .from('pos_machines')
-      .update(updates)
-      .eq('id', posId)
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return
+    const { error } = await posRepository.updateById(normalizedPosId, updates)
 
     throwIfSupabaseError(error)
   },
 
   async updatePOSMachineAddress(posId: string, address: string): Promise<void> {
-    const { error } = await supabase
-      .from('pos_machines')
-      .update({ address })
-      .eq('id', posId)
+    const normalizedPosId = normalizeId(posId)
+    if (!normalizedPosId) return
+    const normalizedAddress = address?.trim()
+    if (!normalizedAddress) return
+    const { error } = await posRepository.updateAddressById(normalizedPosId, normalizedAddress)
 
     throwIfSupabaseError(error)
   },
 
   async removePOSMachinesByIds(posIds: string[]): Promise<void> {
-    if (posIds.length === 0) return
-    const { error } = await supabase
-      .from('pos_machines')
-      .delete()
-      .in('id', posIds)
+    const normalizedPosIds = Array.from(new Set(posIds.map(normalizeId).filter(Boolean)))
+    if (normalizedPosIds.length === 0) return
+    const { error } = await posRepository.deleteByIds(normalizedPosIds)
 
     throwIfSupabaseError(error)
   },
@@ -334,10 +422,7 @@ export const posService = {
     const normalizedPosId = normalizeId(posId)
     if (!normalizedPosId) return
 
-    const { error } = await supabase
-      .from('pos_machines')
-      .delete()
-      .eq('id', normalizedPosId)
+    const { error } = await posRepository.deleteById(normalizedPosId)
 
     throwIfSupabaseError(error)
   },

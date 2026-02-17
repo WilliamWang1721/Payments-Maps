@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, CreditCard, Smartphone, Settings, FileText, Link, Plus, Building } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedInput from '@/components/ui/AnimatedInput'
@@ -14,7 +13,6 @@ import AnimatedModal from '@/components/ui/AnimatedModal'
 import MultiSelect from '@/components/ui/MultiSelect'
 import BrandSelector from '@/components/BrandSelector'
 import { CARD_NETWORKS, CardNetwork, getCardNetworkLabel } from '@/lib/cardNetworks'
-import { supabase } from '@/lib/supabase'
 import RadioGroup from '@/components/ui/RadioGroup'
 import Checkbox from '@/components/ui/Checkbox'
 import Select from '@/components/ui/Select'
@@ -23,12 +21,14 @@ import { getErrorDetails, getFriendlyErrorMessage, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { sanitizeExternalUrl } from '@/utils/sanitize'
 import type { POSMachine } from '@/types'
+import { posService } from '@/services/posService'
+import { useEditPOSSharedState } from './hooks/usePOSPageSharedState'
 
 const EditPOS = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { posMachines, updatePOSMachine, deletePOSMachine } = useMapStore()
+  const { posMachines, updatePOSMachine, deletePOSMachine } = useEditPOSSharedState()
   const { isLoading: permissionsLoading, canEditItem, canDeleteItem } = usePermissions()
   
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -95,16 +95,7 @@ const EditPOS = () => {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('pos_attempts')
-        .select('*')
-        .eq('pos_id', id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        throw error
-      }
-
+      const data = await posService.listPOSAttempts(id)
       setAttempts(data || [])
       attemptsLoadWarningShownRef.current = false
     } catch (error) {
@@ -150,17 +141,13 @@ const EditPOS = () => {
         
         // 如果store中没有数据，直接从数据库查询
         if (!posData) {
-          const { data, error } = await supabase
-            .from('pos_machines')
-            .select('*')
-            .eq('id', id)
-            .single()
-          
-          if (error || !data) {
-            console.error('查询POS机数据失败:', error)
+          const data = await posService.getPOSMachineById(id)
+
+          if (!data) {
+            console.error('查询POS机数据失败: 记录不存在', id)
             notify.critical('未找到该POS机信息', {
               title: '无法编辑 POS 机',
-              details: getErrorDetails(error),
+              details: `POS ID: ${id}`,
             })
             navigate('/app/map')
             return
@@ -400,18 +387,7 @@ const EditPOS = () => {
     }
 
     try {
-      // 从Supabase数据库删除尝试记录
-      const { error } = await supabase
-        .from('pos_attempts')
-        .delete()
-        .eq('id', attemptId)
-        .eq('user_id', user.id) // 确保只能删除自己的记录
-      
-      if (error) {
-        console.error('删除尝试记录失败:', error)
-        notify.error('删除失败，请重试')
-        return
-      }
+      await posService.removePOSAttemptByIdForUser(attemptId, user.id)
       
       // 更新本地状态
       setAttempts(prev => prev.filter(attempt => attempt.id !== attemptId))
@@ -449,43 +425,19 @@ const EditPOS = () => {
     if (!pendingAttemptResult || !user || !id) return
     
     try {
-      // 获取下一个 attempt_number
-      const { data: latestAttempt, error: latestAttemptError } = await supabase
-        .from('pos_attempts')
-        .select('attempt_number')
-        .eq('pos_id', id)
-        .order('attempt_number', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (latestAttemptError && latestAttemptError.code !== 'PGRST116') {
-        console.error('获取最新尝试编号失败:', latestAttemptError)
-      }
-      const nextAttemptNumber = latestAttempt?.attempt_number ? latestAttempt.attempt_number + 1 : 1
-
-      // 保存尝试记录到Supabase数据库
-      const { data, error } = await supabase
-        .from('pos_attempts')
-        .insert({
-          pos_id: id,
-          user_id: user.id,
-          result: pendingAttemptResult === 'success' ? 'success' : 'failure',
-          card_name: cardInfo.card_name.trim() || null,
-          payment_method: cardInfo.payment_method.trim() || null,
-          notes: cardInfo.notes?.trim() || null,
-          attempt_number: nextAttemptNumber
-        })
-        .select()
-        .single()
-      
-      if (error) {
-        console.error('提交尝试记录失败:', error)
-        notify.error('提交失败，请重试')
-        return
-      }
+      const nextAttemptNumber = await posService.getNextPOSAttemptNumber(id)
+      await posService.createPOSAttempt({
+        pos_id: id,
+        user_id: user.id,
+        result: pendingAttemptResult === 'success' ? 'success' : 'failure',
+        card_name: cardInfo.card_name,
+        payment_method: cardInfo.payment_method,
+        notes: cardInfo.notes,
+        attempt_number: nextAttemptNumber,
+      })
       
       // 重新加载尝试记录
-       await loadAttempts()
+      await loadAttempts()
       
       setShowCardInfoModal(false)
       setPendingAttemptResult(null)

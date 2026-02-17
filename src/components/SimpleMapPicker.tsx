@@ -52,33 +52,56 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
 
   const placeMarker = useCallback(
     (lng: number, lat: number) => {
-      if (!mapRef.current) return
+      const map = mapRef.current
+      if (!map) return
+
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+        console.warn('[SimpleMapPicker] 忽略非法坐标:', { lng, lat })
+        return
+      }
 
       const AMap = (window as any).AMap
-      if (!AMap) return
+      if (!AMap || !AMap.Marker) return
 
-      // 移除旧标记（避免 map.remove(undefined) 触发 getOptions 异常）
-      if (markerRef.current && typeof markerRef.current.setMap === 'function') {
+      const position: [number, number] = [lng, lat]
+
+      // 复用同一个 Marker，避免频繁 remove/add 导致高德内部 overlay 列表出现 undefined
+      // 从而触发 "Cannot read properties of undefined (reading 'getOptions')"。
+      if (markerRef.current) {
         try {
-          markerRef.current.setMap(null)
+          if (typeof markerRef.current.setMap === 'function') {
+            markerRef.current.setMap(map)
+          }
+          if (typeof markerRef.current.setPosition === 'function') {
+            markerRef.current.setPosition(position)
+          } else {
+            // 极端兼容：若 setPosition 不存在，退化为重建 marker
+            if (typeof markerRef.current.setMap === 'function') {
+              markerRef.current.setMap(null)
+            }
+            markerRef.current = new AMap.Marker({ position, map })
+          }
         } catch (error) {
-          console.warn('[SimpleMapPicker] 旧标记移除失败:', error)
+          console.warn('[SimpleMapPicker] 更新标记失败，尝试重建:', error)
+          try {
+            markerRef.current?.setMap?.(null)
+          } catch {
+            // ignore
+          }
+          markerRef.current = new AMap.Marker({ position, map })
         }
+      } else {
+        markerRef.current = new AMap.Marker({ position, map })
       }
-      markerRef.current = null
 
-      // 创建新标记
-      const marker = new AMap.Marker({
-        position: [lng, lat],
-        map: mapRef.current,
-      })
-
-      markerRef.current = marker
       setSelectedPos({ lat, lng, address: '' })
       resolveAddress(lng, lat)
 
-      // 移动地图中心
-      mapRef.current.setCenter([lng, lat])
+      try {
+        map.setCenter(position)
+      } catch (error) {
+        console.warn('[SimpleMapPicker] 地图设置中心失败:', error)
+      }
     },
     [resolveAddress]
   )
@@ -86,12 +109,25 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   useEffect(() => {
     if (!isOpen) {
       // 清理地图
-      if (mapRef.current) {
+      const map = mapRef.current
+      const marker = markerRef.current
+
+      // 先断开引用，避免关闭后异步回调继续操作已销毁对象
+      mapRef.current = null
+      markerRef.current = null
+      setIsMapReady(false)
+
+      if (marker?.setMap) {
         try {
-          mapRef.current.destroy()
-          mapRef.current = null
-          markerRef.current = null
-          setIsMapReady(false)
+          marker.setMap(null)
+        } catch (error) {
+          console.warn('[SimpleMapPicker] 标记清理失败:', error)
+        }
+      }
+
+      if (map?.destroy) {
+        try {
+          map.destroy()
         } catch (error) {
           console.warn('[SimpleMapPicker] 地图实例销毁失败', error)
         }
