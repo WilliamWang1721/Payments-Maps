@@ -23,7 +23,6 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useMapStore } from '@/stores/useMapStore'
 import { usePermissions } from '@/hooks/usePermissions'
 import BrandSelector from '@/components/BrandSelector'
 import SystemSelect from '@/components/ui/SystemSelect'
@@ -42,7 +41,9 @@ import { getErrorDetails, getFriendlyErrorMessage, notify } from '@/lib/notify'
 import { extractMissingColumnFromError } from '@/lib/postgrestCompat'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import { sanitizeExternalUrl, sanitizePlainText } from '@/utils/sanitize'
-import type { POSMachine } from '@/types'
+import { posService } from '@/services/posService'
+import type { POSAttempt, POSMachine } from '@/types'
+import { useAddPOSSharedState } from './hooks/usePOSPageSharedState'
 
 interface FormData {
   merchant_name: string
@@ -284,7 +285,7 @@ const AddPOS = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user } = useAuthStore()
-  const { addPOSMachine, deletePOSMachine } = useMapStore()
+  const { addPOSMachine, deletePOSMachine } = useAddPOSSharedState()
   const albumCards = useCardAlbumStore((state) => state.cards)
   const _permissions = usePermissions()
   const uiText = useAutoTranslatedTextMap(ADD_POS_TEXTS)
@@ -636,12 +637,9 @@ const AddPOS = () => {
   }
 
   const ensureAttemptsSchemaReady = async () => {
-    const { error } = await supabase
-      .from('pos_attempts')
-      .select(POS_ATTEMPTS_REQUIRED_COLUMNS)
-      .limit(1)
+    const { ok, error } = await posService.probePOSAttemptsColumns(POS_ATTEMPTS_REQUIRED_COLUMNS)
 
-    if (!error) return { ok: true as const }
+    if (ok || !error) return { ok: true as const }
 
     const missingColumn = extractMissingColumnFromError(error)
     return {
@@ -828,16 +826,13 @@ const AddPOS = () => {
           return
         } else {
           const attemptsInsertStartedAt = Date.now()
-          const {
-            data: insertedAttempts,
-            error: attemptsError,
-            status: attemptsStatus,
-            statusText: attemptsStatusText,
-          } = await supabase
-            .from('pos_attempts')
-            .insert(attemptsPayload)
-            .select('id, attempt_number, result, payment_method, created_at')
-
+          let insertedAttempts: POSAttempt[] = []
+          let attemptsError: any = null
+          try {
+            insertedAttempts = await posService.createPOSAttempts(attemptsPayload as Record<string, unknown>[])
+          } catch (error) {
+            attemptsError = error
+          }
           const attemptsInsertDurationMs = Date.now() - attemptsInsertStartedAt
 
           if (attemptsError) {
@@ -846,8 +841,6 @@ const AddPOS = () => {
 
             console.error('[AddPOS] 保存尝试记录失败:', {
               meta: attemptsDebugMeta,
-              status: attemptsStatus,
-              statusText: attemptsStatusText,
               durationMs: attemptsInsertDurationMs,
               errorCode: attemptsError.code,
               errorMessage: attemptsError.message,
@@ -890,8 +883,6 @@ const AddPOS = () => {
           } else {
             console.info('[AddPOS] 尝试记录保存成功:', {
               meta: attemptsDebugMeta,
-              status: attemptsStatus,
-              statusText: attemptsStatusText,
               durationMs: attemptsInsertDurationMs,
               insertedCount: insertedAttempts?.length || 0,
               insertedAttempts,

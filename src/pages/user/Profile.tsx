@@ -23,6 +23,7 @@ import Input from '@/components/ui/Input'
 import { usePermissions, type UserRole } from '@/hooks/usePermissions'
 import { listDrafts } from '@/lib/drafts'
 import { getErrorDetails, notify } from '@/lib/notify'
+import { posService } from '@/services/posService'
 
 interface UserStats {
   posCount: number
@@ -80,17 +81,14 @@ const Profile = () => {
 
     try {
       const [
-        posCountResult,
+        posCount,
         reviewCountResult,
         favoritesResult,
         historyCountResult,
         historyPreviewResult,
         contributionsResult
       ] = await Promise.all([
-        supabase
-          .from('pos_machines')
-          .select('id', { count: 'exact', head: true })
-          .eq('created_by', user.id),
+        posService.countUserPOSMachines(user.id),
         supabase
           .from('reviews')
           .select('id', { count: 'exact', head: true })
@@ -126,16 +124,11 @@ const Profile = () => {
           .eq('user_id', user.id)
           .order('visited_at', { ascending: false })
           .limit(3),
-        supabase
-          .from('pos_machines')
-          .select('id, merchant_name, address, status, created_at')
-          .eq('created_by', user.id)
-          .order('created_at', { ascending: false })
-          .limit(3)
+        posService.listRecentUserContributions(user.id, 3)
       ])
 
       setStats({
-        posCount: posCountResult.count || 0,
+        posCount,
         reviewCount: reviewCountResult.count || 0,
         favoriteCount: favoritesResult.data?.length || 0
       })
@@ -159,7 +152,7 @@ const Profile = () => {
 
       setHistoryPreview(formattedHistory)
 
-      const formattedContributions: ContributionItem[] = (contributionsResult.data || []).map((item) => ({
+      const formattedContributions: ContributionItem[] = (contributionsResult || []).map((item) => ({
         id: item.id,
         merchant_name: item.merchant_name,
         address: item.address,

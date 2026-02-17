@@ -184,13 +184,28 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
     return () => {
       destroyed = true
-      markersRef.current.forEach((marker) => marker.setMap(null))
+      markersRef.current.forEach((marker) => {
+        try {
+          marker?.setMap?.(null)
+        } catch (error) {
+          console.warn('[MapCanvas] 清理 marker 失败:', error)
+        }
+      })
       markersRef.current = []
       if (localMap) {
-        if (doubleClickHandlerRef.current) {
-          localMap.off('dblclick', doubleClickHandlerRef.current)
+        try {
+          if (doubleClickHandlerRef.current) {
+            localMap.off('dblclick', doubleClickHandlerRef.current)
+          }
+        } catch (error) {
+          console.warn('[MapCanvas] 解绑 dblclick 失败:', error)
         }
-        localMap.destroy()
+        try {
+          localMap.destroy()
+        } catch (error) {
+          // 高德地图内部偶发 overlay 列表包含 undefined，destroy/remove 时会抛出 getOptions 错误
+          console.warn('[MapCanvas] 地图实例销毁失败:', error)
+        }
       }
       doubleClickHandlerRef.current = null
       setMapInstance(null)
@@ -219,7 +234,13 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
     if (!mapInstance || !AMap) return
 
     const clearMarkers = () => {
-      markersRef.current.forEach((marker) => marker.setMap(null))
+      markersRef.current.forEach((marker) => {
+        try {
+          marker?.setMap?.(null)
+        } catch (error) {
+          console.warn('[MapCanvas] 清理 marker 失败:', error)
+        }
+      })
       markersRef.current = []
     }
 
@@ -227,11 +248,14 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       const markers: AMap.Marker[] = []
 
       posMachines.forEach((pos) => {
-        if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
+        const lng = Number(pos.longitude)
+        const lat = Number(pos.latitude)
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
 
         const statusColor = getPOSStatusMapColor(pos.status)
         const marker = new AMap.Marker({
-          position: [pos.longitude, pos.latitude],
+          position: [lng, lat],
+          map: mapInstance,
           title: pos.merchant_name,
           anchor: 'bottom-center',
           offset: new AMap.Pixel(0, DETAIL_MARKER_OFFSET_Y),
@@ -259,11 +283,13 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       const buckets = new Map<string, ClusterBucket>()
 
       posMachines.forEach((pos) => {
-        if (typeof pos.longitude !== 'number' || typeof pos.latitude !== 'number') return
+        const lng = Number(pos.longitude)
+        const lat = Number(pos.latitude)
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
 
-        let bucketKey = `${pos.longitude.toFixed(CLUSTER_BUCKET_COORDINATE_PRECISION)}_${pos.latitude.toFixed(CLUSTER_BUCKET_COORDINATE_PRECISION)}`
+        let bucketKey = `${lng.toFixed(CLUSTER_BUCKET_COORDINATE_PRECISION)}_${lat.toFixed(CLUSTER_BUCKET_COORDINATE_PRECISION)}`
         try {
-          const pixel = mapInstance.lngLatToContainer([pos.longitude, pos.latitude])
+          const pixel = mapInstance.lngLatToContainer([lng, lat])
           const pixelX = typeof pixel?.getX === 'function' ? pixel.getX() : Number.NaN
           const pixelY = typeof pixel?.getY === 'function' ? pixel.getY() : Number.NaN
 
@@ -276,8 +302,8 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
         const currentBucket = buckets.get(bucketKey) || { count: 0, sumLng: 0, sumLat: 0 }
         currentBucket.count += 1
-        currentBucket.sumLng += pos.longitude
-        currentBucket.sumLat += pos.latitude
+        currentBucket.sumLng += lng
+        currentBucket.sumLat += lat
         buckets.set(bucketKey, currentBucket)
       })
 
@@ -286,6 +312,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
         const center: [number, number] = [bucket.sumLng / bucket.count, bucket.sumLat / bucket.count]
         const marker = new AMap.Marker({
           position: center,
+          map: mapInstance,
           title: `${bucket.count} 台 POS 机`,
           anchor: 'center',
           content: createClusterContent(bucket.count),
@@ -314,7 +341,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
     const renderMarkers = () => {
       clearMarkers()
 
-      if (!mapInstance || typeof mapInstance.add !== 'function') {
+      if (!mapInstance) {
         console.warn('Map instance is unavailable or invalid, skip rendering markers')
         return
       }
@@ -327,13 +354,8 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       const overlays = (shouldShowDetail ? createDetailMarkers() : createClusterMarkers()).filter(Boolean)
       markersRef.current = overlays
 
-      if (overlays.length === 0) return
-
-      try {
-        mapInstance.add(overlays)
-      } catch (error) {
-        console.error('Failed to add markers to map:', error)
-      }
+      // Marker 已通过构造参数 map 挂载到地图，无需再次调用 map.add，
+      // 避免高德内部偶发 overlay 列表出现 undefined 时触发 getOptions 错误。
     }
 
     const handleZoomEnd = () => {
