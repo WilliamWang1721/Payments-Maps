@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
+import { getFriendlyErrorMessage } from '@/lib/notify'
 import { getPOSStatusMapColor } from '@/lib/posStatus'
 import { useMapStore } from '@/stores/useMapStore'
 import { useNavigate } from 'react-router-dom'
@@ -114,6 +115,8 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
   const doubleClickHandlerRef = useRef<((e: any) => void) | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [markerMode, setMarkerMode] = useState<'cluster' | 'detail'>('cluster')
+  const [mapError, setMapError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
 
   const mapInstance = useMapStore((state) => state.mapInstance)
   const setMapInstance = useMapStore((state) => state.setMapInstance)
@@ -130,6 +133,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
     const initMap = async () => {
       if (!mapContainerRef.current) return
       try {
+        setMapError(null)
         const AMap = await loadAMap()
         if (destroyed) return
 
@@ -172,10 +176,26 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
         doubleClickHandlerRef.current = handleDoubleClick
         localMap.on('dblclick', handleDoubleClick)
 
+        // 容器尺寸在初次渲染/动画中可能为 0，延迟触发 resize 能显著降低白屏概率
+        requestAnimationFrame(() => {
+          try {
+            ;(localMap as any)?.resize?.()
+          } catch (error) {
+            console.warn('[MapCanvas] map.resize 失败:', error)
+          }
+        })
+
         setMapInstance(localMap)
         setMapReady(true)
       } catch (error) {
         console.error('初始化高德地图失败:', error)
+        setMapError(
+          getFriendlyErrorMessage(
+            error,
+            '地图加载失败，请检查 VITE_AMAP_KEY / 域名白名单 / 安全密钥配置',
+            '网络异常，无法加载地图服务，请检查网络或代理设置'
+          )
+        )
         setMapReady(true)
       }
     }
@@ -210,9 +230,34 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       doubleClickHandlerRef.current = null
       setMapInstance(null)
       setMapReady(false)
+      setMapError(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [reloadToken])
+
+  useEffect(() => {
+    const el = mapContainerRef.current
+    if (!mapInstance || !el) return
+    if (typeof ResizeObserver === 'undefined') return
+
+    let rafId = 0
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        try {
+          ;(mapInstance as any)?.resize?.()
+        } catch (error) {
+          console.warn('[MapCanvas] resize observer 触发 resize 失败:', error)
+        }
+      })
+    })
+
+    observer.observe(el)
+    return () => {
+      cancelAnimationFrame(rafId)
+      observer.disconnect()
+    }
+  }, [mapInstance])
 
   useEffect(() => {
     if (!mapInstance || !currentLocation) return
@@ -407,6 +452,36 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       {!mapReady && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/70 dark:bg-slate-900/80 backdrop-blur-sm z-20">
           <span className="text-sm text-gray-500 dark:text-gray-300">正在加载高德地图…</span>
+        </div>
+      )}
+
+      {mapReady && mapError && (
+        <div className="absolute inset-0 flex items-center justify-center p-6 bg-white/80 dark:bg-slate-900/85 backdrop-blur-sm z-20">
+          <div className="max-w-md w-full rounded-2xl border border-white/60 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-soft p-5">
+            <div className="text-sm font-semibold text-soft-black dark:text-gray-100">地图无法显示</div>
+            <div className="mt-2 text-xs leading-relaxed text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
+              {mapError}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setReloadToken((prev) => prev + 1)}
+                className="px-3 py-2 rounded-xl text-sm font-semibold bg-soft-black text-white hover:bg-soft-black/90 transition"
+              >
+                重试加载
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapError(null)}
+                className="px-3 py-2 rounded-xl text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700 transition"
+              >
+                暂时关闭
+              </button>
+            </div>
+            <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+              提示：本地开发请先创建 `.env` 并填写 `VITE_AMAP_KEY` / `VITE_AMAP_SECURITY_JS_CODE`，同时在高德控制台添加当前域名到白名单。
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { loadAMap, DEFAULT_MAP_CONFIG, locationUtils } from '@/lib/amap'
-import { notify } from '@/lib/notify'
+import { getFriendlyErrorMessage, notify } from '@/lib/notify'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 interface SimpleMapPickerProps {
@@ -26,6 +26,8 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   const markerRef = useRef<any>(null)
   
   const [isMapReady, setIsMapReady] = useState(false)
+  const [mapError, setMapError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
   const [selectedPos, setSelectedPos] = useState({ lat: initialLat, lng: initialLng, address: '' })
   const [isLocating, setIsLocating] = useState(false)
   const [addressStatus, setAddressStatus] = useState<'idle' | 'loading' | 'resolved' | 'error'>('idle')
@@ -116,6 +118,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
       mapRef.current = null
       markerRef.current = null
       setIsMapReady(false)
+      setMapError(null)
 
       if (marker?.setMap) {
         try {
@@ -148,12 +151,22 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
         
         // 创建地图
         const map = new AMap.Map(containerRef.current, {
+          ...DEFAULT_MAP_CONFIG,
           zoom: 15,
           center: [initialLng, initialLat],
-          ...DEFAULT_MAP_CONFIG
         })
         
         mapRef.current = map
+        setMapError(null)
+
+        // 容器在弹窗动画期间可能尺寸不稳定，延迟 resize 可降低白屏概率
+        requestAnimationFrame(() => {
+          try {
+            map.resize?.()
+          } catch (error) {
+            console.warn('[SimpleMapPicker] map.resize 失败:', error)
+          }
+        })
         
         // 添加点击事件
         map.on('click', (e: any) => {
@@ -171,6 +184,27 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
         console.log('[SimpleMapPicker] 地图初始化成功')
       } catch (error) {
         console.error('[SimpleMapPicker] 地图初始化失败:', error)
+        setMapError(
+          getFriendlyErrorMessage(
+            error,
+            '地图加载失败，请检查 VITE_AMAP_KEY / 域名白名单 / 安全密钥配置',
+            '网络异常，无法加载地图服务，请检查网络或代理设置'
+          )
+        )
+        // 失败时尽量回收资源，避免重试时残留 map/overlay 导致无法再次初始化
+        try {
+          markerRef.current?.setMap?.(null)
+        } catch {
+          // ignore
+        }
+        markerRef.current = null
+        try {
+          mapRef.current?.destroy?.()
+        } catch {
+          // ignore
+        }
+        mapRef.current = null
+        setIsMapReady(false)
         notify.error('地图加载失败')
       }
     }, 500) // 延迟以确保DOM准备好
@@ -179,7 +213,32 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [isOpen, initialLat, initialLng, placeMarker])
+  }, [isOpen, initialLat, initialLng, placeMarker, reloadToken])
+
+  useEffect(() => {
+    const map = mapRef.current
+    const el = containerRef.current
+    if (!isOpen || !isMapReady || !map || !el) return
+    if (typeof ResizeObserver === 'undefined') return
+
+    let rafId = 0
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        try {
+          map.resize?.()
+        } catch (error) {
+          console.warn('[SimpleMapPicker] resize observer 触发 resize 失败:', error)
+        }
+      })
+    })
+
+    observer.observe(el)
+    return () => {
+      cancelAnimationFrame(rafId)
+      observer.disconnect()
+    }
+  }, [isOpen, isMapReady])
 
   const handleConfirm = () => {
     onConfirm(selectedPos.lat, selectedPos.lng, selectedPos.address)
@@ -266,9 +325,53 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
             className="w-full"
             style={{ height: '500px', backgroundColor: '#f3f4f6' }}
           >
-            {!isMapReady && (
+            {!isMapReady && !mapError && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-gray-500">加载地图中...</div>
+              </div>
+            )}
+
+            {mapError && (
+              <div className="absolute inset-0 flex items-center justify-center p-6 bg-white/70 backdrop-blur-sm">
+                <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 p-4">
+                  <div className="text-sm font-semibold text-gray-900">地图无法显示</div>
+                  <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{mapError}</div>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          markerRef.current?.setMap?.(null)
+                        } catch {
+                          // ignore
+                        }
+                        markerRef.current = null
+                        try {
+                          mapRef.current?.destroy?.()
+                        } catch {
+                          // ignore
+                        }
+                        mapRef.current = null
+                        setMapError(null)
+                        setIsMapReady(false)
+                        setReloadToken((prev) => prev + 1)
+                      }}
+                      className="px-3 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition"
+                    >
+                      重试加载
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMapError(null)}
+                      className="px-3 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                    >
+                      暂时关闭
+                    </button>
+                  </div>
+                  <div className="mt-3 text-[11px] text-gray-500">
+                    提示：本地开发请先创建 `.env` 并填写 `VITE_AMAP_KEY` / `VITE_AMAP_SECURITY_JS_CODE`，同时在高德控制台添加当前域名到白名单。
+                  </div>
+                </div>
               </div>
             )}
           </div>
