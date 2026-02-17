@@ -48,7 +48,8 @@ LinuxDO推广说明.md
 上海地区接受刷卡的商户汇总.csv
 # Temporary and test files
 temp-*
-*temp*
+temp/
+tmp/
 *.tmp
 *.test.*
 test-*
