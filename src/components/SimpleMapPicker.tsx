@@ -24,6 +24,7 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const markerRef = useRef<any>(null)
+  const recoveryRef = useRef<{ lastAt: number }>({ lastAt: 0 })
   
   const [isMapReady, setIsMapReady] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
@@ -109,6 +110,69 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
   )
 
   useEffect(() => {
+    if (!isOpen) return
+    if (typeof window === 'undefined') return
+
+    const isAmapGetOptionsCrash = (message: string, stack: string, filename: string) => {
+      const combined = `${message}\n${stack}\n${filename}`
+      if (!/getoptions/i.test(combined)) return false
+      if (!/undefined/i.test(combined)) return false
+      return true
+    }
+
+    const attemptRecovery = (reason: string) => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return
+      }
+
+      const now = Date.now()
+      if (now - recoveryRef.current.lastAt < 5000) {
+        return
+      }
+      recoveryRef.current.lastAt = now
+
+      // 轻量“无感”恢复：重新初始化弹窗地图，不打断用户流程。
+      if (import.meta.env.DEV) {
+        console.warn('[SimpleMapPicker] 捕获到高德地图异常，尝试自愈:', reason)
+      }
+      setMapError(null)
+      setIsMapReady(false)
+      setReloadToken((prev) => prev + 1)
+    }
+
+    const handleError = (event: ErrorEvent) => {
+      const message = event?.message || String((event as any)?.error?.message || '')
+      const stack = String((event as any)?.error?.stack || '')
+      const filename = String(event?.filename || '')
+      if (!isAmapGetOptionsCrash(message, stack, filename)) return
+
+      if (import.meta.env.PROD) {
+        event.preventDefault()
+      }
+      attemptRecovery('window.error')
+    }
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason: any = (event as any)?.reason
+      const message = typeof reason === 'string' ? reason : String(reason?.message || '')
+      const stack = String(reason?.stack || '')
+      if (!isAmapGetOptionsCrash(message, stack, '')) return
+
+      if (import.meta.env.PROD) {
+        event.preventDefault()
+      }
+      attemptRecovery('unhandledrejection')
+    }
+
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [isOpen])
+
+  useEffect(() => {
     if (!isOpen) {
       // 清理地图
       const map = mapRef.current
@@ -136,6 +200,24 @@ const SimpleMapPicker: React.FC<SimpleMapPickerProps> = ({
         }
       }
       return
+    }
+
+    // 弹窗保持打开但触发重载时（reloadToken 变化），需要先清理旧实例，避免重复初始化同一个容器。
+    if (mapRef.current) {
+      try {
+        markerRef.current?.setMap?.(null)
+      } catch {
+        // ignore
+      }
+      markerRef.current = null
+
+      try {
+        mapRef.current?.destroy?.()
+      } catch {
+        // ignore
+      }
+      mapRef.current = null
+      setIsMapReady(false)
     }
 
     // 初始化地图

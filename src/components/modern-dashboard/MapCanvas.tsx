@@ -7,6 +7,10 @@ import { useMapStore } from '@/stores/useMapStore'
 import { useNavigate } from 'react-router-dom'
 
 const DETAIL_VIEW_ZOOM = 15
+const AMAP_RECOVERY_COOLDOWN_MS = 5000
+const AMAP_RECOVERY_DECAY_MS = 5 * 60 * 1000
+const AMAP_RECOVERY_SOFT_LIMIT = 2
+const AMAP_RECOVERY_HARD_RELOAD_STORAGE_KEY = 'amap_hard_reload_v1'
 const CLUSTER_GRID_SIZE = 72
 const DEFAULT_MAP_ZOOM = 12
 const CLUSTER_COUNT_DISPLAY_LIMIT = 999
@@ -113,6 +117,8 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const markersRef = useRef<AMap.Marker[]>([])
   const doubleClickHandlerRef = useRef<((e: any) => void) | null>(null)
+  const unmountingRef = useRef(false)
+  const recoveryRef = useRef<{ lastAt: number; softCount: number }>({ lastAt: 0, softCount: 0 })
   const [mapReady, setMapReady] = useState(false)
   const [markerMode, setMarkerMode] = useState<'cluster' | 'detail'>('cluster')
   const [mapError, setMapError] = useState<string | null>(null)
@@ -127,8 +133,98 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
   const selectedPOSMachine = useMapStore((state) => state.selectedPOSMachine)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const isAmapGetOptionsCrash = (message: string, stack: string, filename: string) => {
+      const combined = `${message}\n${stack}\n${filename}`
+      if (!/getoptions/i.test(combined)) return false
+      if (!/undefined/i.test(combined)) return false
+      return true
+    }
+
+    const attemptRecovery = (reason: string) => {
+      if (unmountingRef.current) {
+        return
+      }
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return
+      }
+
+      const now = Date.now()
+      const state = recoveryRef.current
+      if (now - state.lastAt > AMAP_RECOVERY_DECAY_MS) {
+        state.softCount = 0
+      }
+      if (now - state.lastAt < AMAP_RECOVERY_COOLDOWN_MS) {
+        return
+      }
+
+      state.lastAt = now
+      state.softCount += 1
+
+      // 尽量“无感”恢复：先软重载地图组件；若短时间内连续触发，降级为整页刷新一次。
+      if (import.meta.env.DEV) {
+        console.warn('[MapCanvas] 捕获到高德地图异常，尝试自愈:', reason)
+      }
+      setMapError(null)
+      setMapReady(false)
+      setReloadToken((prev) => prev + 1)
+
+      if (state.softCount <= AMAP_RECOVERY_SOFT_LIMIT) {
+        return
+      }
+
+      try {
+        const prevHardReloads = Number(sessionStorage.getItem(AMAP_RECOVERY_HARD_RELOAD_STORAGE_KEY) || '0')
+        if (Number.isFinite(prevHardReloads) && prevHardReloads < 1) {
+          sessionStorage.setItem(AMAP_RECOVERY_HARD_RELOAD_STORAGE_KEY, String(prevHardReloads + 1))
+          setTimeout(() => window.location.reload(), 200)
+          return
+        }
+      } catch {
+        // ignore storage errors
+      }
+
+      setMapReady(true)
+      setMapError('地图模块发生异常，请刷新页面后重试。')
+    }
+
+    const handleError = (event: ErrorEvent) => {
+      const message = event?.message || String((event as any)?.error?.message || '')
+      const stack = String((event as any)?.error?.stack || '')
+      const filename = String(event?.filename || '')
+      if (!isAmapGetOptionsCrash(message, stack, filename)) return
+
+      if (import.meta.env.PROD) {
+        event.preventDefault()
+      }
+      attemptRecovery('window.error')
+    }
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason: any = (event as any)?.reason
+      const message = typeof reason === 'string' ? reason : String(reason?.message || '')
+      const stack = String(reason?.stack || '')
+      if (!isAmapGetOptionsCrash(message, stack, '')) return
+
+      if (import.meta.env.PROD) {
+        event.preventDefault()
+      }
+      attemptRecovery('unhandledrejection')
+    }
+
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
+
+  useEffect(() => {
     let destroyed = false
     let localMap: AMap.Map | null = null
+    unmountingRef.current = false
 
     const initMap = async () => {
       if (!mapContainerRef.current) return
@@ -204,6 +300,7 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
 
     return () => {
       destroyed = true
+      unmountingRef.current = true
       markersRef.current.forEach((marker) => {
         try {
           marker?.setMap?.(null)
@@ -403,21 +500,36 @@ const MapCanvas = ({ showLabels }: MapCanvasProps) => {
       // 避免高德内部偶发 overlay 列表出现 undefined 时触发 getOptions 错误。
     }
 
+    let renderTimer = 0
+    const scheduleRender = () => {
+      window.clearTimeout(renderTimer)
+      renderTimer = window.setTimeout(() => {
+        try {
+          renderMarkers()
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.warn('[MapCanvas] renderMarkers 异常:', error)
+          }
+        }
+      }, 80)
+    }
+
     const handleZoomEnd = () => {
-      renderMarkers()
+      scheduleRender()
     }
 
     const handleMoveEnd = () => {
       if (mapInstance.getZoom() < DETAIL_VIEW_ZOOM) {
-        renderMarkers()
+        scheduleRender()
       }
     }
 
-    renderMarkers()
+    scheduleRender()
     mapInstance.on('zoomend', handleZoomEnd)
     mapInstance.on('moveend', handleMoveEnd)
 
     return () => {
+      window.clearTimeout(renderTimer)
       mapInstance.off('zoomend', handleZoomEnd)
       mapInstance.off('moveend', handleMoveEnd)
       clearMarkers()
