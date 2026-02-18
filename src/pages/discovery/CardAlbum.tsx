@@ -2,11 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Edit, FileText, Filter, Plus, Trash2, User, Users, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import { useSearchParams } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
 import AnimatedButton from '@/components/ui/AnimatedButton'
 import AnimatedListItem from '@/components/AnimatedListItem'
 import clsx from 'clsx'
-import { useMapStore } from '@/stores/useMapStore'
 import AnimatedModal from '@/components/ui/AnimatedModal'
 import SystemSelect from '@/components/ui/SystemSelect'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -21,6 +20,7 @@ import {
 import { useIssueReportStore } from '@/stores/useIssueReportStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import type { LayoutOutletContext } from '@/components/Layout'
 
 const TAB_OPTIONS = [
   { key: 'public', label: '公共卡册', icon: Users },
@@ -127,7 +127,8 @@ const CardAlbum = () => {
     clubPointsProgram: '',
     scope: 'public' as AlbumScope,
   })
-  const searchKeyword = useMapStore((state) => state.searchKeyword)
+  const outletContext = useOutletContext<LayoutOutletContext | undefined>()
+  const searchKeyword = outletContext?.cardAlbumSearchKeyword || ''
   const [filters, setFilters] = useState({
     issuer: 'all',
     organization: 'all',
