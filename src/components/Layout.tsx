@@ -20,22 +20,26 @@ import {
 
 export type LayoutOutletContext = {
   showLabels: boolean
+  cardAlbumSearchKeyword: string
 }
 
 const Layout = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore((state) => state.user)
-  const searchKeyword = useMapStore((state) => state.searchKeyword)
+  const posSearchKeyword = useMapStore((state) => state.searchKeyword)
   const setSearchQuery = useMapStore((state) => state.setSearchQuery)
-  const setSearchKeyword = useMapStore((state) => state.setSearchKeyword)
+  const setPosSearchKeyword = useMapStore((state) => state.setSearchKeyword)
   const loadPOSMachines = useMapStore((state) => state.loadPOSMachines)
   const setCurrentLocation = useMapStore((state) => state.setCurrentLocation)
   const getCurrentLocation = useMapStore((state) => state.getCurrentLocation)
   const locationLoading = useMapStore((state) => state.locationLoading)
   const mapInstance = useMapStore((state) => state.mapInstance)
 
-  const [searchValue, setSearchValue] = useState(searchKeyword)
+  // The global header search bar serves two different contexts:
+  // - POS pages (map/list/etc): query Supabase via useMapStore
+  // - Card album: local in-memory filter only
+  const [cardAlbumSearchKeyword, setCardAlbumSearchKeyword] = useState('')
   const [showLabels, setShowLabels] = useState(true)
   const hideHeaderControls =
     location.pathname.startsWith('/app/profile') ||
@@ -44,13 +48,10 @@ const Layout = () => {
     location.pathname.startsWith('/app/role-management')
   const isMapPage = location.pathname.startsWith('/app/map')
   const isCardAlbumPage = location.pathname.startsWith('/app/card-album')
+  const activeSearchValue = isCardAlbumPage ? cardAlbumSearchKeyword : posSearchKeyword
   const searchPlaceholder = isCardAlbumPage
     ? '搜索卡片：卡BIN / 卡名 / 发卡行 / 卡组织'
     : '全域搜索：商户 / 地址 / 坐标 / 收单机构 / 时间'
-
-  useEffect(() => {
-    setSearchValue(searchKeyword)
-  }, [searchKeyword])
 
   useEffect(() => {
     let cancelled = false
@@ -100,14 +101,23 @@ const Layout = () => {
   }, [setCurrentLocation, user?.id])
 
   const handleSearchChange = (value: string) => {
-    setSearchValue(value)
-    setSearchKeyword(value)
+    if (isCardAlbumPage) {
+      setCardAlbumSearchKeyword(value)
+      return
+    }
+
+    setPosSearchKeyword(value)
   }
 
   const handleSearchSubmit = (value?: string) => {
-    const nextValue = typeof value === 'string' ? value : searchValue
+    const nextValue = typeof value === 'string' ? value : activeSearchValue
+
+    if (isCardAlbumPage) {
+      // Card album is filtered reactively while typing; no extra submit action required.
+      return
+    }
+
     const parsed = parseSearchInput(nextValue || '')
-    setSearchValue(nextValue)
     setSearchQuery(parsed)
 
     if (isMapPage && mapInstance && parsed.keyword && !parsed.coordinates) {
@@ -121,10 +131,6 @@ const Layout = () => {
         .catch(() => {
           // 地址可能不是定位地址（例如商户关键字），忽略解析失败并继续执行搜索
         })
-    }
-
-    if (isCardAlbumPage) {
-      return
     }
     loadPOSMachines()
       .catch((error) => console.error('搜索 POS 机失败:', error))
@@ -152,7 +158,7 @@ const Layout = () => {
           <main className={`flex-1 ml-0 md:ml-6 lg:ml-8 max-w-screen-2xl w-full mx-auto flex flex-col min-h-[70vh] pb-28 md:pb-0 md:overflow-hidden ${isMapPage ? 'pb-0 overflow-hidden' : ''}`}>
             <div className="sticky top-0 z-30 bg-cream dark:bg-slate-950 pb-4">
               <ModernHeader
-                searchValue={searchValue}
+                searchValue={activeSearchValue}
                 onSearchChange={handleSearchChange}
                 onSearchSubmit={handleSearchSubmit}
                 onFilterClick={handleFilterClick}
@@ -167,7 +173,7 @@ const Layout = () => {
 
             <div className={`flex-1 w-full h-full pb-2 ${isMapPage ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
               <PageTransition variant="fadeIn">
-                <Outlet context={{ showLabels }} />
+                <Outlet context={{ showLabels, cardAlbumSearchKeyword }} />
               </PageTransition>
             </div>
           </main>
