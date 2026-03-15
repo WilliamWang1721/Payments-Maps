@@ -5,13 +5,11 @@ import {
   ArrowLeft,
   ArrowRight,
   Ban,
-  BadgeCheck,
   BadgeDollarSign,
   Building2,
   CalendarDays,
   Check,
   Globe,
-  ImageUp,
   Rocket,
   Store
 } from "lucide-react";
@@ -159,12 +157,6 @@ function getStatusLabel(value: BrandStatus): string {
   if (value === "inactive") return "Paused";
   if (value === "coming_soon") return "Coming soon";
   return "Active rollout";
-}
-
-function getImageSourceLabel(source: "icon" | "favicon" | "none"): string {
-  if (source === "icon") return "Direct logo";
-  if (source === "favicon") return "Website favicon";
-  return "Monogram fallback";
 }
 
 function CardFrame({
@@ -371,25 +363,15 @@ function BrandPreviewPanel({ draft }: { draft: DraftState }): React.JSX.Element 
       <div className="relative grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SummaryRow icon={BadgeDollarSign} label="Brand Category" value={CATEGORY_OPTIONS.find((item) => item.value === draft.category)?.label || "Retail"} />
         <SummaryRow icon={draft.businessType === "online" ? Globe : Store} label="Business Type" value={getBusinessTypeLabel(draft.businessType)} />
-        <SummaryRow icon={ImageUp} label="Image Source" value={getImageSourceLabel(showImage ? preview.source : "none")} />
         <SummaryRow icon={Building2} label="Website" value={host || "Not set"} />
       </div>
 
-      <div className="relative rounded-[24px] border border-[var(--input)] bg-[var(--accent)] px-4 py-4">
-        <p className="text-sm font-semibold leading-[1.3] text-[var(--foreground)]">{t("Image Priority")}</p>
-        <p className="mt-2 text-sm leading-[1.5] text-[var(--muted-foreground)]">
-          {t("We prioritize the direct logo URL, then website favicon, then initials fallback.")}
-        </p>
-        <p className="mt-2 text-sm leading-[1.5] text-[var(--muted-foreground)]">
-          {t("Preview uses contain mode and a high-contrast surface for cleaner logos.")}
-        </p>
-        {preview.imageUrl && imageFailed ? (
-          <div className="mt-3 flex items-start gap-2 rounded-[18px] border border-[rgba(239,68,68,0.18)] bg-[rgba(254,242,242,0.92)] px-3 py-2 text-sm text-[#b42318]">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{t("Visual fallback applied because the image could not be loaded.")}</span>
-          </div>
-        ) : null}
-      </div>
+      {preview.imageUrl && imageFailed ? (
+        <div className="relative flex items-start gap-2 rounded-[18px] border border-[rgba(239,68,68,0.18)] bg-[rgba(254,242,242,0.92)] px-3 py-2 text-sm text-[#b42318]">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{t("Visual fallback applied because the image could not be loaded.")}</span>
+        </div>
+      ) : null}
     </aside>
   );
 }
@@ -539,17 +521,6 @@ function StepTwoContent({
           <SummaryRow icon={CalendarDays} label="Founded Year" value={draft.founded.trim() || "Not set"} />
           <SummaryRow icon={Building2} label="Headquarters" value={draft.headquarters.trim() || "Not set"} />
         </div>
-
-        <div className="rounded-[24px] border border-[var(--input)] bg-[var(--accent)] px-4 py-4">
-          <div className="flex items-center gap-2">
-            <BadgeCheck className="h-4 w-4 text-[var(--primary)]" />
-            <p className="text-sm font-semibold leading-[1.3] text-[var(--foreground)]">{t("UI Design Standard")}</p>
-          </div>
-          <div className="mt-3 flex flex-col gap-3 text-sm leading-[1.5] text-[var(--muted-foreground)]">
-            <p>{t("Consistent spacing, readable contrast, and logo-safe preview surfaces are applied by default.")}</p>
-            <p>{t("The final catalog card will prefer uploaded branding assets without breaking the fallback layout.")}</p>
-          </div>
-        </div>
       </aside>
     </div>
   );
@@ -560,8 +531,6 @@ export function AddBrandWizard({ onCancel, onComplete, saving = false }: AddBran
   const [step, setStep] = useState<WizardStep>(1);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftState>(DEFAULT_DRAFT);
-
-  const preview = useMemo(() => buildBrandPreviewImage(draft.iconUrl, draft.website), [draft.iconUrl, draft.website]);
   const isLastStep = step === 2;
 
   const updateDraft = <Key extends keyof DraftState>(field: Key, value: DraftState[Key]): void => {
@@ -692,17 +661,6 @@ export function AddBrandWizard({ onCancel, onComplete, saving = false }: AddBran
       <div className="min-h-0 flex-1 overflow-auto">
         {step === 1 ? <StepOneContent draft={draft} onFieldChange={updateDraft} /> : null}
         {step === 2 ? <StepTwoContent draft={draft} onFieldChange={updateDraft} /> : null}
-      </div>
-
-      <div className="px-4 pb-4 sm:px-6 lg:px-10">
-        <div className="flex flex-wrap items-center gap-2 rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
-          <span className="inline-flex h-8 items-center rounded-pill bg-[var(--accent)] px-3 font-medium text-[var(--foreground)]">
-            {t(getImageSourceLabel(preview.imageUrl ? preview.source : "none"))}
-          </span>
-          <span>{t("Image Preview")}</span>
-          <span className="text-[var(--border)]">•</span>
-          <span>{t("UI-safe fallback chain is active for this brand.")}</span>
-        </div>
       </div>
     </section>
   );

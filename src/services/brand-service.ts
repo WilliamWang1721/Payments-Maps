@@ -38,6 +38,13 @@ interface BrandStatsAccumulator {
   cityCounts: Map<string, number>;
 }
 
+interface PostgrestLikeError {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+}
+
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -227,6 +234,21 @@ function buildBrandStats(rows: PosMachineBrandRow[]): Map<string, BrandStatsAccu
   return statsByBrandId;
 }
 
+function buildErrorMessage(error: unknown): string | null {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const postgrestError = error as PostgrestLikeError;
+    if (typeof postgrestError.message === "string" && postgrestError.message.trim()) {
+      return postgrestError.message.trim();
+    }
+  }
+
+  return null;
+}
+
 function mapBrandRowToRecord(row: BrandRow, stats?: BrandStatsAccumulator): BrandRecord {
   const category = normalizeString(row.category, "other");
   const name = normalizeString(row.name, "Unknown");
@@ -258,6 +280,40 @@ function mapBrandRowToRecord(row: BrandRow, stats?: BrandStatsAccumulator): Bran
     inactiveStoreCount: stats?.inactiveStoreCount || 0,
     primaryCity: pickPrimaryCity(stats?.cityCounts || new Map<string, number>(), normalizeOptionalString(row.headquarters)),
     lastSyncAt,
+    uiSegment,
+    uiCategoryLabel: mapSegmentToCategoryLabel(uiSegment)
+  };
+}
+
+function buildOptimisticBrandRecord(input: CreateBrandInput, userId?: string): BrandRecord {
+  const name = normalizeString(input.name, "Unknown");
+  const category = normalizeString(input.category, "other");
+  const uiSegment = mapCategoryToSegment(category, name);
+  const timestamp = new Date().toISOString();
+
+  return {
+    id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `brand-${Date.now()}`,
+    name,
+    description: normalizeOptionalString(input.description),
+    notes: normalizeOptionalString(input.notes),
+    category,
+    businessType: input.businessType,
+    status: input.status,
+    iconUrl: normalizeOptionalString(input.iconUrl),
+    logo: normalizeOptionalString(input.logo),
+    color: normalizeOptionalString(input.color),
+    website: normalizeOptionalString(input.website),
+    founded: normalizeYear(input.founded ?? null),
+    headquarters: normalizeOptionalString(input.headquarters),
+    isSystemBrand: false,
+    createdBy: userId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    storeCount: 0,
+    activeStoreCount: 0,
+    inactiveStoreCount: 0,
+    primaryCity: normalizeOptionalString(input.headquarters) || "Unknown",
+    lastSyncAt: timestamp,
     uiSegment,
     uiCategoryLabel: mapSegmentToCategoryLabel(uiSegment)
   };
@@ -295,6 +351,26 @@ async function assertBrandNameAvailable(name: string): Promise<void> {
   if (data?.id) {
     throw new Error("A brand with this name already exists.");
   }
+}
+
+async function fetchBrandByName(name: string): Promise<BrandRecord | null> {
+  const { data, error } = await supabase
+    .from("brands")
+    .select("*")
+    .eq("name", name.trim())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = buildErrorMessage(error) || "";
+    if (error.code === "PGRST116" || message.toLowerCase().includes("0 rows")) {
+      return null;
+    }
+    throw error;
+  }
+
+  return data ? mapBrandRowToRecord(data as BrandRow) : null;
 }
 
 function buildCreateBrandPayload(input: CreateBrandInput, userId: string) {
@@ -347,11 +423,7 @@ export const brandService = {
     const userId = await getCurrentUserId();
     await assertBrandNameAvailable(trimmedName);
 
-    const { data, error } = await supabase
-      .from("brands")
-      .insert(buildCreateBrandPayload(input, userId))
-      .select("*")
-      .single();
+    const { error } = await supabase.from("brands").insert(buildCreateBrandPayload(input, userId));
 
     if (error) {
       if (error.code === "23505") {
@@ -360,6 +432,15 @@ export const brandService = {
       throw error;
     }
 
-    return mapBrandRowToRecord(data as BrandRow);
+    try {
+      const insertedBrand = await fetchBrandByName(trimmedName);
+      if (insertedBrand) {
+        return insertedBrand;
+      }
+    } catch {
+      // Some production policies allow insert but restrict immediate reads. Fall back to optimistic UI.
+    }
+
+    return buildOptimisticBrandRecord(input, userId);
   }
 };

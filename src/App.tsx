@@ -397,6 +397,10 @@ export default function App({
               brand={lastCreatedBrand}
               onAddAnother={() => setOverlayView("addBrand")}
               onBack={() => setOverlayView(null)}
+              onViewDetail={() => {
+                if (!lastCreatedBrand) return;
+                openBrandDetail(lastCreatedBrand);
+              }}
             />
           </div>
         ) : null}

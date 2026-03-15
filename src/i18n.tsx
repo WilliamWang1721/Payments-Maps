@@ -427,6 +427,7 @@ const DICTIONARY: Dictionary = {
     "Founded year must be a valid 4-digit year.": "创立年份必须是有效的 4 位数字。",
     "Image Preview": "图像预览",
     "UI-safe fallback chain is active for this brand.": "当前品牌已启用符合 UI 标准的图像回退链路。",
+    "UI-safe fallback chain is active for this brand too.": "当前品牌也启用符合 UI 标准的图像回推链路。",
     "Direct logo": "直接 logo",
     "Website favicon": "官网 favicon",
     "Monogram fallback": "首字母回退",

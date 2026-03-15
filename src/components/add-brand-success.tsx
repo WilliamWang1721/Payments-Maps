@@ -8,6 +8,7 @@ interface AddBrandSuccessProps {
   brand: BrandRecord | null;
   onAddAnother: () => void;
   onBack: () => void;
+  onViewDetail: () => void;
 }
 
 function getStatusLabel(status: BrandRecord["status"] | undefined): string {
@@ -16,7 +17,7 @@ function getStatusLabel(status: BrandRecord["status"] | undefined): string {
   return "Active rollout";
 }
 
-export function AddBrandSuccess({ brand, onAddAnother, onBack }: AddBrandSuccessProps): React.JSX.Element {
+export function AddBrandSuccess({ brand, onAddAnother, onBack, onViewDetail }: AddBrandSuccessProps): React.JSX.Element {
   const { t } = useI18n();
 
   return (
@@ -60,11 +61,11 @@ export function AddBrandSuccess({ brand, onAddAnother, onBack }: AddBrandSuccess
 
             <button
               className="ui-hover-shadow inline-flex h-10 items-center gap-2 rounded-pill border border-[var(--input)] bg-[var(--secondary)] px-5 text-sm font-medium text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)] [--hover-outline:#2a293336]"
-              onClick={onBack}
+              onClick={onViewDetail}
               type="button"
             >
               <MoveRight className="h-4 w-4" />
-              <span>{t("View Catalog")}</span>
+              <span>{t("View Detail")}</span>
             </button>
 
             <button

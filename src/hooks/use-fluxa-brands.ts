@@ -18,6 +18,10 @@ function formatErrorMessage(error: unknown): string {
     return error.message;
   }
 
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message.trim()) {
+    return error.message.trim();
+  }
+
   return "Unable to reach Fluxa brand backend.";
 }
 
@@ -48,7 +52,19 @@ export function useFluxaBrands(): UseFluxaBrandsResult {
     setSaving(true);
     try {
       const created = await brandService.createBrand(input);
-      setBrands((prev) => [created, ...prev.filter((brand) => brand.id !== created.id)]);
+      try {
+        const nextBrands = await brandService.listBrands();
+        setBrands(nextBrands);
+        const syncedBrand =
+          nextBrands.find((brand) => brand.id === created.id) ||
+          nextBrands.find((brand) => brand.name === created.name) ||
+          created;
+        setError(null);
+        return syncedBrand;
+      } catch {
+        setBrands((prev) => [created, ...prev.filter((brand) => brand.id !== created.id)]);
+      }
+
       setError(null);
       return created;
     } catch (err) {
