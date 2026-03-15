@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
@@ -10,6 +11,10 @@
     {
       "source": "/mcp/:sessionToken",
       "destination": "/api/mcp/:sessionToken"
+    },
+    {
+      "source": "^/(?!api/|.*\\..*).*$",
+      "destination": "/index.html"
     }
   ]
 }
