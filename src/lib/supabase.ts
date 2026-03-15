@@ -1,43 +1,24 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder-key";
+export const isSupabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-  console.warn('Supabase environment variables not configured properly. Some features may not work.')
+if (!isSupabaseConfigured) {
+  console.warn("Supabase environment variables are missing. Fluxa backend features will stay read-only.");
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
+    persistSession: true
   },
   db: {
-    schema: 'public'
+    schema: "public"
   },
   global: {
     headers: {
-      'x-client-info': 'pos-maps-app'
-    }
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
+      "x-client-info": "fluxa-map-app"
     }
   }
-})
-export type {
-  AttemptAcquiringMode,
-  AttemptCheckoutLocation,
-  AttemptCvm,
-  AttemptDeviceStatus,
-  AttemptPaymentMethod,
-  AttemptResult,
-  ExternalLink,
-  FieldConfig,
-  POSAttempt,
-  POSMachine,
-  Review,
-  User,
-} from '@/types/database'
+});

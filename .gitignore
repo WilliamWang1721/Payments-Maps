@@ -64,6 +64,7 @@ __MACOSX/
 # Development tools
 .trae/
 .claude/
+.codex/
 *.zip
 *.gz
 *.tar
@@ -102,3 +103,7 @@ local.properties
 
 # Documentation that shouldn't be in main repo
 各类独有名词规范使用书.txt
+
+# Fluxa local artifacts
+*.pen
+images/generated-*.png
