@@ -2,20 +2,25 @@ import type React from "react";
 import { CheckCircle2, List, MapPinPlus, MoveRight } from "lucide-react";
 
 import { useI18n } from "@/i18n";
+import type { LocationRecord } from "@/types/location";
 
 interface AddLocationSuccessProps {
+  location: LocationRecord | null;
   onAddAnother: () => void;
   onBack: () => void;
   onViewDetail: () => void;
 }
 
-export function AddLocationSuccess({ onAddAnother, onBack, onViewDetail }: AddLocationSuccessProps): React.JSX.Element {
+export function AddLocationSuccess({ location, onAddAnother, onBack, onViewDetail }: AddLocationSuccessProps): React.JSX.Element {
   const { t } = useI18n();
+  const merchantName = location?.name || "地点";
+  const networkLabel = location?.brand || "未知";
+  const statusLabel = location?.status === "inactive" ? t("Inactive") : t("Active");
 
   return (
-    <section className="tab-switch-enter flex min-h-0 min-w-0 flex-1 flex-col bg-[#FAFAFA] px-10 py-8">
-      <div className="mx-auto flex h-full w-full max-w-[960px] flex-col">
-        <div className="rounded-[40px] border border-[var(--border)] bg-[var(--card)] px-10 py-12">
+    <section className="tab-switch-enter flex min-h-0 min-w-0 flex-1 flex-col bg-[#FAFAFA] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+      <div className="flex h-full w-full min-w-0 flex-1 flex-col">
+        <div className="flex h-full min-h-0 flex-1 flex-col justify-center rounded-[32px] border border-[var(--border)] bg-[var(--card)] px-6 py-8 sm:px-8 lg:px-10 lg:py-12">
           <div className="flex flex-col items-start gap-4">
             <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-success)] text-[var(--color-success-foreground)]">
               <CheckCircle2 className="h-8 w-8" />
@@ -27,15 +32,15 @@ export function AddLocationSuccess({ onAddAnother, onBack, onViewDetail }: AddLo
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
             <article className="rounded-2xl border border-[var(--input)] bg-white p-5">
               <p className="text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted-foreground)]">{t("Merchant")}</p>
-              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">McDonald's (GT Land Plaza)</p>
+              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{merchantName}</p>
             </article>
             <article className="rounded-2xl border border-[var(--input)] bg-white p-5">
               <p className="text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted-foreground)]">{t("Network")}</p>
-              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">Visa / MasterCard / UnionPay</p>
+              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{networkLabel}</p>
             </article>
             <article className="rounded-2xl border border-[var(--input)] bg-white p-5">
               <p className="text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted-foreground)]">{t("Status")}</p>
-              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{t("Active")}</p>
+              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{statusLabel}</p>
             </article>
           </div>
 

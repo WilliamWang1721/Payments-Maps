@@ -3,3 +3,6 @@ dist
 .vite
 *.log
 .DS_Store
+.vercel
+.env
+.codex
