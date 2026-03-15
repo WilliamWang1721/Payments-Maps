@@ -1,10 +1,11 @@
 import type { SidebarTab } from "@/components/fluxa-sidebar";
 
-export type FluxaPageView = SidebarTab | "detail";
+export type FluxaPageView = SidebarTab | "detail" | "brandDetail";
 
 export interface FluxaPageRoute {
   view: FluxaPageView;
   locationId?: string;
+  brandId?: string;
   from?: SidebarTab;
 }
 
@@ -41,6 +42,15 @@ export function parseFluxaPageRoute(pathname: string, search: string): FluxaPage
     return { view: "history" };
   }
 
+  const brandDetailMatch = cleanPath.match(/^\/brands\/([^/]+)$/);
+  if (brandDetailMatch) {
+    return {
+      view: "brandDetail",
+      brandId: decodeURIComponent(brandDetailMatch[1]),
+      from
+    };
+  }
+
   const detailMatch = cleanPath.match(/^\/locations\/([^/]+)$/);
   if (detailMatch) {
     return {
@@ -54,6 +64,15 @@ export function parseFluxaPageRoute(pathname: string, search: string): FluxaPage
 }
 
 export function buildFluxaPagePath(route: FluxaPageRoute): string {
+  if (route.view === "brandDetail" && route.brandId) {
+    const query = new URLSearchParams();
+    if (route.from) {
+      query.set("from", route.from);
+    }
+    const suffix = query.toString();
+    return `/brands/${encodeURIComponent(route.brandId)}${suffix ? `?${suffix}` : ""}`;
+  }
+
   if (route.view === "detail" && route.locationId) {
     const query = new URLSearchParams();
     if (route.from) {

@@ -5,6 +5,7 @@ import { AddBrandSuccess } from "@/components/add-brand-success";
 import { AddBrandWizard } from "@/components/add-brand-wizard";
 import { AddLocationSuccess } from "@/components/add-location-success";
 import { AddLocationWizard } from "@/components/add-location-wizard";
+import { BrandDetailWeb } from "@/components/brand-detail-web";
 import { CardsAlbumWeb } from "@/components/cards-album-web";
 import { FluxaHeader } from "@/components/fluxa-header";
 import { FluxaMapCanvas } from "@/components/fluxa-map-canvas";
@@ -67,6 +68,7 @@ export default function App({
   const [mapFocusRequestKey, setMapFocusRequestKey] = useState(0);
   const [lastCreatedLocation, setLastCreatedLocation] = useState<LocationRecord | null>(null);
   const [lastCreatedBrand, setLastCreatedBrand] = useState<BrandRecord | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<BrandRecord | null>(null);
   const [locateRequestKey, setLocateRequestKey] = useState(0);
   const [locating, setLocating] = useState(false);
   const [hasAutoLocatedMap, setHasAutoLocatedMap] = useState(false);
@@ -144,6 +146,15 @@ export default function App({
     });
   };
 
+  const openBrandDetail = (brand: BrandRecord): void => {
+    setSelectedBrand(brand);
+    navigatePage({
+      view: "brandDetail",
+      brandId: brand.id,
+      from: sidebarActiveTab
+    });
+  };
+
   const handleCreateLocation = async (input: CreateLocationInput): Promise<void> => {
     const createdLocation = await createLocation(input);
     setLastCreatedLocation(createdLocation);
@@ -162,7 +173,9 @@ export default function App({
     ? activeView
     : isSidebarTab(pageRoute.view)
       ? pageRoute.view
-      : pageRoute.from || "map";
+      : pageRoute.view === "brandDetail"
+        ? pageRoute.from || "brands"
+        : pageRoute.from || "map";
   const currentSearchQuery =
     sidebarActiveTab === "map" || sidebarActiveTab === "list" || sidebarActiveTab === "brands"
       ? searchQueries[sidebarActiveTab]
@@ -175,6 +188,11 @@ export default function App({
     ? locations.find((location) => location.id === pageRoute.locationId)
       || (selectedLocation?.id === pageRoute.locationId ? selectedLocation : null)
       || (lastCreatedLocation?.id === pageRoute.locationId ? lastCreatedLocation : null)
+    : null;
+  const detailBrand = pageRoute.view === "brandDetail" && pageRoute.brandId
+    ? brands.find((brand) => brand.id === pageRoute.brandId)
+      || (selectedBrand?.id === pageRoute.brandId ? selectedBrand : null)
+      || (lastCreatedBrand?.id === pageRoute.brandId ? lastCreatedBrand : null)
     : null;
   const {
     profile: viewerProfile,
@@ -320,6 +338,17 @@ export default function App({
           </div>
         ) : null}
 
+        {activeView === "brandDetail" ? (
+          <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
+            <BrandDetailWeb
+              brand={detailBrand}
+              locations={locations}
+              onBack={() => navigatePage({ view: "brands" })}
+              onOpenLocation={openLocationDetail}
+            />
+          </div>
+        ) : null}
+
         {activeView === "addLocation" ? (
           <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
             <AddLocationWizard
@@ -444,6 +473,7 @@ export default function App({
                   mapFocusLocation={mapFocusLocation}
                   mapFocusRequestKey={mapFocusRequestKey}
                   onLocatingChange={setLocating}
+                  onOpenBrandDetail={openBrandDetail}
                   onOpenDetail={openLocationDetail}
                   onRefresh={refreshLocations}
                   searchQuery={currentSearchQuery}

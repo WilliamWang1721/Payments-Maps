@@ -39,6 +39,7 @@ interface BrandMerchantCard {
   segment: BrandCategoryLabel;
   color?: string;
   coverage: string;
+  description: string;
   imageUrl?: string;
   issues: string;
   owner: string;
@@ -302,6 +303,7 @@ function groupBrands(locations: LocationRecord[], t: (text: string) => string): 
               : "Retail",
       segment: category,
       coverage: `${t("Coverage")} ${items.length} ${t("stores")} · ${Math.round((activeCount / items.length) * 100)}% ${t("active")}`,
+      description: `${t("Primary city")}: ${items[0]?.city || t("Unknown")}`,
       issues: `${t("Issue stores")} ${inactiveCount} · ${t("Last sync")} ${formatRelativeTime(latestUpdate, t)}`,
       owner: `${t("Primary city")}: ${items[0]?.city || t("Unknown")}`,
       searchText: [brand, category, items[0]?.city || "Unknown"].join(" ").toLowerCase()
@@ -321,6 +323,7 @@ function mapBrandRecordToCard(brand: BrandRecord, t: (text: string) => string): 
     color: brand.color,
     segment: brand.uiSegment,
     coverage: `${t("Coverage")} ${brand.storeCount} ${t("stores")} · ${activeRatio}% ${t("active")}`,
+    description: brand.description || brand.notes || `${t("Primary city")}: ${brand.primaryCity || t("Unknown")}`,
     imageUrl: preview.imageUrl || undefined,
     issues: `${t("Issue stores")} ${brand.inactiveStoreCount} · ${t("Last sync")} ${formatRelativeTime(lastSyncSource, t)}`,
     owner: `${t("Primary city")}: ${brand.primaryCity || t("Unknown")}`,
@@ -401,6 +404,7 @@ interface FluxaMapCanvasProps {
   listPagingMode?: "paged" | "scroll";
   listSort?: "distance" | "updated";
   onRefresh?: () => Promise<void> | void;
+  onOpenBrandDetail?: (brand: BrandRecord) => void;
   onOpenDetail?: (location: LocationRecord) => void;
   mapTheme: MapThemeKey;
   locateRequestKey?: number;
@@ -425,6 +429,7 @@ export function FluxaMapCanvas({
   listPagingMode = "paged",
   listSort = "distance",
   onRefresh,
+  onOpenBrandDetail,
   onOpenDetail,
   mapTheme,
   locateRequestKey = 0,
@@ -1269,7 +1274,7 @@ export function FluxaMapCanvas({
             const isActive = brandCategory === item;
             return (
               <button
-                className={`ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] ${
+                className={`ui-hover-shadow relative z-[1] inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-pill px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] select-none ${
                   isActive
                     ? "bg-[var(--secondary)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
                     : "bg-[var(--muted)] transition-colors duration-200 hover:bg-[var(--muted-hover)]"
@@ -1298,27 +1303,42 @@ export function FluxaMapCanvas({
                 className="flex min-h-[182px] min-w-0 flex-col rounded-m border border-[var(--border)] bg-[var(--muted-hover)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--secondary)]"
                 key={item.id}
               >
-                <div className="flex min-h-20 items-center gap-3 px-3 pb-1.5 pt-3">
-                  <BrandAvatar card={item} />
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-base font-semibold leading-6 text-[var(--foreground)]">{item.brand}</h3>
-                    <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.category)}</p>
+                <button
+                  className="flex min-h-0 flex-1 cursor-pointer flex-col text-left"
+                  onClick={() => {
+                    const targetBrand = brands.find((brand) => brand.id === item.id);
+                    if (targetBrand) {
+                      onOpenBrandDetail?.(targetBrand);
+                    }
+                  }}
+                  type="button"
+                >
+                  <div className="flex min-h-20 items-center gap-3 px-3 pb-1.5 pt-3">
+                    <BrandAvatar card={item} />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-base font-semibold leading-6 text-[var(--foreground)]">{item.brand}</h3>
+                      <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.category)}</p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex flex-col gap-1 px-3 pb-2.5">
-                  <p className="truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{t(item.coverage)}</p>
-                  <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.issues)}</p>
-                  <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.owner)}</p>
-                  {brandActionTarget === item.id ? <p className="truncate text-xs leading-[1.2] text-[var(--foreground)]">{t("Actions opened")}</p> : null}
-                </div>
+                  <div className="flex flex-col gap-1 px-3 pb-2.5">
+                    <p className="line-clamp-2 min-h-[32px] text-[13px] leading-[1.25] text-[var(--foreground)]">{t(item.description)}</p>
+                    <p className="truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{t(item.coverage)}</p>
+                    <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.issues)}</p>
+                    <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.owner)}</p>
+                    {brandActionTarget === item.id ? <p className="truncate text-xs leading-[1.2] text-[var(--foreground)]">{t("Actions opened")}</p> : null}
+                  </div>
+                </button>
 
                 <div className="mt-auto flex items-center justify-between px-3 pb-3">
                   <span className="text-xs font-medium leading-[1.2] text-[var(--muted-foreground)]">{t("Trend")}</span>
                   <button
                     aria-label={`更多操作：${item.brand}`}
                     className="ui-hover-shadow inline-flex h-10 w-10 items-center justify-center rounded-pill bg-[var(--secondary)] text-[var(--foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
-                    onClick={() => setBrandActionTarget((prev) => (prev === item.id ? null : item.id))}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setBrandActionTarget((prev) => (prev === item.id ? null : item.id));
+                    }}
                     type="button"
                   >
                     <MoreHorizontal className="h-4 w-4" />
