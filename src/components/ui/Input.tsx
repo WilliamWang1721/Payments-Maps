@@ -1,53 +1,22 @@
-import { forwardRef, InputHTMLAttributes } from 'react'
-import { cn } from '@/lib/utils'
+import * as React from "react";
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label?: string
-  error?: string
-  helperText?: string
-}
+import { cn } from "@/lib/utils";
 
-const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, helperText, type = 'text', ...props }, ref) => {
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
+  ({ className, type, ...props }, ref) => {
     return (
-      <div className="space-y-1">
-        {label && (
-          <label className="block text-sm font-medium text-gray-700">
-            {label}
-            {props.required && <span className="text-red-500 ml-1">*</span>}
-          </label>
+      <input
+        type={type}
+        className={cn(
+          "flex h-10 w-full rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm text-[var(--foreground)] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50",
+          className
         )}
-        <input
-          type={type}
-          ref={ref}
-          className={cn(
-            'block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
-            'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
-            'min-h-[44px] touch-manipulation webkit-tap-highlight-none webkit-appearance-none',
-            error && 'border-red-300 focus:ring-red-500 focus:border-red-500',
-            className
-          )}
-          style={{
-            WebkitTapHighlightColor: 'transparent',
-            touchAction: 'manipulation',
-            WebkitAppearance: 'none',
-            fontSize: '16px', // 防止iOS Safari缩放
-            ...props.style
-          }}
-          {...props}
-        />
-        {error && (
-          <p className="text-sm text-red-600">{error}</p>
-        )}
-        {helperText && !error && (
-          <p className="text-sm text-gray-500">{helperText}</p>
-        )}
-      </div>
-    )
+        ref={ref}
+        {...props}
+      />
+    );
   }
-)
+);
+Input.displayName = "Input";
 
-Input.displayName = 'Input'
-
-export default Input
+export { Input };

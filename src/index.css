@@ -1,184 +1,168 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import './styles/mobile-optimizations.css';
-@import './styles/z-index-layers.css';
-@import './styles/safari-animations.css';
-@import './styles/safari-compatibility.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Safari 兼容性和移动端优化 */
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  /* Safari 移动端优化 */
-  -webkit-text-size-adjust: 100%;
-  -webkit-tap-highlight-color: transparent;
-  /* 防止 Safari 缩放 */
-  touch-action: manipulation;
-  /* 支持安全区域 */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+:root {
+  --sidebar: #ffffff;
+  --sidebar-foreground: #939399;
+  --sidebar-primary: #f5f5f5;
+  --sidebar-primary-foreground: #2a2933;
+  --sidebar-border: #d9d9db;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-accent-hover: #e4e4e8;
+  --sidebar-accent-foreground: #2a2933;
+  --background: #f5f5f5;
+  --foreground: #2a2933;
+  --card: #ffffff;
+  --card-hover: #f6f6f8;
+  --primary: #5749f4;
+  --primary-hover: #4c40e1;
+  --primary-foreground: #ffffff;
+  --secondary: #d9d9db;
+  --secondary-hover: #cdced4;
+  --secondary-foreground: #2a2933;
+  --muted: #f5f5f5;
+  --muted-hover: #e9e9ed;
+  --muted-foreground: #616167;
+  --accent: #f5f5f5;
+  --accent-hover: #e9e9ed;
+  --accent-foreground: #2a2933;
+  --border: #c5c5cb;
+  --border-hover: #b3b4bc;
+  --input: #c5c5cb;
+  --ring: #e1e2e5;
+  --color-success: #a1e5a1;
+  --color-success-foreground: #003300;
+  --color-warning: #ffd9b2;
+  --color-warning-foreground: #4d2700;
+  --color-info: #c9d6f0;
+  --color-info-foreground: #001133;
+  --radius-l: 40px;
+  --radius-m: 24px;
+  --radius-xs: 6px;
+  --radius-pill: 999px;
 }
 
-:root {
-  --app-height: 100vh;
-  --layout-top-offset: 4rem;
-  --layout-bottom-offset: 4rem;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  line-height: 1.5;
-  font-weight: 400;
+* {
+  box-sizing: border-box;
+}
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
 }
 
 body {
-  overscroll-behavior-y: none;
-}
-
-/* Safari 特有的样式修复 */
-* {
-  /* 防止 Safari 的默认样式覆盖 */
-  -webkit-appearance: none;
-  -webkit-border-radius: 0;
-}
-
-/* 移动端触摸优化 */
-button, [role="button"], input[type="submit"], input[type="button"] {
-  /* 增加触摸区域 */
-  min-height: 44px;
-  min-width: 44px;
-  /* Safari 触摸反馈 */
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-}
-
-/* 输入框 Safari 优化 */
-input, textarea, select {
-  /* 移除 Safari 默认样式 */
-  -webkit-appearance: none;
-  -webkit-border-radius: 0;
-  /* 防止缩放 */
-  font-size: 16px;
-}
-
-/* 修复 Safari 的 flexbox 问题 */
-.flex {
-  display: -webkit-box;
-  display: -webkit-flex;
-  display: flex;
-}
-
-.flex-col {
-  -webkit-box-orient: vertical;
-  -webkit-box-direction: normal;
-  -webkit-flex-direction: column;
-  flex-direction: column;
-}
-
-/* 修复 Safari 的 position: fixed 问题 */
-.fixed {
-  position: -webkit-sticky;
-  position: fixed;
-}
-
-/* 防止内容溢出 */
-.overflow-hidden {
   overflow: hidden;
-  -webkit-overflow-scrolling: touch;
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Inter, sans-serif;
 }
 
-/*
-  Safari 动画优化：
-  不要对全局 `*` 强制施加 `transform: translateZ(0)`，否则会破坏 `position: fixed`
-  的定位（例如 toast/banner/modal 会“掉到页面最底部”，需要滚动才能看到）。
-  需要 GPU 加速时，请使用 `src/styles/safari-animations.css` 中的按需类名。
-*/
+a {
+  color: inherit;
+  text-decoration: none;
+}
 
-/* 渐变动画效果 */
-@keyframes gradient {
-  0%, 100% {
-    background-position: 0% 50%;
+svg {
+  display: block;
+}
+
+.ui-hover-shadow {
+  --hover-outline: #2a293324;
+  --hover-outline-active: #2a29333d;
+  transition:
+    box-shadow 180ms ease,
+    background-color 220ms ease,
+    border-color 220ms ease,
+    color 220ms ease;
+}
+
+.ui-hover-shadow:hover {
+  box-shadow: 0 0 0 1px var(--hover-outline);
+}
+
+.ui-hover-shadow:active {
+  box-shadow: 0 0 0 1px var(--hover-outline-active);
+}
+
+@keyframes tab-switch-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
-  50% {
-    background-position: 100% 50%;
+
+  60% {
+    opacity: 0.92;
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.animate-gradient {
-  animation: gradient 6s ease infinite;
+.tab-switch-enter {
+  animation: tab-switch-in 460ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.bg-300 {
-  background-size: 300% 300%;
+.ui-banner-enter {
+  animation: banner-slide-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Dashboard style scrollbar for list视图 */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #A0AEC0 transparent;
+.merchant-input-shimmer {
+  background-image: linear-gradient(110deg, #8f90a2 12%, #ffffff 30%, #6d63dd 45%, #ffffff 58%, #8f90a2 78%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: merchant-input-shimmer 1.75s linear infinite;
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+@keyframes banner-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+@keyframes merchant-input-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -20% 0;
+  }
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #A0AEC0;
-  border-radius: 9999px;
-}
+@media (prefers-reduced-motion: reduce) {
+  .ui-hover-shadow {
+    transition: none;
+  }
 
-/* Toast notification styling */
-[data-sonner-toaster] {
-  z-index: var(--z-notification);
-}
+  .ui-hover-shadow:hover,
+  .ui-hover-shadow:active {
+    transform: none;
+    box-shadow: none;
+  }
 
-.app-toast {
-  width: min(92vw, 420px);
-  border-radius: 20px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.98);
-  color: #0f172a;
-  padding: 16px 20px;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
-  font-weight: 600;
-  letter-spacing: 0.1px;
-  backdrop-filter: blur(12px);
-}
+  .tab-switch-enter {
+    animation: none;
+  }
 
-.app-toast__description {
-  margin-top: 4px;
-  font-weight: 500;
-  color: #475569;
-}
-
-.dark .app-toast {
-  border-color: rgba(148, 163, 184, 0.25);
-  background: rgba(15, 23, 42, 0.95);
-  color: #f8fafc;
-  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.6);
-}
-
-.dark .app-toast__description {
-  color: #cbd5f5;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #718096;
-}
-
-.bg-pattern {
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.4) 0, transparent 45%),
-    radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.25) 0, transparent 40%),
-    radial-gradient(circle at 0% 50%, rgba(255, 255, 255, 0.3) 0, transparent 50%);
-  background-size: 200% 200%;
+  .ui-banner-enter,
+  .merchant-input-shimmer {
+    animation: none;
+  }
 }
