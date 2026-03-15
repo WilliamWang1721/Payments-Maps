@@ -13,7 +13,7 @@
       "destination": "/api/mcp/:sessionToken"
     },
     {
-      "source": "^/(?!api/|.*\\..*).*$",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
