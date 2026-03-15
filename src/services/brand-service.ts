@@ -47,6 +47,20 @@ interface PostgrestLikeError {
 
 type BrandInsertPayload = Record<string, string | number | boolean | null>;
 
+interface BrandNotesEnvelope {
+  version: 1;
+  internalNotes?: string;
+  businessType?: BrandBusinessType;
+  status?: BrandStatus;
+  website?: string;
+  founded?: number | null;
+  headquarters?: string;
+  color?: string;
+  logo?: string;
+}
+
+const BRAND_NOTES_META_PREFIX = "__FLUXA_BRAND_META__:";
+
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -261,28 +275,79 @@ function getMissingColumnName(error: unknown): string | null {
   return match?.[1] || null;
 }
 
+function parseBrandNotes(value: unknown): { internalNotes?: string; metadata: Partial<BrandNotesEnvelope> } {
+  const raw = normalizeOptionalString(value);
+  if (!raw) {
+    return { metadata: {} };
+  }
+
+  if (!raw.startsWith(BRAND_NOTES_META_PREFIX)) {
+    return {
+      internalNotes: raw,
+      metadata: {}
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw.slice(BRAND_NOTES_META_PREFIX.length)) as BrandNotesEnvelope;
+    return {
+      internalNotes: normalizeOptionalString(parsed.internalNotes),
+      metadata: parsed && typeof parsed === "object" ? parsed : {}
+    };
+  } catch {
+    return {
+      internalNotes: raw,
+      metadata: {}
+    };
+  }
+}
+
+function serializeBrandNotesEnvelope(input: CreateBrandInput): string | null {
+  const envelope: BrandNotesEnvelope = {
+    version: 1,
+    internalNotes: normalizeOptionalString(input.notes),
+    businessType: input.businessType,
+    status: input.status,
+    website: ensureOptionalUrl(input.website, "Website URL is invalid.") || undefined,
+    founded: normalizeYear(input.founded),
+    headquarters: normalizeOptionalString(input.headquarters),
+    color: ensureOptionalHexColor(input.color) || undefined,
+    logo: ensureOptionalUrl(input.logo, "Image URL is invalid.") || undefined
+  };
+
+  return `${BRAND_NOTES_META_PREFIX}${JSON.stringify(envelope)}`;
+}
+
 function mapBrandRowToRecord(row: BrandRow, stats?: BrandStatsAccumulator): BrandRecord {
+  const parsedNotes = parseBrandNotes(row.notes);
   const category = normalizeString(row.category, "other");
   const name = normalizeString(row.name, "Unknown");
   const uiSegment = mapCategoryToSegment(category, name);
   const createdAt = normalizeOptionalString(row.created_at) || normalizeOptionalString(row.updated_at) || new Date().toISOString();
   const updatedAt = normalizeOptionalString(row.updated_at) || normalizeOptionalString(row.created_at) || createdAt;
   const lastSyncAt = stats?.lastSyncAt || updatedAt;
+  const embeddedBusinessType = parsedNotes.metadata.businessType;
+  const embeddedStatus = parsedNotes.metadata.status;
+  const embeddedWebsite = parsedNotes.metadata.website;
+  const embeddedFounded = parsedNotes.metadata.founded;
+  const embeddedHeadquarters = parsedNotes.metadata.headquarters;
+  const embeddedColor = parsedNotes.metadata.color;
+  const embeddedLogo = parsedNotes.metadata.logo;
 
   return {
     id: row.id,
     name,
     description: normalizeOptionalString(row.description),
-    notes: normalizeOptionalString(row.notes),
+    notes: parsedNotes.internalNotes,
     category,
-    businessType: normalizeBusinessType(category, row.business_type),
-    status: normalizeBrandStatus(row.status),
+    businessType: normalizeBusinessType(category, row.business_type || embeddedBusinessType),
+    status: normalizeBrandStatus(row.status || embeddedStatus),
     iconUrl: normalizeOptionalString(row.icon_url),
-    logo: normalizeOptionalString(row.logo),
-    color: normalizeOptionalString(row.color),
-    website: normalizeOptionalString(row.website),
-    founded: normalizeNumber(row.founded),
-    headquarters: normalizeOptionalString(row.headquarters),
+    logo: normalizeOptionalString(row.logo) || normalizeOptionalString(embeddedLogo),
+    color: normalizeOptionalString(row.color) || normalizeOptionalString(embeddedColor),
+    website: normalizeOptionalString(row.website) || normalizeOptionalString(embeddedWebsite),
+    founded: normalizeNumber(row.founded) ?? normalizeNumber(embeddedFounded),
+    headquarters: normalizeOptionalString(row.headquarters) || normalizeOptionalString(embeddedHeadquarters),
     isSystemBrand: normalizeBoolean(row.is_system_brand),
     createdBy: normalizeOptionalString(row.created_by),
     createdAt,
@@ -290,7 +355,10 @@ function mapBrandRowToRecord(row: BrandRow, stats?: BrandStatsAccumulator): Bran
     storeCount: stats?.storeCount || 0,
     activeStoreCount: stats?.activeStoreCount || 0,
     inactiveStoreCount: stats?.inactiveStoreCount || 0,
-    primaryCity: pickPrimaryCity(stats?.cityCounts || new Map<string, number>(), normalizeOptionalString(row.headquarters)),
+    primaryCity: pickPrimaryCity(
+      stats?.cityCounts || new Map<string, number>(),
+      normalizeOptionalString(row.headquarters) || normalizeOptionalString(embeddedHeadquarters)
+    ),
     lastSyncAt,
     uiSegment,
     uiCategoryLabel: mapSegmentToCategoryLabel(uiSegment)
@@ -389,7 +457,7 @@ function buildCreateBrandPayload(input: CreateBrandInput, userId: string): Brand
   return {
     name: input.name.trim(),
     description: normalizeOptionalString(input.description) ?? null,
-    notes: normalizeOptionalString(input.notes) ?? null,
+    notes: serializeBrandNotesEnvelope(input),
     category: normalizeString(input.category, "other"),
     business_type: input.businessType,
     status: input.status,
