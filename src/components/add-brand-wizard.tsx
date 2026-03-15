@@ -35,7 +35,8 @@ interface AddBrandWizardProps {
 }
 
 interface DraftState {
-  name: string;
+  nameZh: string;
+  nameEn: string;
   description: string;
   notes: string;
   category: BrandCategory;
@@ -75,7 +76,8 @@ const CATEGORY_OPTIONS: Array<{ value: BrandCategory; label: string }> = [
 ];
 
 const DEFAULT_DRAFT: DraftState = {
-  name: "",
+  nameZh: "",
+  nameEn: "",
   description: "",
   notes: "",
   category: "retail",
@@ -95,6 +97,17 @@ function buildAccentColor(draft: DraftState): string {
   }
 
   return draft.businessType === "online" ? "#0F8B8D" : "#5749F4";
+}
+
+function buildDisplayBrandName(draft: Pick<DraftState, "nameZh" | "nameEn">): string {
+  const zh = draft.nameZh.trim();
+  const en = draft.nameEn.trim();
+
+  if (zh && en) {
+    return `${zh} ${en}`;
+  }
+
+  return zh || en;
 }
 
 function hexToRgb(hex: string): { red: number; green: number; blue: number } | null {
@@ -301,10 +314,11 @@ function SummaryRow({
 function BrandPreviewPanel({ draft }: { draft: DraftState }): React.JSX.Element {
   const { t } = useI18n();
   const accentColor = buildAccentColor(draft);
+  const displayName = buildDisplayBrandName(draft);
   const preview = useMemo(() => buildBrandPreviewImage(draft.iconUrl, draft.website), [draft.iconUrl, draft.website]);
   const [imageFailed, setImageFailed] = useState(false);
   const host = buildBrandHostname(draft.website);
-  const initials = buildBrandInitials(draft.name);
+  const initials = buildBrandInitials(displayName);
 
   useEffect(() => {
     setImageFailed(false);
@@ -316,48 +330,52 @@ function BrandPreviewPanel({ draft }: { draft: DraftState }): React.JSX.Element 
   const showImage = Boolean(preview.imageUrl) && !imageFailed;
 
   return (
-    <aside className="flex h-full flex-col gap-4 rounded-[32px] border border-[var(--border)] p-6" style={heroStyle}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-[var(--muted-foreground)]">{t("Brand Preview")}</p>
-          <h3 className="mt-2 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--foreground)]">
-            {draft.name.trim() || t("Brand Name")}
-          </h3>
-        </div>
-        <span className="inline-flex h-10 items-center rounded-pill border border-white/70 bg-white/72 px-4 text-xs font-semibold text-[var(--foreground)] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]">
-          {t(getStatusLabel(draft.status))}
-        </span>
-      </div>
+    <aside className="relative flex h-full flex-col gap-4 overflow-hidden rounded-[32px] border border-[var(--border)] bg-[var(--card)] p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[188px]" style={heroStyle} />
 
-      <div className="flex min-h-[240px] flex-1 items-center justify-center rounded-[28px] border border-white/70 bg-white/84 px-6 py-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-        {showImage ? (
-          <img
-            alt={draft.name.trim() || "Brand Preview"}
-            className="max-h-[160px] w-full object-contain"
-            decoding="async"
-            loading="eager"
-            onError={() => setImageFailed(true)}
-            referrerPolicy="no-referrer"
-            src={preview.imageUrl || ""}
-          />
-        ) : (
-          <span
-            className="inline-flex h-28 w-28 items-center justify-center rounded-[32px] text-[34px] font-semibold uppercase text-white shadow-[0_20px_40px_-24px_rgba(15,23,42,0.45)]"
-            style={{ backgroundColor: accentColor }}
-          >
-            {initials}
+      <div className="relative flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.1em] text-[var(--muted-foreground)]">{t("Brand Preview")}</p>
+            <h3 className="mt-2 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--foreground)]">
+              {displayName || t("Brand Name")}
+            </h3>
+          </div>
+          <span className="inline-flex h-10 items-center rounded-pill border border-white/70 bg-white/72 px-4 text-xs font-semibold text-[var(--foreground)] shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]">
+            {t(getStatusLabel(draft.status))}
           </span>
-        )}
+        </div>
+
+        <div className="flex min-h-[240px] flex-1 items-center justify-center rounded-[28px] border border-white/70 bg-white/90 px-6 py-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          {showImage ? (
+            <img
+              alt={displayName || "Brand Preview"}
+              className="max-h-[160px] w-full object-contain"
+              decoding="async"
+              loading="eager"
+              onError={() => setImageFailed(true)}
+              referrerPolicy="no-referrer"
+              src={preview.imageUrl || ""}
+            />
+          ) : (
+            <span
+              className="inline-flex h-28 w-28 items-center justify-center rounded-[32px] text-[34px] font-semibold uppercase text-white shadow-[0_20px_40px_-24px_rgba(15,23,42,0.45)]"
+              style={{ backgroundColor: accentColor }}
+            >
+              {initials}
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="relative grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SummaryRow icon={BadgeDollarSign} label="Brand Category" value={CATEGORY_OPTIONS.find((item) => item.value === draft.category)?.label || "Retail"} />
         <SummaryRow icon={draft.businessType === "online" ? Globe : Store} label="Business Type" value={getBusinessTypeLabel(draft.businessType)} />
         <SummaryRow icon={ImageUp} label="Image Source" value={getImageSourceLabel(showImage ? preview.source : "none")} />
         <SummaryRow icon={Building2} label="Website" value={host || "Not set"} />
       </div>
 
-      <div className="rounded-[24px] border border-white/72 bg-white/76 px-4 py-4">
+      <div className="relative rounded-[24px] border border-[var(--input)] bg-[var(--accent)] px-4 py-4">
         <p className="text-sm font-semibold leading-[1.3] text-[var(--foreground)]">{t("Image Priority")}</p>
         <p className="mt-2 text-sm leading-[1.5] text-[var(--muted-foreground)]">
           {t("We prioritize the direct logo URL, then website favicon, then initials fallback.")}
@@ -387,7 +405,20 @@ function StepOneContent({
     <div className="grid grid-cols-1 gap-4 px-4 pb-4 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:px-10">
       <div className="flex min-h-0 flex-col gap-4">
         <CardFrame title="Brand Identity" description="Set the brand name, primary website, and visual direction before publishing.">
-          <TextField label="Brand Name" onChange={(value) => onFieldChange("name", value)} placeholder="e.g. Starbucks Reserve" value={draft.name} />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <TextField
+              label="Chinese Brand Name"
+              onChange={(value) => onFieldChange("nameZh", value)}
+              placeholder="e.g. 星巴克臻选"
+              value={draft.nameZh}
+            />
+            <TextField
+              label="English Brand Name"
+              onChange={(value) => onFieldChange("nameEn", value)}
+              placeholder="e.g. Starbucks Reserve"
+              value={draft.nameEn}
+            />
+          </div>
           <TextField label="Website" onChange={(value) => onFieldChange("website", value)} placeholder="https://brand.com" type="url" value={draft.website} />
           <TextField
             label="Description"
@@ -444,6 +475,7 @@ function StepTwoContent({
   onFieldChange: <Key extends keyof DraftState>(field: Key, value: DraftState[Key]) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
+  const displayName = buildDisplayBrandName(draft);
 
   return (
     <div className="grid grid-cols-1 gap-4 px-4 pb-4 sm:px-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] lg:px-10">
@@ -495,7 +527,7 @@ function StepTwoContent({
       <aside className="flex h-full flex-col gap-4 rounded-[32px] border border-[var(--border)] bg-[var(--card)] p-6">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.1em] text-[var(--muted-foreground)]">{t("Ready to publish")}</p>
-          <h3 className="mt-2 text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--foreground)]">{draft.name.trim() || t("Brand Name")}</h3>
+          <h3 className="mt-2 text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--foreground)]">{displayName || t("Brand Name")}</h3>
           <p className="mt-3 text-sm leading-[1.5] text-[var(--muted-foreground)]">
             {t("This brand will be added to the shared catalog and become available in Add Location immediately.")}
           </p>
@@ -543,8 +575,8 @@ export function AddBrandWizard({ onCancel, onComplete, saving = false }: AddBran
   };
 
   const validateDraft = (): string | null => {
-    if (!draft.name.trim()) {
-      return "Brand name is required.";
+    if (!buildDisplayBrandName(draft)) {
+      return "At least one brand name is required.";
     }
 
     if (draft.website.trim() && !normalizeExternalUrl(draft.website)) {
@@ -567,7 +599,7 @@ export function AddBrandWizard({ onCancel, onComplete, saving = false }: AddBran
   };
 
   const buildPayload = (): CreateBrandInput => ({
-    name: draft.name.trim(),
+    name: buildDisplayBrandName(draft),
     description: draft.description.trim(),
     notes: draft.notes.trim(),
     category: draft.category,
