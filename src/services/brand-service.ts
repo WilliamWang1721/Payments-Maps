@@ -45,6 +45,8 @@ interface PostgrestLikeError {
   message?: string;
 }
 
+type BrandInsertPayload = Record<string, string | number | boolean | null>;
+
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -249,6 +251,16 @@ function buildErrorMessage(error: unknown): string | null {
   return null;
 }
 
+function getMissingColumnName(error: unknown): string | null {
+  const message = buildErrorMessage(error);
+  if (!message) {
+    return null;
+  }
+
+  const match = message.match(/Could not find the '([^']+)' column of 'brands' in the schema cache/i);
+  return match?.[1] || null;
+}
+
 function mapBrandRowToRecord(row: BrandRow, stats?: BrandStatsAccumulator): BrandRecord {
   const category = normalizeString(row.category, "other");
   const name = normalizeString(row.name, "Unknown");
@@ -373,11 +385,11 @@ async function fetchBrandByName(name: string): Promise<BrandRecord | null> {
   return data ? mapBrandRowToRecord(data as BrandRow) : null;
 }
 
-function buildCreateBrandPayload(input: CreateBrandInput, userId: string) {
+function buildCreateBrandPayload(input: CreateBrandInput, userId: string): BrandInsertPayload {
   return {
     name: input.name.trim(),
-    description: normalizeOptionalString(input.description),
-    notes: normalizeOptionalString(input.notes),
+    description: normalizeOptionalString(input.description) ?? null,
+    notes: normalizeOptionalString(input.notes) ?? null,
     category: normalizeString(input.category, "other"),
     business_type: input.businessType,
     status: input.status,
@@ -386,10 +398,33 @@ function buildCreateBrandPayload(input: CreateBrandInput, userId: string) {
     color: ensureOptionalHexColor(input.color),
     website: ensureOptionalUrl(input.website, "Website URL is invalid."),
     founded: normalizeYear(input.founded),
-    headquarters: normalizeOptionalString(input.headquarters),
+    headquarters: normalizeOptionalString(input.headquarters) ?? null,
     created_by: userId,
     is_system_brand: false
   };
+}
+
+async function insertBrandPayloadWithFallback(payload: BrandInsertPayload): Promise<void> {
+  const currentPayload: BrandInsertPayload = { ...payload };
+
+  while (true) {
+    const { error } = await supabase.from("brands").insert(currentPayload);
+
+    if (!error) {
+      return;
+    }
+
+    if (error.code === "23505") {
+      throw new Error("A brand with this name already exists.");
+    }
+
+    const missingColumn = getMissingColumnName(error);
+    if (!missingColumn || !(missingColumn in currentPayload) || missingColumn === "name") {
+      throw error;
+    }
+
+    delete currentPayload[missingColumn];
+  }
 }
 
 export const brandService = {
@@ -423,14 +458,7 @@ export const brandService = {
     const userId = await getCurrentUserId();
     await assertBrandNameAvailable(trimmedName);
 
-    const { error } = await supabase.from("brands").insert(buildCreateBrandPayload(input, userId));
-
-    if (error) {
-      if (error.code === "23505") {
-        throw new Error("A brand with this name already exists.");
-      }
-      throw error;
-    }
+    await insertBrandPayloadWithFallback(buildCreateBrandPayload(input, userId));
 
     try {
       const insertedBrand = await fetchBrandByName(trimmedName);

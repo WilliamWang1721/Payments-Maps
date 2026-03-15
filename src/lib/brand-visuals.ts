@@ -67,6 +67,23 @@ export function buildBrandHostname(website: string | null | undefined): string |
   }
 }
 
+function hasResolvableBrandHostname(website: string | null | undefined): boolean {
+  const hostname = buildBrandHostname(website);
+  if (!hostname) {
+    return false;
+  }
+
+  if (hostname === "localhost") {
+    return true;
+  }
+
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) {
+    return true;
+  }
+
+  return hostname.includes(".");
+}
+
 export function buildBrandPreviewImage(
   iconUrl: string | null | undefined,
   website: string | null | undefined
@@ -80,7 +97,7 @@ export function buildBrandPreviewImage(
   }
 
   const normalizedWebsite = normalizeExternalUrl(website);
-  if (normalizedWebsite) {
+  if (normalizedWebsite && hasResolvableBrandHostname(normalizedWebsite)) {
     return {
       imageUrl: `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(normalizedWebsite)}`,
       source: "favicon"
