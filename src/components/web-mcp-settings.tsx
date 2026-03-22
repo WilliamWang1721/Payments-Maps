@@ -205,9 +205,7 @@ export function WebMcpSettings({
 
     try {
       await revokeMcpSession(sessionId);
-      setMcpSessions((prev) =>
-        prev.map((session) => (session.id === sessionId ? { ...session, revokedAt: new Date().toISOString() } : session))
-      );
+      setMcpSessions((prev) => prev.filter((session) => session.id !== sessionId));
     } catch (error) {
       console.error("Failed to revoke MCP session.", error);
       setMcpError(error instanceof Error ? error.message : "撤销 MCP 会话失败。");
@@ -430,6 +428,9 @@ export function WebMcpSettings({
                     <p>2. 把配置复制到 AI 客户端的 MCP 设置页面。</p>
                     <p>3. 重载 MCP 连接。</p>
                     <p>4. 之后可以直接让 AI 搜索地点、创建地点、补录 attempt、查看卡册，或做全站统计、抓取地点数据并更新资料。</p>
+                    <p>5. 如果要导入某个范围内某个品牌的全部门店，可以先让 AI 调用地图搜索工具列出候选门店，再批量导入这些结果。</p>
+                    <p>6. 如果当前账号是管理员，还可以直接让 AI 用地图搜索结果批量新增地点；批量模式下 `city` 可以留空，系统会尽量补全或回退为默认值。</p>
+                    <p>7. 如果你要先铺满品牌门店但还没有真实支付记录，建议让 AI 使用 `create_as_shell=true` 或 `create_shell_location` 创建空壳地点；后续第一条真实 attempt 会自动把它转成真实 POS 地点，并从那时开始计算成功率。</p>
                   </div>
                 </div>
 
@@ -438,8 +439,12 @@ export function WebMcpSettings({
                   <div className="mt-3 space-y-3 text-xs leading-[1.7] text-[var(--muted-foreground)]">
                     <p>`帮我查一下上海徐汇区已收录的瑞幸地点。`</p>
                     <p>`新增一个地点，并写入第一条支付 attempt。`</p>
+                    <p>`新增一个空壳地点，不要写入任何 attempt，等后续用户补录真实支付记录。`</p>
+                    <p>`先在地图里搜索石家庄市范围内的所有星巴克门店，给我整理坐标和地址。`</p>
+                    <p>`如果我是管理员，请把石家庄市范围内地图搜索到的所有星巴克门店批量导入为空壳地点，create_as_shell=true，状态默认 active。`</p>
                     <p>`统计一下全站添加地点最多的 10 个用户。`</p>
                     <p>`抓取深圳地区的已收录地点数据，整理成分析用列表。`</p>
+                    <p>`如果我是管理员，请批量添加这 20 个地点，city 留空也可以；如果只是预铺门店，请创建为空壳地点。`</p>
                     <p>`把这张卡片加入我的公共卡册。`</p>
                     <p>`帮我新建一张卡，并直接保存到公共卡册。`</p>
                     <p>`帮我读取我的浏览历史并总结最近看过的门店。`</p>

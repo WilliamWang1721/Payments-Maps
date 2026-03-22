@@ -58,7 +58,7 @@ export interface CreateLocationInput {
   address: string;
   brand: string;
   bin: string;
-  city: string;
+  city?: string;
   status: LocationStatus;
   lat: number;
   lng: number;
@@ -72,6 +72,96 @@ export interface CreateLocationInput {
   posModel?: string;
   checkoutLocation?: "Staffed Checkout" | "Self-checkout";
   attemptedAt?: string;
+}
+
+export interface BulkCreateLocationResult {
+  index: number;
+  success: boolean;
+  inputName: string;
+  location?: LocationRecord;
+  error?: string;
+}
+
+export interface MapAreaResolutionRecord {
+  provider: "nominatim" | "amap-js";
+  name: string;
+  displayName: string;
+  lat: number;
+  lng: number;
+  bounds: {
+    south: number;
+    west: number;
+    north: number;
+    east: number;
+  };
+  category: string;
+  type: string;
+}
+
+export interface MapBrandLocationCandidate {
+  provider: "nominatim" | "amap-js";
+  providerId: string;
+  name: string;
+  address: string;
+  city: string;
+  district: string;
+  state: string;
+  postcode?: string;
+  country: string;
+  lat: number;
+  lng: number;
+  category: string;
+  type: string;
+  displayName: string;
+}
+
+export interface MapBrandLocationSearchRecord {
+  provider: "nominatim" | "amap-js";
+  brand: string;
+  areaQuery: string;
+  resolvedArea: MapAreaResolutionRecord;
+  total: number;
+  limit: number;
+  results: MapBrandLocationCandidate[];
+  warnings: string[];
+}
+
+export interface BulkImportBrandLocationsFromMapInput {
+  brand: string;
+  area: string;
+  bin?: string;
+  brandAliases?: string[];
+  countryCode?: string;
+  limit?: number;
+  status?: LocationStatus;
+  notes?: string;
+  transactionStatus?: "Success" | "Fault" | "Unknown";
+  network?: string;
+  paymentMethod?: string;
+  cvm?: string;
+  acquiringMode?: string;
+  acquirer?: string;
+  posModel?: string;
+  checkoutLocation?: "Staffed Checkout" | "Self-checkout";
+  attemptedAt?: string;
+  skipExisting?: boolean;
+  createAsShell?: boolean;
+}
+
+export interface BulkImportBrandLocationsFromMapResult {
+  search: MapBrandLocationSearchRecord;
+  totalCandidates: number;
+  createdCount: number;
+  skippedCount: number;
+  failureCount: number;
+  results: Array<{
+    index: number;
+    action: "created" | "skipped" | "failed";
+    candidate: MapBrandLocationCandidate;
+    reason?: string;
+    location?: LocationRecord;
+    error?: string;
+  }>;
 }
 
 export interface CreateLocationAttemptInput {

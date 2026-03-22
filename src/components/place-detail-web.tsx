@@ -11,17 +11,19 @@ import {
   Globe,
   Hash,
   HelpCircle,
-  Key,
   MapPin,
   MinusCircle,
   Nfc,
   PenTool,
+  Phone,
   PlayCircle,
   Plus,
+  Clock3,
   Radio,
   Settings2,
   Smartphone,
   StopCircle,
+  Trash2,
   TrendingUp,
   Wifi
 } from "lucide-react";
@@ -37,24 +39,36 @@ import {
 } from "@/components/ui/dialog";
 import { TabsWarp } from "@/components/ui/tabs-warp";
 import { useLocationDetail } from "@/hooks/use-location-detail";
+import { useViewerAccess } from "@/hooks/use-viewer-access";
 import { useI18n } from "@/i18n";
 import { browsingHistoryService } from "@/services/browsing-history-service";
 import { locationService } from "@/services/location-service";
-import type { CreateLocationAttemptInput, LocationAttemptRecord, LocationDetailRecord, LocationRecord, LocationReviewRecord } from "@/types/location";
+import type {
+  CreateLocationAttemptInput,
+  LocationAttemptRecord,
+  LocationBusinessHours,
+  LocationDetailRecord,
+  LocationRecord,
+  LocationReviewRecord,
+  LocationSupportInsight,
+  SupportEvidenceStatus
+} from "@/types/location";
 
 type DetailContentTab = "overview" | "attempt" | "reviews";
 type SuccessRateFilterMode = "all" | "custom";
 
 interface NetworkRow {
+  key: string;
   name: string;
-  status: "supported" | "unknown";
-  tags?: string[];
+  status: SupportEvidenceStatus;
+  insight: LocationSupportInsight;
 }
 
-interface CvmRow {
-  name: string;
-  icon: React.ComponentType<{ className?: string }>;
-  status: "supported" | "limited";
+interface BusinessHoursRow {
+  id: string;
+  label: string;
+  value: string;
+  kind: "regular" | "special";
 }
 
 interface SuccessRateDateFilter {
@@ -69,17 +83,75 @@ interface SuccessRateSummary {
   totalAttempts: number;
 }
 
-const DEFAULT_CVM_ROWS: CvmRow[] = [
-  { name: "实体拍卡（无 CVM）", icon: Wifi, status: "supported" },
-  { name: "PIN", icon: Key, status: "supported" },
-  { name: "Signature", icon: PenTool, status: "limited" }
-];
+type StaffProficiencyLevel = 1 | 2 | 3 | 4 | 5;
+
+interface StaffProficiencyOption {
+  level: StaffProficiencyLevel;
+  label: string;
+  description: string;
+  badgeClassName: string;
+  cardClassName: string;
+  pillKind: "supported" | "unknown" | "limited" | "unsupported";
+}
+
+interface DetailStaffProficiencyShape {
+  staffProficiencyLevel?: number | null;
+  staffProficiencyUpdatedAt?: string | null;
+}
+
+interface StaffProficiencyMutationLocationService {
+  updateLocationStaffProficiency?: (location: LocationRecord, level: StaffProficiencyLevel | null) => Promise<unknown>;
+  updateStaffProficiency?: (location: LocationRecord, level: StaffProficiencyLevel | null) => Promise<unknown>;
+}
 
 const DEFAULT_SUCCESS_RATE_FILTER: SuccessRateDateFilter = {
   mode: "all",
   startDate: "",
   endDate: ""
 };
+
+const STAFF_PROFICIENCY_OPTIONS: StaffProficiencyOption[] = [
+  {
+    level: 1,
+    label: "Completely Unfamiliar",
+    description: "Has never used a POS device and does not know the basic workflow.",
+    badgeClassName: "bg-[#FEF2F2] text-[#B42318] ring-1 ring-inset ring-[#FECACA]",
+    cardClassName: "border-[#FECACA] bg-[#FFF7F7]",
+    pillKind: "unsupported"
+  },
+  {
+    level: 2,
+    label: "Knows the Basics",
+    description: "Understands what the POS is for but cannot complete a transaction alone.",
+    badgeClassName: "bg-[#FFF7ED] text-[#C2410C] ring-1 ring-inset ring-[#FED7AA]",
+    cardClassName: "border-[#FED7AA] bg-[#FFFBF5]",
+    pillKind: "limited"
+  },
+  {
+    level: 3,
+    label: "Needs Guided Operation",
+    description: "Can finish basic checkout steps with docs or someone guiding them.",
+    badgeClassName: "bg-[#FFFBEA] text-[#A16207] ring-1 ring-inset ring-[#FDE68A]",
+    cardClassName: "border-[#FDE68A] bg-[#FFFDF5]",
+    pillKind: "unknown"
+  },
+  {
+    level: 4,
+    label: "Independent Operator",
+    description: "Can independently handle everyday checkout and refund flows.",
+    badgeClassName: "bg-[#ECFDF3] text-[#027A48] ring-1 ring-inset ring-[#A7F3D0]",
+    cardClassName: "border-[#A7F3D0] bg-[#F5FFF9]",
+    pillKind: "supported"
+  },
+  {
+    level: 5,
+    label: "Highly Proficient",
+    description: "Comfortable with advanced flows such as reports, inventory, and issue handling.",
+    badgeClassName: "bg-[#E8FFF4] text-[#05603A] ring-1 ring-inset ring-[#6EE7B7]",
+    cardClassName: "border-[#6EE7B7] bg-[#F2FFF8]",
+    pillKind: "supported"
+  }
+];
 
 const DETAIL_TABS: Array<{ key: DetailContentTab; label: string }> = [
   { key: "overview", label: "Overview" },
@@ -149,6 +221,14 @@ function formatAttemptMutationError(error: unknown): string {
   }
 
   return "Unable to save the attempt right now.";
+}
+
+function formatDeleteMutationError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unable to delete the location right now.";
 }
 
 function AttemptDialogCard({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
@@ -330,19 +410,158 @@ function formatStatusLabel(status: LocationRecord["status"]): string {
   return status === "inactive" ? "Inactive" : "Active";
 }
 
+function normalizeStaffProficiencyLevel(value: number | null | undefined): StaffProficiencyLevel | null {
+  if (value === 1 || value === 2 || value === 3 || value === 4 || value === 5) {
+    return value;
+  }
+
+  return null;
+}
+
+function getStaffProficiencyLevel(detail: LocationDetailRecord | null | undefined): StaffProficiencyLevel | null {
+  return normalizeStaffProficiencyLevel((detail as DetailStaffProficiencyShape | null | undefined)?.staffProficiencyLevel);
+}
+
+function getStaffProficiencyUpdatedAt(detail: LocationDetailRecord | null | undefined): string | null {
+  const value = (detail as DetailStaffProficiencyShape | null | undefined)?.staffProficiencyUpdatedAt;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function findStaffProficiencyOption(level: StaffProficiencyLevel | null): StaffProficiencyOption | null {
+  if (!level) {
+    return null;
+  }
+
+  return STAFF_PROFICIENCY_OPTIONS.find((option) => option.level === level) || null;
+}
+
+function formatStaffProficiencyUpdatedAt(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function formatStaffProficiencyMutationError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unable to update staff proficiency right now.";
+}
+
 function buildFallbackDetail(location: LocationRecord): LocationDetailRecord {
   return {
     ...location,
     source: location.source || "fluxa_locations",
     deviceName: location.name,
-    metaLine: `品牌：${location.brand}  •  城市：${location.city}  •  BIN：${location.bin}`,
+    metaLine: `品牌：${location.brand}  •  城市：${location.city}`,
     successRate: location.successRate || 0,
     successCount: 0,
     failedCount: 0,
     totalAttempts: 0,
     attempts: [],
-    reviews: []
+    reviews: [],
+    supportInsights: {
+      networks: [],
+      paymentMethods: []
+    }
   };
+}
+
+function formatSpecialDateLabel(dateValue: string): string {
+  if (!dateValue) {
+    return "";
+  }
+
+  const parsed = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return dateValue;
+  }
+
+  return parsed.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+}
+
+function hasLocationBusinessHours(value: LocationBusinessHours | undefined): boolean {
+  return Boolean(value?.weekday || value?.weekend || value?.specialDates?.length);
+}
+
+function buildBusinessHoursRows(
+  value: LocationBusinessHours | undefined,
+  t: (text: string) => string
+): BusinessHoursRow[] {
+  const weekday = value?.weekday?.trim() || "";
+  const weekend = value?.weekend?.trim() || "";
+  const specialDates = (value?.specialDates || []).filter((entry) => entry.date.trim() && entry.hours.trim());
+  const rows: BusinessHoursRow[] = [];
+
+  if (weekday && weekend) {
+    if (weekday === weekend) {
+      rows.push({
+        id: "daily",
+        label: t("Daily"),
+        value: weekday,
+        kind: "regular"
+      });
+    } else {
+      rows.push({
+        id: "weekday",
+        label: t("Weekdays"),
+        value: weekday,
+        kind: "regular"
+      });
+      rows.push({
+        id: "weekend",
+        label: t("Weekends"),
+        value: weekend,
+        kind: "regular"
+      });
+    }
+  } else if (weekday) {
+    rows.push({
+      id: "weekday",
+      label: t("Weekdays"),
+      value: weekday,
+      kind: "regular"
+    });
+  } else if (weekend) {
+    rows.push({
+      id: "weekend",
+      label: t("Weekends"),
+      value: weekend,
+      kind: "regular"
+    });
+  }
+
+  specialDates
+    .slice()
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .forEach((entry) => {
+      rows.push({
+        id: `special-${entry.date}-${entry.hours}`,
+        label: formatSpecialDateLabel(entry.date),
+        value: entry.hours.trim(),
+        kind: "special"
+      });
+    });
+
+  return rows;
 }
 
 function formatSupportedNetworkLabel(network: string): string {
@@ -380,61 +599,123 @@ function formatPaymentMethodLabel(method: string): string {
     .join(" ");
 }
 
+function buildFallbackInsight(key: string, title: string, status: SupportEvidenceStatus, rationale: string): LocationSupportInsight {
+  return {
+    key,
+    title,
+    status,
+    rationale,
+    evidence: [],
+    counters: {
+      supportingAttempts: 0,
+      conflictingAttempts: 0,
+      officialSources: 0
+    }
+  };
+}
+
 function buildNetworkRows(detail: LocationDetailRecord): NetworkRow[] {
-  if (detail.supportedNetworks && detail.supportedNetworks.length > 0) {
-    return Array.from(new Set(detail.supportedNetworks.map(formatSupportedNetworkLabel))).map((name) => ({
-      name,
-      status: "supported" as const
+  if (detail.supportInsights?.networks?.length) {
+    return detail.supportInsights.networks.map((insight) => ({
+      key: insight.key,
+      name: insight.title,
+      status: insight.status,
+      insight
     }));
   }
 
-  const inferred = Array.from(
-    new Set(
-      detail.attempts
-        .map((attempt) => attempt.network)
-        .filter(Boolean)
-        .flatMap((cardNetwork) => {
-          const normalized = cardNetwork.toLowerCase();
-          const matches: string[] = [];
-          if (normalized.includes("visa")) matches.push("Visa");
-          if (normalized.includes("master")) matches.push("MasterCard");
-          if (normalized.includes("union")) matches.push("银联 UnionPay");
-          if (normalized.includes("amex cn")) matches.push("American Express 中国");
-          else if (normalized.includes("amex") || normalized.includes("american express")) matches.push("American Express");
-          if (normalized.includes("discover")) matches.push("Discover（发现）");
-          if (normalized.includes("jcb")) matches.push("JCB");
-          if (normalized.includes("diners")) matches.push("Diners Club");
-          return matches;
-        })
-    )
-  );
-
-  return inferred.map((name) => ({ name, status: "supported" as const }));
-}
-
-function buildCvmRows(detail: LocationDetailRecord): CvmRow[] {
-  const methods = Array.from(new Set(detail.attempts.map((attempt) => attempt.method.toLowerCase())));
-  if (methods.length === 0) {
-    return DEFAULT_CVM_ROWS;
+  if (detail.supportedNetworks && detail.supportedNetworks.length > 0) {
+    return Array.from(new Set(detail.supportedNetworks.map(formatSupportedNetworkLabel))).map((name) => ({
+      key: `network:${name.toLowerCase()}`,
+      name,
+      status: "supported" as const,
+      insight: buildFallbackInsight(`network:${name.toLowerCase()}`, name, "supported", "This network is inferred from the current location record.")
+    }));
   }
 
-  return [
-    {
-      name: "实体拍卡（无 CVM）",
-      icon: Wifi,
-      status: methods.some((method) => method.includes("contactless") || method.includes("tap")) ? "supported" : "limited"
-    },
-    {
-      name: "PIN",
-      icon: Key,
-      status: methods.some((method) => method.includes("pin") || method.includes("insert")) ? "supported" : "limited"
-    },
-    {
-      name: "Signature",
-      icon: PenTool,
-      status: methods.some((method) => method.includes("signature")) ? "supported" : "limited"
+  const grouped = new Map<string, { supporting: number; conflicting: number }>();
+
+  detail.attempts.forEach((attempt) => {
+    const name = formatSupportedNetworkLabel(attempt.network);
+    if (!name || name === "Unknown") {
+      return;
     }
-  ];
+
+    const next = grouped.get(name) || { supporting: 0, conflicting: 0 };
+    if (attempt.status === "success") {
+      next.supporting += 1;
+    } else {
+      next.conflicting += 1;
+    }
+    grouped.set(name, next);
+  });
+
+  return Array.from(grouped.entries()).map(([name, counts]) => {
+    const status: SupportEvidenceStatus = counts.supporting > 0 ? "supported" : counts.conflicting > 0 ? "unsupported" : "unknown";
+
+    return {
+      key: `network:${name.toLowerCase()}`,
+      name,
+      status,
+      insight: buildFallbackInsight(
+        `network:${name.toLowerCase()}`,
+        name,
+        status,
+        "This network is inferred from recorded payment attempts."
+      )
+    };
+  });
+}
+
+function buildPaymentMethodRows(detail: LocationDetailRecord): NetworkRow[] {
+  if (detail.supportInsights?.paymentMethods?.length) {
+    return detail.supportInsights.paymentMethods.map((insight) => ({
+      key: insight.key,
+      name: insight.title,
+      status: insight.status,
+      insight
+    }));
+  }
+
+  const grouped = new Map<string, { supporting: number; conflicting: number }>();
+
+  detail.attempts.forEach((attempt) => {
+    const name = formatPaymentMethodLabel(attempt.paymentMethod || attempt.method);
+    if (!name || name === "Unknown") {
+      return;
+    }
+
+    const next = grouped.get(name) || { supporting: 0, conflicting: 0 };
+    if (attempt.status === "success") {
+      next.supporting += 1;
+    } else {
+      next.conflicting += 1;
+    }
+    grouped.set(name, next);
+  });
+
+  return Array.from(grouped.entries()).map(([name, counts]) => {
+    const status: SupportEvidenceStatus = counts.supporting > 0 ? "supported" : counts.conflicting > 0 ? "unsupported" : "unknown";
+
+    return {
+      key: `payment-method:${name.toLowerCase()}`,
+      name,
+      status,
+      insight: buildFallbackInsight(
+        `payment-method:${name.toLowerCase()}`,
+        name,
+        status,
+        "This payment method is inferred from recorded payment attempts."
+      )
+    };
+  });
+}
+
+function formatSupportStatusLabel(status: SupportEvidenceStatus): string {
+  if (status === "supported") return "Supported";
+  if (status === "unsupported") return "Unsupported";
+  if (status === "limited") return "Limited";
+  return "Unknown";
 }
 
 function StatusPill({
@@ -442,12 +723,14 @@ function StatusPill({
   kind = "supported"
 }: {
   label: string;
-  kind?: "supported" | "unknown" | "limited" | "declined";
+  kind?: "supported" | "unknown" | "limited" | "declined" | "unsupported";
 }): React.JSX.Element {
   const { t } = useI18n();
   const cls =
     kind === "supported"
       ? "bg-[var(--color-success)] text-[var(--color-success-foreground)]"
+      : kind === "unsupported"
+        ? "bg-[#FFE0DB] text-[#7A1F0E]"
       : kind === "declined"
         ? "bg-[var(--color-warning)] text-[var(--color-warning-foreground)]"
         : kind === "limited"
@@ -483,6 +766,129 @@ function SectionHeader({
         <span>{t(buttonLabel)}</span>
       </button>
     </div>
+  );
+}
+
+function StaffProficiencyCard({
+  currentLevel,
+  updatedAt,
+  saving,
+  savingLevel,
+  error,
+  onSelectLevel,
+  onClear
+}: {
+  currentLevel: StaffProficiencyLevel | null;
+  updatedAt: string | null;
+  saving: boolean;
+  savingLevel: StaffProficiencyLevel | null;
+  error: string | null;
+  onSelectLevel: (level: StaffProficiencyLevel) => void;
+  onClear: () => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const activeOption = findStaffProficiencyOption(currentLevel);
+  const lastUpdatedLabel = formatStaffProficiencyUpdatedAt(updatedAt);
+
+  return (
+    <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t("Staff Proficiency")}</p>
+          <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
+            {activeOption
+              ? t("Use this to estimate how much POS guidance the store staff will need.")
+              : t("No proficiency level has been recorded for this location yet.")}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {activeOption ? <StatusPill kind={activeOption.pillKind} label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
+          <HelpCircle className="h-5 w-5 text-[var(--primary)]" />
+        </div>
+      </div>
+
+      <div className={`mt-6 rounded-[28px] border px-6 py-5 ${activeOption ? activeOption.cardClassName : "border-dashed border-[var(--input)] bg-[#FAFAFA]"}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              {activeOption ? (
+                <>
+                  <span className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm font-semibold ${activeOption.badgeClassName}`}>
+                    {activeOption.level}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-lg font-semibold leading-[1.25] text-[var(--foreground)]">{t(activeOption.label)}</p>
+                    <p className="mt-1 max-w-[52ch] text-sm leading-[1.6] text-[var(--muted-foreground)]">{t(activeOption.description)}</p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <p className="text-lg font-semibold leading-[1.25] text-[var(--foreground)]">{t("Not set")}</p>
+                  <p className="mt-1 max-w-[52ch] text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                    {t("Pick one of the levels below to save a recommendation baseline for onboarding and support.")}
+                  </p>
+                </div>
+              )}
+            </div>
+            {lastUpdatedLabel ? (
+              <p className="mt-4 text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
+                {t("Last updated")} · {lastUpdatedLabel}
+              </p>
+            ) : null}
+          </div>
+
+          <button
+            className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={saving || currentLevel === null}
+            onClick={onClear}
+            type="button"
+          >
+            {saving ? t("Saving...") : t("Clear")}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {STAFF_PROFICIENCY_OPTIONS.map((option) => {
+          const active = currentLevel === option.level;
+          const saving = savingLevel === option.level;
+
+          return (
+            <button
+              className={`group rounded-[24px] border px-5 py-4 text-left transition-colors duration-200 ${
+                active
+                  ? `${option.cardClassName} shadow-[0_18px_40px_-28px_rgba(15,23,42,0.4)]`
+                  : "border-[var(--input)] bg-white hover:border-[var(--border-hover)] hover:bg-[#FAFAFA]"
+              } ${saving ? "cursor-progress opacity-80" : ""}`}
+              disabled={saving}
+              key={option.level}
+              onClick={() => onSelectLevel(option.level)}
+              type="button"
+            >
+              <div className="flex items-start gap-3">
+                <span className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold ${option.badgeClassName}`}>
+                  {option.level}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{t(option.label)}</p>
+                    {active ? <StatusPill kind={option.pillKind} label="Selected" /> : null}
+                    {saving ? <StatusPill kind="unknown" label="Saving..." /> : null}
+                  </div>
+                  <p className="mt-1 text-sm leading-[1.55] text-[var(--muted-foreground)]">{t(option.description)}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {error ? (
+        <div className="mt-5 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">
+          {t(error)}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -633,6 +1039,11 @@ function AuthSuccessRateCard({
 
 function OverviewContent({
   detail,
+  proficiencyLevel,
+  proficiencyUpdatedAt,
+  proficiencySaving,
+  proficiencySavingLevel,
+  proficiencyError,
   successRateSummary,
   successRateFilter,
   draftSuccessRateFilter,
@@ -644,12 +1055,20 @@ function OverviewContent({
   onSuccessRateEndDateChange,
   onApplySuccessRateFilter,
   onResetSuccessRateFilter,
+  onSelectProficiencyLevel,
+  onClearProficiencyLevel,
   showUnknownNetworksOnly,
-  showLimitedCvmOnly,
+  showLimitedPaymentMethodsOnly,
   onToggleUnknownNetworks,
-  onToggleLimitedCvm
+  onToggleLimitedPaymentMethods,
+  onOpenSupportInsight
 }: {
   detail: LocationDetailRecord;
+  proficiencyLevel: StaffProficiencyLevel | null;
+  proficiencyUpdatedAt: string | null;
+  proficiencySaving: boolean;
+  proficiencySavingLevel: StaffProficiencyLevel | null;
+  proficiencyError: string | null;
   successRateSummary: SuccessRateSummary;
   successRateFilter: SuccessRateDateFilter;
   draftSuccessRateFilter: SuccessRateDateFilter;
@@ -661,16 +1080,22 @@ function OverviewContent({
   onSuccessRateEndDateChange: (value: string) => void;
   onApplySuccessRateFilter: () => void;
   onResetSuccessRateFilter: () => void;
+  onSelectProficiencyLevel: (level: StaffProficiencyLevel) => void;
+  onClearProficiencyLevel: () => void;
   showUnknownNetworksOnly: boolean;
-  showLimitedCvmOnly: boolean;
+  showLimitedPaymentMethodsOnly: boolean;
   onToggleUnknownNetworks: () => void;
-  onToggleLimitedCvm: () => void;
+  onToggleLimitedPaymentMethods: () => void;
+  onOpenSupportInsight: (insight: LocationSupportInsight) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
   const networkRows = buildNetworkRows(detail);
-  const cvmRows = buildCvmRows(detail);
+  const businessHoursRows = buildBusinessHoursRows(detail.businessHours, t);
+  const paymentMethodRows = buildPaymentMethodRows(detail);
   const visibleNetworkRows = showUnknownNetworksOnly ? networkRows.filter((row) => row.status === "unknown") : networkRows;
-  const visibleCvmRows = showLimitedCvmOnly ? cvmRows.filter((row) => row.status === "limited") : cvmRows;
+  const visiblePaymentMethodRows = showLimitedPaymentMethodsOnly
+    ? paymentMethodRows.filter((row) => row.status === "limited" || row.status === "unsupported")
+    : paymentMethodRows;
   const statusLabel = formatStatusLabel(detail.status);
 
   return (
@@ -701,6 +1126,16 @@ function OverviewContent({
         </div>
       </article>
 
+      <StaffProficiencyCard
+        currentLevel={proficiencyLevel}
+        error={proficiencyError}
+        onClear={onClearProficiencyLevel}
+        onSelectLevel={onSelectProficiencyLevel}
+        saving={proficiencySaving}
+        savingLevel={proficiencySavingLevel}
+        updatedAt={proficiencyUpdatedAt}
+      />
+
       <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
         <SectionHeader
           buttonLabel={showUnknownNetworksOnly ? "Show All" : "Unknown Only"}
@@ -710,9 +1145,11 @@ function OverviewContent({
 
         <div className="mt-6 flex flex-col">
           {visibleNetworkRows.map((row, idx) => (
-            <div
-              className={`flex min-h-[64px] items-center justify-between gap-3 py-4 ${idx !== visibleNetworkRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
+            <button
+              className={`flex min-h-[64px] w-full items-center justify-between gap-3 py-4 text-left transition-colors duration-200 hover:bg-[#FAFAFA] ${idx !== visibleNetworkRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
               key={row.name}
+              onClick={() => onOpenSupportInsight(row.insight)}
+              type="button"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#F5F5F7]">
@@ -721,10 +1158,13 @@ function OverviewContent({
                 <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {row.tags?.map((tag) => <StatusPill key={tag} label={tag} />)}
-                {!row.tags ? <StatusPill kind={row.status === "unknown" ? "unknown" : "supported"} label={row.status === "unknown" ? "Unknown" : "Supported"} /> : null}
+                <StatusPill
+                  kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
+                  label={formatSupportStatusLabel(row.status)}
+                />
+                <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
               </div>
-            </div>
+            </button>
           ))}
           {visibleNetworkRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No network matched current filter.")}</p> : null}
         </div>
@@ -732,33 +1172,237 @@ function OverviewContent({
 
       <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
         <SectionHeader
-          buttonLabel={showLimitedCvmOnly ? "Show All" : "Limited Only"}
-          onAction={onToggleLimitedCvm}
-          title="Common CVM Methods"
+          buttonLabel={showLimitedPaymentMethodsOnly ? "Show All" : "Limited Only"}
+          onAction={onToggleLimitedPaymentMethods}
+          title="Payment Methods"
         />
 
         <div className="mt-6 flex flex-col">
-          {visibleCvmRows.map((row, idx) => {
-            const Icon = row.icon;
-            return (
-              <div
-                className={`flex min-h-[64px] items-center justify-between gap-3 py-4 ${idx !== visibleCvmRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
-                key={row.name}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#F5F5F7]">
-                    <Icon className="h-4 w-4 text-[var(--foreground)]" />
-                  </span>
-                  <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
-                </div>
-                <StatusPill kind={row.status} label={row.status === "limited" ? "Limited" : "Supported"} />
+          {visiblePaymentMethodRows.map((row, idx) => (
+            <button
+              className={`flex min-h-[64px] w-full items-center justify-between gap-3 py-4 text-left transition-colors duration-200 hover:bg-[#FAFAFA] ${idx !== visiblePaymentMethodRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
+              key={row.key}
+              onClick={() => onOpenSupportInsight(row.insight)}
+              type="button"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#F5F5F7]">
+                  <Smartphone className="h-4 w-4 text-[var(--foreground)]" />
+                </span>
+                <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
               </div>
-            );
-          })}
-          {visibleCvmRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No CVM matched current filter.")}</p> : null}
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusPill
+                  kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
+                  label={formatSupportStatusLabel(row.status)}
+                />
+                <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
+              </div>
+            </button>
+          ))}
+          {visiblePaymentMethodRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No payment method matched current filter.")}</p> : null}
+        </div>
+      </article>
+
+      <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t("Business Hours & Contact")}</p>
+            <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
+              {detail.contactInfo || hasLocationBusinessHours(detail.businessHours)
+                ? t("Structured business information for this location.")
+                : t("No business hours or contact information yet.")}
+            </p>
+          </div>
+          <Clock3 className="h-5 w-5 text-[var(--primary)]" />
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.5fr)_320px]">
+          <div className="rounded-[28px] border border-[var(--input)] bg-[#FAFAFA] px-6 py-5">
+            <div className="flex items-center gap-3">
+              <CalendarRange className="h-4 w-4 text-[var(--primary)]" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Business Hours")}</p>
+                <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
+                  {businessHoursRows.length > 0 ? t("Displayed in the order people usually read them.") : t("No business hours have been added yet.")}
+                </p>
+              </div>
+            </div>
+
+            {businessHoursRows.length > 0 ? (
+              <div className="mt-5 flex flex-col divide-y divide-[var(--input)]">
+                {businessHoursRows.map((row) => (
+                  <div className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between" key={row.id}>
+                    <div className="flex items-center gap-2">
+                      {row.kind === "special" ? (
+                        <span className="inline-flex h-6 items-center justify-center rounded-pill bg-[rgba(34,197,94,0.12)] px-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#166534]">
+                          {t("Special")}
+                        </span>
+                      ) : null}
+                      <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{row.label}</p>
+                    </div>
+                    <p className="break-words text-sm leading-[1.6] text-[var(--muted-foreground)] sm:max-w-[58%] sm:text-right">
+                      {row.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-5 text-sm font-medium leading-[1.5] text-[var(--foreground)]">{t("Not set")}</p>
+            )}
+          </div>
+
+          <div className="rounded-[28px] border border-[var(--input)] bg-[#FAFAFA] px-6 py-5">
+            <div className="flex items-center gap-3">
+              <Phone className="h-4 w-4 text-[var(--primary)]" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Contact Information")}</p>
+                <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[20px] border border-[var(--input)] bg-white px-4 py-4">
+              <p className="break-words text-sm font-medium leading-[1.6] text-[var(--foreground)]">
+                {detail.contactInfo?.trim() || t("Not set")}
+              </p>
+            </div>
+          </div>
         </div>
       </article>
     </div>
+  );
+}
+
+function SupportSourceDialog({
+  insight,
+  open,
+  onOpenChange
+}: {
+  insight: LocationSupportInsight | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const officialEvidence = insight?.evidence.filter((item) => item.kind === "official") || [];
+  const attemptEvidence = insight?.evidence.filter((item) => item.kind === "attempt") || [];
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="max-h-[90vh] max-w-[min(920px,calc(100vw-2rem))] gap-0 overflow-hidden rounded-[32px] p-0">
+        <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
+          <DialogTitle>{insight ? `${insight.title} · ${t("Source Details")}` : t("Source Details")}</DialogTitle>
+          <DialogDescription>
+            {insight?.rationale || t("Review why this item is currently marked as supported, unsupported, limited, or unknown.")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          {insight ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,160px))]">
+                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Current Status")}</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <StatusPill
+                      kind={insight.status === "unsupported" ? "unsupported" : insight.status === "limited" ? "limited" : insight.status === "unknown" ? "unknown" : "supported"}
+                      label={formatSupportStatusLabel(insight.status)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Positive Attempts")}</p>
+                  <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.supportingAttempts}</p>
+                </div>
+
+                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Conflicting Attempts")}</p>
+                  <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.conflictingAttempts}</p>
+                </div>
+
+                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Structured Sources")}</p>
+                  <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.officialSources}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                <article className="rounded-[28px] border border-[var(--input)] bg-white p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Attempt Evidence")}</p>
+                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Recent payment attempts that support or challenge this item.")}</p>
+                    </div>
+                    <StatusPill label={String(attemptEvidence.length)} />
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-3">
+                    {attemptEvidence.length > 0 ? attemptEvidence.map((item) => (
+                      <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{item.title}</p>
+                          <StatusPill
+                            kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
+                            label={formatSupportStatusLabel(item.status)}
+                          />
+                          {item.invalidated ? <StatusPill kind="limited" label="Challenging" /> : null}
+                        </div>
+                        {item.summary ? <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">{item.summary}</p> : null}
+                        {item.notes ? <p className="mt-2 text-sm leading-[1.6] text-[var(--foreground)]">{item.notes}</p> : null}
+                      </div>
+                    )) : (
+                      <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                        {t("No attempt evidence has been recorded for this item yet.")}
+                      </div>
+                    )}
+                  </div>
+                </article>
+
+                <article className="rounded-[28px] border border-[var(--input)] bg-white p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Official / Structured Evidence")}</p>
+                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Structured store or POS information currently available on this location.")}</p>
+                    </div>
+                    <StatusPill label={String(officialEvidence.length)} />
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-3">
+                    {officialEvidence.length > 0 ? officialEvidence.map((item) => (
+                      <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{item.title}</p>
+                          <StatusPill
+                            kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
+                            label={formatSupportStatusLabel(item.status)}
+                          />
+                          {item.invalidated ? <StatusPill kind="limited" label="Needs Review" /> : null}
+                        </div>
+                        {item.summary ? <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">{item.summary}</p> : null}
+                      </div>
+                    )) : (
+                      <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                        {t("No official or structured source is attached yet.")}
+                      </div>
+                    )}
+                  </div>
+                </article>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
+          <button
+            className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          >
+            {t("Close")}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -768,7 +1412,8 @@ function AttemptContent({
   onPageChange,
   onAddAttempt,
   canAddAttempt = false,
-  addingAttempt = false
+  addingAttempt = false,
+  isShellLocation = false
 }: {
   attemptRows: LocationAttemptRecord[];
   attemptPage: number;
@@ -776,6 +1421,7 @@ function AttemptContent({
   onAddAttempt?: () => void;
   canAddAttempt?: boolean;
   addingAttempt?: boolean;
+  isShellLocation?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const pageSize = 5;
@@ -788,6 +1434,12 @@ function AttemptContent({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-8 pt-4">
+      {isShellLocation ? (
+        <div className="rounded-[18px] border border-[rgba(59,130,246,0.16)] bg-[rgba(239,246,255,0.9)] px-4 py-3 text-sm leading-[1.6] text-[#1d4ed8]">
+          {t("This location is currently a shell entry. Your first real attempt will activate it and start the real success-rate history.")}
+        </div>
+      ) : null}
+
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <h3 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Payment Attempts")}</h3>
@@ -950,12 +1602,16 @@ function ReviewsContent({ reviewItems }: { reviewItems: LocationReviewRecord[] }
 interface PlaceDetailWebProps {
   location?: LocationRecord | null;
   locationLoading?: boolean;
+  onDeleteLocation?: (location: LocationRecord) => Promise<void>;
   onViewMap?: () => void;
 }
 
-export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }: PlaceDetailWebProps): React.JSX.Element {
+export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLocation, onViewMap }: PlaceDetailWebProps): React.JSX.Element {
   const { t } = useI18n();
   const { detail, loading, error, refreshDetail } = useLocationDetail(location);
+  const { isAdmin, loading: viewerAccessLoading } = useViewerAccess({
+    enabled: Boolean(onDeleteLocation)
+  });
   const recordedHistoryLocationIdRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailContentTab>("overview");
   const [editable, setEditable] = useState(false);
@@ -963,14 +1619,24 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
   const [locationAddress, setLocationAddress] = useState("");
   const [locationMeta, setLocationMeta] = useState("");
   const [showUnknownNetworksOnly, setShowUnknownNetworksOnly] = useState(false);
-  const [showLimitedCvmOnly, setShowLimitedCvmOnly] = useState(false);
+  const [showLimitedPaymentMethodsOnly, setShowLimitedPaymentMethodsOnly] = useState(false);
   const [attemptPage, setAttemptPage] = useState(1);
   const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
   const [attemptSaving, setAttemptSaving] = useState(false);
   const [attemptMutationError, setAttemptMutationError] = useState<string | null>(null);
+  const [selectedSupportInsight, setSelectedSupportInsight] = useState<LocationSupportInsight | null>(null);
+  const [supportSourceDialogOpen, setSupportSourceDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteMutationError, setDeleteMutationError] = useState<string | null>(null);
   const [successRateFilter, setSuccessRateFilter] = useState<SuccessRateDateFilter>(DEFAULT_SUCCESS_RATE_FILTER);
   const [draftSuccessRateFilter, setDraftSuccessRateFilter] = useState<SuccessRateDateFilter>(DEFAULT_SUCCESS_RATE_FILTER);
   const [successRateDialogOpen, setSuccessRateDialogOpen] = useState(false);
+  const [staffProficiencyLevel, setStaffProficiencyLevel] = useState<StaffProficiencyLevel | null>(null);
+  const [staffProficiencyUpdatedAt, setStaffProficiencyUpdatedAt] = useState<string | null>(null);
+  const [staffProficiencySaving, setStaffProficiencySaving] = useState(false);
+  const [staffProficiencySavingLevel, setStaffProficiencySavingLevel] = useState<StaffProficiencyLevel | null>(null);
+  const [staffProficiencyError, setStaffProficiencyError] = useState<string | null>(null);
 
   const detailRecord = useMemo(() => {
     if (detail) return detail;
@@ -999,6 +1665,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
     setLocationName(detailRecord.name);
     setLocationAddress(detailRecord.address);
     setLocationMeta(detailRecord.metaLine);
+    setStaffProficiencyLevel(getStaffProficiencyLevel(detailRecord));
+    setStaffProficiencyUpdatedAt(getStaffProficiencyUpdatedAt(detailRecord));
   }, [detailRecord]);
 
   useEffect(() => {
@@ -1011,6 +1679,25 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
     setAttemptDraft(createAttemptDraft(detailRecord));
     setAttemptDialogOpen(false);
     setAttemptMutationError(null);
+  }, [detailRecord?.id]);
+
+  useEffect(() => {
+    setSelectedSupportInsight(null);
+    setSupportSourceDialogOpen(false);
+    setShowUnknownNetworksOnly(false);
+    setShowLimitedPaymentMethodsOnly(false);
+  }, [detailRecord?.id]);
+
+  useEffect(() => {
+    setDeleteDialogOpen(false);
+    setDeleteSaving(false);
+    setDeleteMutationError(null);
+  }, [detailRecord?.id]);
+
+  useEffect(() => {
+    setStaffProficiencySaving(false);
+    setStaffProficiencySavingLevel(null);
+    setStaffProficiencyError(null);
   }, [detailRecord?.id]);
 
   useEffect(() => {
@@ -1058,8 +1745,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
   };
 
   const handleAddAttempt = async (): Promise<void> => {
-    if (!detailRecord || detailRecord.source !== "pos_machines") {
-      setAttemptMutationError("Only POS-backed locations can accept new attempt records.");
+    if (!detailRecord) {
+      setAttemptMutationError("Unable to load the current location.");
       return;
     }
 
@@ -1090,6 +1777,62 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
       setAttemptMutationError(formatAttemptMutationError(attemptError));
     } finally {
       setAttemptSaving(false);
+    }
+  };
+
+  const handleDelete = async (): Promise<void> => {
+    if (!detailRecord || !onDeleteLocation) {
+      setDeleteMutationError("Unable to load the current location.");
+      return;
+    }
+
+    setDeleteSaving(true);
+    setDeleteMutationError(null);
+
+    try {
+      await onDeleteLocation(detailRecord);
+      setDeleteDialogOpen(false);
+    } catch (deleteError) {
+      setDeleteMutationError(formatDeleteMutationError(deleteError));
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
+
+  const handleSaveStaffProficiency = async (nextLevel: StaffProficiencyLevel | null): Promise<void> => {
+    if (!detailRecord) {
+      setStaffProficiencyError("Unable to load the current location.");
+      return;
+    }
+
+    const previousLevel = getStaffProficiencyLevel(detailRecord);
+    const previousUpdatedAt = getStaffProficiencyUpdatedAt(detailRecord);
+    const mutationService = locationService as unknown as StaffProficiencyMutationLocationService;
+    const mutation =
+      mutationService.updateLocationStaffProficiency ||
+      mutationService.updateStaffProficiency;
+
+    if (!mutation) {
+      setStaffProficiencyError("Staff proficiency updates are not available yet.");
+      return;
+    }
+
+    setStaffProficiencySaving(true);
+    setStaffProficiencySavingLevel(nextLevel);
+    setStaffProficiencyError(null);
+    setStaffProficiencyLevel(nextLevel);
+    setStaffProficiencyUpdatedAt(new Date().toISOString());
+
+    try {
+      await mutation(detailRecord, nextLevel);
+      await refreshDetail();
+    } catch (proficiencyError) {
+      setStaffProficiencyLevel(previousLevel);
+      setStaffProficiencyUpdatedAt(previousUpdatedAt);
+      setStaffProficiencyError(formatStaffProficiencyMutationError(proficiencyError));
+    } finally {
+      setStaffProficiencySaving(false);
+      setStaffProficiencySavingLevel(null);
     }
   };
 
@@ -1159,6 +1902,19 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
         </div>
 
         <div className="flex items-center gap-3">
+          {onDeleteLocation && isAdmin && !viewerAccessLoading ? (
+            <button
+              className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[rgba(220,38,38,0.18)] bg-[rgba(254,242,242,0.88)] px-4 text-sm font-medium leading-[1.4286] text-[#991b1b] transition-colors duration-200 hover:bg-[rgba(254,226,226,0.96)]"
+              onClick={() => {
+                setDeleteMutationError(null);
+                setDeleteDialogOpen(true);
+              }}
+              type="button"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>{t("Delete Location")}</span>
+            </button>
+          ) : null}
           <button
             className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
             onClick={() => setEditable((prev) => !prev)}
@@ -1192,8 +1948,19 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
       {activeTab === "overview" ? (
         <OverviewContent
           detail={detailRecord}
+          proficiencyError={staffProficiencyError}
+          proficiencyLevel={staffProficiencyLevel}
+          proficiencySaving={staffProficiencySaving}
+          proficiencySavingLevel={staffProficiencySavingLevel}
+          proficiencyUpdatedAt={staffProficiencyUpdatedAt}
           draftSuccessRateFilter={draftSuccessRateFilter}
           onApplySuccessRateFilter={handleApplySuccessRateFilter}
+          onClearProficiencyLevel={() => {
+            void handleSaveStaffProficiency(null);
+          }}
+          onSelectProficiencyLevel={(level) => {
+            void handleSaveStaffProficiency(level);
+          }}
           onResetSuccessRateFilter={handleResetSuccessRateFilter}
           onSuccessRateDialogOpenChange={setSuccessRateDialogOpen}
           onSuccessRateEndDateChange={(value) =>
@@ -1214,13 +1981,17 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
               startDate: value
             }))
           }
-          onToggleLimitedCvm={() => setShowLimitedCvmOnly((prev) => !prev)}
+          onOpenSupportInsight={(insight) => {
+            setSelectedSupportInsight(insight);
+            setSupportSourceDialogOpen(true);
+          }}
+          onToggleLimitedPaymentMethods={() => setShowLimitedPaymentMethodsOnly((prev) => !prev)}
           onToggleUnknownNetworks={() => setShowUnknownNetworksOnly((prev) => !prev)}
           successRateDialogOpen={successRateDialogOpen}
           successRateFilter={successRateFilter}
           successRateFilterError={successRateFilterError}
           successRateSummary={successRateSummary}
-          showLimitedCvmOnly={showLimitedCvmOnly}
+          showLimitedPaymentMethodsOnly={showLimitedPaymentMethodsOnly}
           showUnknownNetworksOnly={showUnknownNetworksOnly}
         />
       ) : null}
@@ -1229,7 +2000,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
           addingAttempt={attemptSaving}
           attemptPage={attemptPage}
           attemptRows={detailRecord.attempts}
-          canAddAttempt={detailRecord.source === "pos_machines"}
+          canAddAttempt
+          isShellLocation={detailRecord.source === "fluxa_locations"}
           onAddAttempt={() => {
             setAttemptDraft(createAttemptDraft(detailRecord));
             setAttemptMutationError(null);
@@ -1239,6 +2011,17 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
         />
       ) : null}
       {activeTab === "reviews" ? <ReviewsContent reviewItems={detailRecord.reviews} /> : null}
+
+      <SupportSourceDialog
+        insight={selectedSupportInsight}
+        onOpenChange={(open) => {
+          setSupportSourceDialogOpen(open);
+          if (!open) {
+            setSelectedSupportInsight(null);
+          }
+        }}
+        open={supportSourceDialogOpen}
+      />
 
       <Dialog
         onOpenChange={(open) => {
@@ -1280,7 +2063,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
                       value={attemptDraft.network}
                     />
                     <AttemptDialogField
-                      label="Card Info / BIN"
+                      label="Card Info"
                       onChange={(value) => handleAttemptFieldChange("cardName", value)}
                       placeholder="e.g. Visa Signature"
                       value={attemptDraft.cardName}
@@ -1383,6 +2166,56 @@ export function PlaceDetailWeb({ location, locationLoading = false, onViewMap }:
             >
               <Plus className="h-4 w-4" />
               <span>{attemptSaving ? t("Saving...") : t("Add Attempt")}</span>
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setDeleteMutationError(null);
+          }
+        }}
+        open={deleteDialogOpen}
+      >
+        <DialogContent className="max-w-[520px] rounded-[32px] p-0">
+          <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
+            <DialogTitle>{t("Delete Location")}</DialogTitle>
+            <DialogDescription>
+              {t("This action will permanently remove this location and all related attempts, reviews, and browsing history.")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-6 py-5 sm:px-8">
+            <div className="rounded-[20px] border border-[rgba(220,38,38,0.14)] bg-[rgba(254,242,242,0.72)] px-4 py-4 text-sm leading-[1.6] text-[#7f1d1d]">
+              {t("Deleted locations cannot be restored from the detail page.")}
+            </div>
+            {deleteMutationError ? (
+              <div className="mt-4 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">{deleteMutationError}</div>
+            ) : null}
+          </div>
+
+          <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
+            <button
+              className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              disabled={deleteSaving}
+              onClick={() => setDeleteDialogOpen(false)}
+              type="button"
+            >
+              {t("Cancel")}
+            </button>
+            <button
+              className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[#DC2626] px-4 text-sm font-medium leading-[1.4286] text-white transition-colors duration-200 hover:bg-[#B91C1C]"
+              disabled={deleteSaving}
+              onClick={() => {
+                void handleDelete();
+              }}
+              type="button"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>{deleteSaving ? t("Deleting...") : t("Delete")}</span>
             </button>
           </DialogFooter>
         </DialogContent>

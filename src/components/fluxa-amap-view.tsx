@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { MapPinned, Navigation, RefreshCw } from "lucide-react";
+import Supercluster from "supercluster";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DETAIL_LOCATION_ZOOM_THRESHOLD, type MapPartitionSummary } from "@/hooks/use-fluxa-map-partitions";
 import { DEFAULT_FLUXA_MAP_CENTER, SHANGHAI_GOVERNMENT_FALLBACK, getAMapConfig, loadAMap } from "@/lib/amap";
 import { MAP_THEME_PRESETS, type MarkerVariant, type MapThemeKey } from "@/lib/map-theme";
+import type { LocationMapIndexRecord, LocationSearchRecord } from "@/services/location-service";
 import type { LocationRecord } from "@/types/location";
 
+export interface MapViewportSnapshot {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  zoom: number;
+  center: [number, number];
+}
+
 interface FluxaAmapViewProps {
+  active?: boolean;
+  mapIndexPoints?: LocationMapIndexRecord[];
+  locationSearchDirectory?: LocationSearchRecord[];
   locations: LocationRecord[];
   loading?: boolean;
   locateRequestKey?: number;
@@ -18,6 +33,8 @@ interface FluxaAmapViewProps {
   onRefresh?: () => Promise<void> | void;
   onOpenDetail?: (location: LocationRecord) => void;
   onLocatingChange?: (locating: boolean) => void;
+  onViewportChange?: (viewport: MapViewportSnapshot) => void;
+  mapSummary?: MapPartitionSummary;
   mapTheme: MapThemeKey;
 }
 
@@ -41,6 +58,21 @@ interface RenderedClusterMarker {
 
 type RenderedMapMarker = RenderedLocationMarker | RenderedClusterMarker;
 
+interface RenderedIndexClusterMarker {
+  type: "index-cluster";
+  count: number;
+  clusterId: number;
+  position: [number, number];
+}
+
+interface RenderedIndexPointMarker {
+  type: "index-point";
+  locationId: string;
+  position: [number, number];
+}
+
+type RenderedIndexMarker = RenderedIndexClusterMarker | RenderedIndexPointMarker;
+
 interface ClusterBucket {
   locations: LocationRecord[];
   sumLng: number;
@@ -52,6 +84,8 @@ interface ClusterBucket {
 
 let cachedMapViewport: CachedMapViewport | null = null;
 const CLUSTER_BREAK_ZOOM = 15;
+const INDEX_RENDER_DETAIL_ZOOM_THRESHOLD = DETAIL_LOCATION_ZOOM_THRESHOLD + 1;
+const FOCUS_POINT_RELEASE_TOLERANCE = 0.0008;
 
 function createClusterMarkerContent(count: number): string {
   return `
@@ -63,15 +97,15 @@ function createClusterMarkerContent(count: number): string {
 
 function getClusterGridSize(zoom: number): number {
   if (zoom >= CLUSTER_BREAK_ZOOM) return 0;
-  if (zoom >= 13) return 72;
-  if (zoom >= 11) return 88;
-  return 104;
+  if (zoom >= 13) return 84;
+  if (zoom >= 11) return 108;
+  return 132;
 }
 
 function getClusterMarkerSpacing(zoom: number): number {
-  if (zoom >= 13) return 56;
-  if (zoom >= 11) return 64;
-  return 72;
+  if (zoom >= 13) return 66;
+  if (zoom >= 11) return 80;
+  return 96;
 }
 
 function getPixelPoint(pixel: any): { x: number; y: number } | null {
@@ -208,12 +242,18 @@ function buildRenderedMapMarkers(map: any, locations: LocationRecord[]): {
   });
 
   const spacedBuckets = mergeNearbyClusterBuckets(Array.from(buckets.values()), getClusterMarkerSpacing(zoom));
-  const clusteredMarkers = spacedBuckets.map<RenderedMapMarker>((bucket) => ({
+  const clusteredMarkers = spacedBuckets.flatMap<RenderedMapMarker>((bucket) => {
+    if (bucket.locations.length === 1) {
+      return [{ type: "location", location: bucket.locations[0] }];
+    }
+
+    return [{
       type: "cluster",
       count: bucket.locations.length,
       locations: bucket.locations,
       position: [bucket.sumLng / bucket.locations.length, bucket.sumLat / bucket.locations.length]
-    }));
+    }];
+  });
 
   return {
     visibleCount: visibleLocations.length,
@@ -221,8 +261,118 @@ function buildRenderedMapMarkers(map: any, locations: LocationRecord[]): {
   };
 }
 
+function buildRenderedIndexMarkers(
+  map: any,
+  clusterIndex: Supercluster<any, any>
+): {
+  visibleCount: number;
+  markers: RenderedIndexMarker[];
+} {
+  const snapshot = readViewportSnapshot(map);
+  if (!snapshot) {
+    return {
+      visibleCount: 0,
+      markers: []
+    };
+  }
+
+  const zoom = Math.max(0, Math.floor(snapshot.zoom));
+  const features = clusterIndex.getClusters([snapshot.west, snapshot.south, snapshot.east, snapshot.north], zoom);
+  let visibleCount = 0;
+
+  const markers = features.flatMap<RenderedIndexMarker>((feature) => {
+    const [lng, lat] = feature.geometry.coordinates as [number, number];
+    const properties = feature.properties as {
+      cluster?: boolean;
+      cluster_id?: number;
+      point_count?: number;
+      locationId?: string;
+    };
+
+    if (properties.cluster && typeof properties.cluster_id === "number") {
+      const count = typeof properties.point_count === "number" ? properties.point_count : 0;
+      visibleCount += count;
+      return [{
+        type: "index-cluster",
+        count,
+        clusterId: properties.cluster_id,
+        position: [lng, lat]
+      }];
+    }
+
+    visibleCount += 1;
+    return properties.locationId
+      ? [{
+          type: "index-point",
+          locationId: properties.locationId,
+          position: [lng, lat]
+        }]
+      : [];
+  });
+
+  return {
+    visibleCount,
+    markers
+  };
+}
+
+function readViewportSnapshot(map: any): MapViewportSnapshot | null {
+  const bounds = map?.getBounds?.();
+  const southWest = bounds?.getSouthWest?.();
+  const northEast = bounds?.getNorthEast?.();
+  const center = map?.getCenter?.();
+  const zoom = map?.getZoom?.();
+
+  if (
+    typeof southWest?.lat !== "number" ||
+    typeof southWest?.lng !== "number" ||
+    typeof northEast?.lat !== "number" ||
+    typeof northEast?.lng !== "number" ||
+    typeof center?.lat !== "number" ||
+    typeof center?.lng !== "number" ||
+    typeof zoom !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    south: southWest.lat,
+    west: southWest.lng,
+    north: northEast.lat,
+    east: northEast.lng,
+    zoom,
+    center: [center.lng, center.lat]
+  };
+}
+
+function isNearPoint(left: [number, number], right: [number, number], tolerance = FOCUS_POINT_RELEASE_TOLERANCE): boolean {
+  return Math.abs(left[0] - right[0]) <= tolerance && Math.abs(left[1] - right[1]) <= tolerance;
+}
+
 function markerColor(status: LocationRecord["status"]): string {
   return status === "active" ? "#2563EB" : "#F97316";
+}
+
+function buildLightweightLocation(
+  locationId: string,
+  position: [number, number],
+  searchRecord?: LocationSearchRecord
+): LocationRecord {
+  const timestamp = searchRecord?.updatedAt || new Date().toISOString();
+
+  return {
+    id: locationId,
+    name: searchRecord?.name || "地图地点",
+    address: searchRecord?.address || "Unknown address",
+    brand: searchRecord?.brand || "Unknown",
+    city: searchRecord?.city || "Unknown",
+    addedBy: searchRecord?.addedBy,
+    status: searchRecord?.status || "active",
+    lat: position[1],
+    lng: position[0],
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
 }
 
 function createMarkerContent(location: LocationRecord, variant: MarkerVariant): string {
@@ -548,6 +698,9 @@ function createFocusMarkerContent(name: string, variant: MarkerVariant): string 
 }
 
 export function FluxaAmapView({
+  active = true,
+  mapIndexPoints = [],
+  locationSearchDirectory = [],
   locations,
   loading = false,
   locateRequestKey = 0,
@@ -557,6 +710,13 @@ export function FluxaAmapView({
   onRefresh,
   onOpenDetail,
   onLocatingChange,
+  onViewportChange,
+  mapSummary = {
+    visibleLocationCount: 0,
+    totalLocationCount: 0,
+    visiblePartitionCount: 0,
+    totalPartitionCount: 0
+  },
   mapTheme
 }: FluxaAmapViewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -568,15 +728,48 @@ export function FluxaAmapView({
   const focusPointRef = useRef<[number, number] | null>(null);
   const focusTimerRefs = useRef<number[]>([]);
   const openDetailRef = useRef(onOpenDetail);
+  const viewportChangeRef = useRef(onViewportChange);
   const locationsRef = useRef(locations);
   const selectedLocationIdRef = useRef<string | null>(null);
   const renderVisibleMarkersRef = useRef<(() => void) | null>(null);
+  const emitViewportSnapshotRef = useRef<(() => void) | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [fallbackDialogMessage, setFallbackDialogMessage] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [visibleLocationCount, setVisibleLocationCount] = useState(locations.length);
+  const clusterIndex = useMemo(() => {
+    if (mapIndexPoints.length === 0) {
+      return null;
+    }
+
+    const nextIndex = new Supercluster<any, any>({
+      radius: 76,
+      maxZoom: DETAIL_LOCATION_ZOOM_THRESHOLD,
+      minPoints: 2
+    });
+
+    nextIndex.load(
+      mapIndexPoints.map((point) => ({
+        type: "Feature" as const,
+        id: point.id,
+        properties: {
+          locationId: point.id
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [point.lng, point.lat] as [number, number]
+        }
+      }))
+    );
+
+    return nextIndex;
+  }, [mapIndexPoints]);
+  const locationSearchById = useMemo(
+    () => new Map(locationSearchDirectory.map((location) => [location.id, location])),
+    [locationSearchDirectory]
+  );
 
   const center = useMemo<[number, number]>(() => {
     if (cachedMapViewport?.center) {
@@ -594,22 +787,101 @@ export function FluxaAmapView({
   }, [onOpenDetail]);
 
   useEffect(() => {
+    viewportChangeRef.current = onViewportChange;
+  }, [onViewportChange]);
+
+  useEffect(() => {
     locationsRef.current = locations;
-    setVisibleLocationCount(locations.length);
-    renderVisibleMarkersRef.current?.();
-  }, [locations]);
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+    }
+  }, [active, locations]);
 
   useEffect(() => {
     selectedLocationIdRef.current = selectedLocationId;
-    renderVisibleMarkersRef.current?.();
-  }, [selectedLocationId]);
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+    }
+  }, [active, selectedLocationId]);
+
+  useEffect(() => {
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+    }
+  }, [active, clusterIndex]);
+
+  useEffect(() => {
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+    }
+  }, [active, locationSearchById]);
 
   renderVisibleMarkersRef.current = () => {
     const map = mapRef.current;
     if (!map || !window.AMap) return;
 
+    if (!active) {
+      return;
+    }
+
     markersRef.current.forEach((marker) => marker.setMap?.(null));
     markersRef.current = [];
+
+    const currentZoom = typeof map?.getZoom?.() === "number" ? map.getZoom() : 11;
+
+    const shouldUseIndexMarkers =
+      Boolean(clusterIndex)
+      && (locationsRef.current.length === 0 || currentZoom < INDEX_RENDER_DETAIL_ZOOM_THRESHOLD);
+
+    if (shouldUseIndexMarkers && clusterIndex) {
+      const { visibleCount, markers } = buildRenderedIndexMarkers(map, clusterIndex);
+      const locationsById = new Map(locationsRef.current.map((location) => [location.id, location]));
+      setVisibleLocationCount(visibleCount);
+
+      const nextMarkers = markers.map((item) => {
+        if (item.type === "index-cluster") {
+          const marker = new window.AMap.Marker({
+            position: item.position,
+            offset: new window.AMap.Pixel(-20, -20),
+            content: createClusterMarkerContent(item.count),
+            zIndex: 40
+          });
+
+          marker.on("click", () => {
+            const expansionZoom = clusterIndex.getClusterExpansionZoom(item.clusterId);
+            map.stopMove?.();
+            map.setZoomAndCenter(Math.min(expansionZoom, 18), item.position);
+          });
+
+          marker.setMap(map);
+          return marker;
+        }
+
+        const matchedLocation =
+          locationsById.get(item.locationId)
+          || buildLightweightLocation(item.locationId, item.position, locationSearchById.get(item.locationId));
+        const isSelected = selectedLocationIdRef.current === matchedLocation.id;
+        const marker = new window.AMap.Marker({
+          position: item.position,
+          title: matchedLocation.name,
+          offset: new window.AMap.Pixel(-17, -34),
+          content: createMarkerContent(matchedLocation, themePreset.markerVariant),
+          extData: matchedLocation,
+          zIndex: isSelected ? 90 : 60
+        });
+
+        marker.on("click", () => {
+          setSelectedLocationId(matchedLocation.id);
+          openDetailRef.current?.(matchedLocation);
+        });
+
+        marker.setMap(map);
+        return marker;
+      });
+
+      markersRef.current = nextMarkers;
+      return;
+    }
 
     const { visibleCount, markers } = buildRenderedMapMarkers(map, locationsRef.current);
     setVisibleLocationCount(visibleCount);
@@ -653,6 +925,17 @@ export function FluxaAmapView({
     });
 
     markersRef.current = nextMarkers;
+  };
+
+  emitViewportSnapshotRef.current = () => {
+    if (!active) {
+      return;
+    }
+
+    const snapshot = readViewportSnapshot(mapRef.current);
+    if (snapshot) {
+      viewportChangeRef.current?.(snapshot);
+    }
   };
 
   const renderFocusMarker = (point: [number, number], name: string): void => {
@@ -738,22 +1021,31 @@ export function FluxaAmapView({
           if (typeof lng !== "number" || typeof lat !== "number" || typeof zoom !== "number") {
             return;
           }
+          const nextCenterPoint: [number, number] = [lng, lat];
+          const retainedFocusPoint =
+            focusPointRef.current && isNearPoint(nextCenterPoint, focusPointRef.current)
+              ? focusPointRef.current
+              : null;
+
+          focusPointRef.current = retainedFocusPoint;
           cachedMapViewport = {
-            center: [lng, lat],
+            center: nextCenterPoint,
             zoom,
-            focusPoint: focusPointRef.current
+            focusPoint: retainedFocusPoint
           };
         };
 
         const handleViewportChange = () => {
           persistViewport();
           renderVisibleMarkersRef.current?.();
+          emitViewportSnapshotRef.current?.();
         };
 
         map.on?.("moveend", handleViewportChange);
         map.on?.("zoomend", handleViewportChange);
         setMapReady(true);
         renderVisibleMarkersRef.current?.();
+        emitViewportSnapshotRef.current?.();
       } catch (error) {
         setMapReady(false);
         setMapError(error instanceof Error ? error.message : "高德地图初始化失败。");
@@ -789,12 +1081,16 @@ export function FluxaAmapView({
     const map = mapRef.current;
     if (!map) return;
     map.setMapStyle(themePreset.mapStyle);
-    renderVisibleMarkersRef.current?.();
-  }, [themePreset.mapStyle]);
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+    }
+  }, [active, themePreset.mapStyle]);
 
   useEffect(() => {
-    renderVisibleMarkersRef.current?.();
-  }, [locations, themePreset.markerVariant]);
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+    }
+  }, [active, locations, themePreset.markerVariant]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -808,6 +1104,7 @@ export function FluxaAmapView({
       window.requestAnimationFrame(() => {
         map.resize?.();
         renderVisibleMarkersRef.current?.();
+        emitViewportSnapshotRef.current?.();
       });
     });
 
@@ -819,10 +1116,15 @@ export function FluxaAmapView({
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || locations.length > 0) return;
-    map.setCenter(focusPointRef.current || center);
-  }, [center, locations.length]);
+    if (!mapReady) {
+      return;
+    }
+
+    if (active) {
+      renderVisibleMarkersRef.current?.();
+      emitViewportSnapshotRef.current?.();
+    }
+  }, [active, mapReady]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current || !window.AMap) return;
@@ -903,6 +1205,28 @@ export function FluxaAmapView({
 
   const config = getAMapConfig();
   const missingKey = !config.key;
+  const hasWarmCache = Boolean(cachedMapViewport || locations.length > 0 || mapIndexPoints.length > 0 || mapSummary.totalLocationCount > 0);
+  const showBlockingOverlay = missingKey || mapError || ((!mapReady || loading) && !hasWarmCache);
+  const totalCountLoading = mapSummary.totalCountLoading ?? (loading && mapSummary.totalLocationCount === 0 && mapIndexPoints.length === 0);
+  const summaryVisibleCount = mapSummary.totalLocationCount > 0 || totalCountLoading ? mapSummary.visibleLocationCount : visibleLocationCount;
+  const summaryTotalCount = mapSummary.totalLocationCount;
+  const summaryVisibleLabel = loading && summaryVisibleCount === 0 ? "正在加载" : String(summaryVisibleCount);
+  const summaryTotalLabel = totalCountLoading ? "正在加载" : String(summaryTotalCount);
+  const showLoadingHint = loading || totalCountLoading;
+  const overlayTitle = missingKey
+    ? "AMap key 未配置"
+    : mapError
+      ? "AMap 加载失败"
+      : showLoadingHint
+        ? "地图正在加载"
+        : "正在加载 AMap";
+  const overlayDescription = missingKey
+    ? "请在 .env 中添加 VITE_AMAP_KEY；如果启用了安全密钥，再补 VITE_AMAP_SECURITY_JS_CODE。"
+      : mapError
+        ? mapError
+      : showLoadingHint
+        ? "正在优先加载当前位置附近地点，完整数据稍后补齐。"
+        : "地图 SDK 初始化中，请稍候。";
 
   return (
     <div
@@ -916,8 +1240,10 @@ export function FluxaAmapView({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-start gap-2 p-4">
         <div className="pointer-events-auto ui-hover-shadow flex h-10 items-center justify-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)]">
-          <Navigation className="h-4 w-4" />
-          <span>视野内 {visibleLocationCount} / 总计 {locations.length}</span>
+          {loading && summaryTotalLabel === "正在加载" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+          <span>
+            视野内 {summaryVisibleLabel} / 总计 {summaryTotalLabel}
+          </span>
         </div>
 
         <button
@@ -931,18 +1257,25 @@ export function FluxaAmapView({
         </button>
       </div>
 
-      {(loading || mapError || missingKey || !mapReady) ? (
+      {showBlockingOverlay ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/72 backdrop-blur-[2px]">
           <div className="pointer-events-auto max-w-[560px] rounded-[24px] border border-[var(--border)] bg-white px-6 py-5 text-center shadow-[0_18px_50px_-18px_rgba(15,23,42,0.28)]">
-            <MapPinned className="mx-auto h-10 w-10 text-[var(--muted-foreground)]" />
+            {loading && !missingKey && !mapError ? (
+              <RefreshCw className="mx-auto h-10 w-10 animate-spin text-[var(--muted-foreground)]" />
+            ) : (
+              <MapPinned className="mx-auto h-10 w-10 text-[var(--muted-foreground)]" />
+            )}
             <h3 className="mt-3 text-lg font-semibold text-[var(--foreground)]">
-              {missingKey ? "AMap key 未配置" : mapError ? "AMap 加载失败" : "正在加载 AMap"}
+              {overlayTitle}
             </h3>
             <p className="mt-2 text-sm leading-[1.5] text-[var(--muted-foreground)]">
-              {missingKey
-                ? "请在 .env 中添加 VITE_AMAP_KEY；如果启用了安全密钥，再补 VITE_AMAP_SECURITY_JS_CODE。"
-                : mapError || (loading ? "正在同步位置与地图数据..." : "地图 SDK 初始化中，请稍候。")}
+              {overlayDescription}
             </p>
+            {loading && !missingKey && !mapError ? (
+              <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+                地图索引与当前位置附近数据正在并行载入
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}

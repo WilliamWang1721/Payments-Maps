@@ -20,9 +20,11 @@ import {
   Nfc,
   PenTool,
   PlayCircle,
+  Plus,
   ScanFace,
   Smartphone,
   StopCircle,
+  Trash2,
   User,
   Wallet,
   Wifi,
@@ -40,6 +42,10 @@ import {
   type TraceBannerEvent
 } from "@/components/add-location-map-picker";
 import { useI18n } from "@/i18n";
+import {
+  STAFF_PROFICIENCY_OPTIONS,
+  formatStaffProficiencyValue
+} from "@/lib/staff-proficiency";
 import type { MapThemeKey } from "@/lib/map-theme";
 import { inferBrandMatch } from "@/services/ai-service";
 import type {
@@ -47,7 +53,12 @@ import type {
   AddLocationAssistantDraft,
   AddLocationAssistantPatch
 } from "@/types/add-location-assistant";
-import type { CreateLocationInput } from "@/types/location";
+import type {
+  CreateLocationInput,
+  LocationBusinessHours,
+  LocationSpecialDateHours,
+  StaffProficiencyLevel
+} from "@/types/location";
 
 type WizardStep = 1 | 2 | 3;
 
@@ -232,6 +243,88 @@ function Chip({
   );
 }
 
+function buildLocationBusinessHours(draft: DraftState): LocationBusinessHours | undefined {
+  const weekday = draft.weekdayBusinessHours.trim();
+  const weekend = draft.weekendBusinessHours.trim();
+  const specialDates = draft.specialDateHours
+    .map((entry) => ({
+      date: entry.date.trim(),
+      hours: entry.hours.trim()
+    }))
+    .filter((entry) => entry.date && entry.hours);
+
+  if (!weekday && !weekend && specialDates.length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...(weekday ? { weekday } : {}),
+    ...(weekend ? { weekend } : {}),
+    ...(specialDates.length > 0 ? { specialDates } : {})
+  };
+}
+
+function SpecialDateHoursEditor({
+  value,
+  onChange
+}: {
+  value: LocationSpecialDateHours[];
+  onChange: (value: LocationSpecialDateHours[]) => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+
+  const handleEntryChange = (index: number, key: keyof LocationSpecialDateHours, nextValue: string) => {
+    onChange(
+      value.map((entry, entryIndex) =>
+        entryIndex === index
+          ? {
+              ...entry,
+              [key]: nextValue
+            }
+          : entry
+      )
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {value.map((entry, index) => (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]" key={`${entry.date}-${index}`}>
+          <input
+            className="h-12 rounded-m border border-[var(--border)] bg-[var(--accent)] px-4 text-sm text-[var(--foreground)] outline-none"
+            onChange={(event) => handleEntryChange(index, "date", event.target.value)}
+            type="date"
+            value={entry.date}
+          />
+          <input
+            className="h-12 rounded-m border border-[var(--border)] bg-[var(--accent)] px-4 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+            onChange={(event) => handleEntryChange(index, "hours", event.target.value)}
+            placeholder={t("e.g. 10:00 - 18:00 / Closed")}
+            type="text"
+            value={entry.hours}
+          />
+          <button
+            className="ui-hover-shadow inline-flex h-12 items-center justify-center rounded-m border border-[rgba(220,38,38,0.18)] bg-[rgba(254,242,242,0.88)] px-4 text-sm font-medium text-[#991b1b] transition-colors duration-200 hover:bg-[rgba(254,226,226,0.96)]"
+            onClick={() => onChange(value.filter((_, entryIndex) => entryIndex !== index))}
+            type="button"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+
+      <button
+        className="ui-hover-shadow inline-flex h-10 items-center justify-center gap-2 self-start rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+        onClick={() => onChange([...value, { date: "", hours: "" }])}
+        type="button"
+      >
+        <Plus className="h-4 w-4" />
+        <span>{t("Add Special Date")}</span>
+      </button>
+    </div>
+  );
+}
+
 function buildSubmissionNotes(draft: DraftState): string {
   const fragments = [
     `网络：${draft.network || "未知"}`,
@@ -268,11 +361,13 @@ function buildCreateLocationPayload(draft: DraftState): CreateLocationInput {
     name: draft.name,
     address: draft.address,
     brand: draft.brand || draft.network,
-    bin: draft.bin,
     city: draft.city,
     status: draft.status,
     lat: draft.lat,
     lng: draft.lng,
+    contactInfo: draft.contactInfo.trim() || undefined,
+    businessHours: buildLocationBusinessHours(draft),
+    staffProficiencyLevel: draft.staffProficiencyLevel,
     notes: buildSubmissionNotes(draft),
     transactionStatus: draft.transactionStatus,
     network: draft.network,
@@ -503,7 +598,6 @@ function StepOneContent({
 
         <CardFrame title="Billing Settings">
           <Field label="Statement Descriptor" onChange={(value) => onFieldChange("notes", value)} placeholder="Optional internal note" value={draft.notes} />
-          <Field label="MCC Code / BIN" onChange={(value) => onFieldChange("bin", value)} placeholder="e.g. 400001" value={draft.bin} />
           <Field
             isSelect
             label="Brand"
@@ -515,6 +609,34 @@ function StepOneContent({
             placeholder="Select brand"
             value={draft.brand}
           />
+        </CardFrame>
+
+        <CardFrame title="Business Hours & Contact">
+          <Field
+            label="Contact Information"
+            onChange={(value) => onFieldChange("contactInfo", value)}
+            placeholder="Phone / WeChat / Telegram / Email"
+            value={draft.contactInfo}
+          />
+          <Field
+            label="Weekday Business Hours"
+            onChange={(value) => onFieldChange("weekdayBusinessHours", value)}
+            placeholder="e.g. Mon-Fri 09:00 - 18:00"
+            value={draft.weekdayBusinessHours}
+          />
+          <Field
+            label="Weekend Business Hours"
+            onChange={(value) => onFieldChange("weekendBusinessHours", value)}
+            placeholder="e.g. Sat-Sun 10:00 - 20:00"
+            value={draft.weekendBusinessHours}
+          />
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium leading-[1.35] text-[var(--foreground)]">{t("Special Date Hours")}</p>
+            <SpecialDateHoursEditor
+              onChange={(value) => onFieldChange("specialDateHours", value)}
+              value={draft.specialDateHours}
+            />
+          </div>
         </CardFrame>
       </div>
 
@@ -557,6 +679,65 @@ function StepOneContent({
   );
 }
 
+function StaffProficiencySelector({
+  currentLevel,
+  onChange
+}: {
+  currentLevel: StaffProficiencyLevel | null;
+  onChange: (value: StaffProficiencyLevel | null) => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm leading-[1.5] text-[var(--muted-foreground)]">
+          {t("Choose the closest level for how comfortably the store staff can operate the POS today.")}
+        </p>
+        <button
+          className="ui-hover-shadow inline-flex h-9 shrink-0 items-center justify-center rounded-pill border border-[var(--input)] px-3 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={currentLevel === null}
+          onClick={() => onChange(null)}
+          type="button"
+        >
+          {t("Clear")}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {STAFF_PROFICIENCY_OPTIONS.map((option) => {
+          const active = currentLevel === option.level;
+
+          return (
+            <button
+              className={`rounded-[24px] border px-5 py-4 text-left transition-colors duration-200 ${
+                active
+                  ? `${option.cardClassName} shadow-[0_18px_40px_-28px_rgba(15,23,42,0.4)]`
+                  : "border-[var(--input)] bg-white hover:border-[var(--border-hover)] hover:bg-[#FAFAFA]"
+              }`}
+              key={option.level}
+              onClick={() => onChange(option.level)}
+              type="button"
+            >
+              <div className="flex items-start gap-3">
+                <span className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold ${option.badgeClassName}`}>
+                  {option.level}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">
+                    {t(formatStaffProficiencyValue(option))}
+                  </p>
+                  <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t(option.description)}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StepTwoContent({
   draft,
   onFieldChange
@@ -580,7 +761,6 @@ function StepTwoContent({
         <CardFrame title="2. Card Info">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[140px_1fr]">
             <Field isSelect label="Network" onChange={(value) => onFieldChange("network", value)} options={NETWORK_OPTIONS} placeholder="Visa" value={draft.network} />
-            <Field label="Card Info / BIN" onChange={(value) => onFieldChange("bin", value)} placeholder="e.g. 400001" value={draft.bin} />
           </div>
           <div className="pt-1">
             <Chip active={walletSelected} icon={Wallet} label="Select from Wallet" onClick={() => setWalletSelected((prev) => !prev)} />
@@ -683,7 +863,14 @@ function StepThreeContent({
           <Field label="Custom POS Model (Optional)" onChange={(value) => onFieldChange("posModel", value)} placeholder="Enter model name if not in list..." value={draft.posModel} />
         </CardFrame>
 
-        <CardFrame title="5. Additional Remarks">
+        <CardFrame title="5. Staff Proficiency">
+          <StaffProficiencySelector
+            currentLevel={draft.staffProficiencyLevel}
+            onChange={(value) => onFieldChange("staffProficiencyLevel", value)}
+          />
+        </CardFrame>
+
+        <CardFrame title="6. Additional Remarks">
           <Field label="Notes / Internal Comments" multiline onChange={(value) => onFieldChange("notes", value)} placeholder="Enter any additional information or internal notes here..." value={draft.notes} />
         </CardFrame>
       </div>
@@ -712,7 +899,6 @@ export function AddLocationWizard({
     address: "",
     brand: "",
     city: "上海",
-    bin: "",
     status: "active",
     transactionStatus: "Success",
     lat: 31.2304,
@@ -727,6 +913,11 @@ export function AddLocationWizard({
     attemptYear: String(today.getFullYear()),
     attemptMonth: String(today.getMonth() + 1).padStart(2, "0"),
     attemptDay: String(today.getDate()).padStart(2, "0"),
+    contactInfo: "",
+    weekdayBusinessHours: "",
+    weekendBusinessHours: "",
+    specialDateHours: [],
+    staffProficiencyLevel: null,
     notes: ""
   });
 

@@ -59,7 +59,6 @@ const MISSING_FIELD_LABELS: Record<string, string> = {
   transactionStatus: "支付结果",
   paymentMethod: "支付方式",
   network: "交易网络",
-  bin: "卡 BIN",
   acquirer: "收单机构",
   deviceStatus: "设备状态"
 };
@@ -438,7 +437,7 @@ export function AddLocationSmartAddDialog({
           ? [
               {
                 label: "卡册匹配",
-                value: `${resolvedCard.issuer} · ${resolvedCard.title} · ${resolvedCard.organization} · BIN ${resolvedCard.bin}`
+                value: `${resolvedCard.issuer} · ${resolvedCard.title} · ${resolvedCard.organization}`
               }
             ]
           : []),
@@ -449,7 +448,6 @@ export function AddLocationSmartAddDialog({
         { label: "支付结果", value: formatDraftValue(confirmationDraft.transactionStatus, "待补全") },
         { label: "支付方式", value: formatDraftValue(confirmationDraft.paymentMethod, "待补全") },
         { label: "交易网络", value: formatDraftValue(confirmationDraft.network, "待补全") },
-        { label: "卡 BIN", value: formatDraftValue(confirmationDraft.bin, "待补全") },
         { label: "收单机构", value: formatDraftValue(confirmationDraft.acquirer, "待补全") },
         { label: "尝试日期", value: buildAttemptDateLabel(confirmationDraft) }
       ]
@@ -514,7 +512,6 @@ export function AddLocationSmartAddDialog({
             : resolvedCard;
       const resolvedCardPatch = nextResolvedCard && response.matchedCardId
         ? {
-            bin: nextResolvedCard.bin,
             network: normalizeCardOrganizationToNetwork(nextResolvedCard.organization)
           }
         : {};

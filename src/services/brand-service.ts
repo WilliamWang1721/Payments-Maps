@@ -47,6 +47,10 @@ interface PostgrestLikeError {
 
 type BrandInsertPayload = Record<string, string | number | boolean | null>;
 
+interface BrandNameRow {
+  name: string | null;
+}
+
 interface BrandNotesEnvelope {
   version: 1;
   internalNotes?: string;
@@ -60,6 +64,7 @@ interface BrandNotesEnvelope {
 }
 
 const BRAND_NOTES_META_PREFIX = "__FLUXA_BRAND_META__:";
+const FULL_SCAN_BATCH_SIZE = 1000;
 
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -399,6 +404,65 @@ function buildOptimisticBrandRecord(input: CreateBrandInput, userId?: string): B
   };
 }
 
+async function fetchAllBrandRows(queryFactory: () => any): Promise<BrandRow[]> {
+  const rows: BrandRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await queryFactory()
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + FULL_SCAN_BATCH_SIZE - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const batch = (data || []) as BrandRow[];
+    rows.push(...batch);
+
+    if (batch.length < FULL_SCAN_BATCH_SIZE) {
+      return rows;
+    }
+
+    offset += FULL_SCAN_BATCH_SIZE;
+  }
+}
+
+async function fetchBrandStatsByIds(brandIds: string[]): Promise<Map<string, BrandStatsAccumulator>> {
+  const uniqueBrandIds = Array.from(new Set(brandIds.filter(Boolean)));
+
+  if (uniqueBrandIds.length === 0) {
+    return new Map<string, BrandStatsAccumulator>();
+  }
+
+  const rows: PosMachineBrandRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("pos_machines")
+      .select("brand_id, status, updated_at, address, merchant_info")
+      .in("brand_id", uniqueBrandIds)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + FULL_SCAN_BATCH_SIZE - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const batch = (data || []) as PosMachineBrandRow[];
+    rows.push(...batch);
+
+    if (batch.length < FULL_SCAN_BATCH_SIZE) {
+      return buildBrandStats(rows);
+    }
+
+    offset += FULL_SCAN_BATCH_SIZE;
+  }
+}
+
 async function getCurrentUserId(): Promise<string> {
   const {
     data: { user },
@@ -497,24 +561,75 @@ async function insertBrandPayloadWithFallback(payload: BrandInsertPayload): Prom
 
 export const brandService = {
   async listBrands(): Promise<BrandRecord[]> {
-    const [{ data: brandData, error: brandError }, { data: posMachineData, error: posMachineError }] = await Promise.all([
-      supabase.from("brands").select("*").order("created_at", { ascending: false }),
-      supabase.from("pos_machines").select("brand_id, status, updated_at, address, merchant_info")
-    ]);
+    const brandData = await fetchAllBrandRows(() => supabase.from("brands").select("*"));
+    const statsByBrandId = await fetchBrandStatsByIds(brandData.map((row) => row.id));
 
-    if (brandError) {
-      throw brandError;
-    }
-
-    if (posMachineError) {
-      throw posMachineError;
-    }
-
-    const statsByBrandId = buildBrandStats((posMachineData || []) as PosMachineBrandRow[]);
-
-    return ((brandData || []) as BrandRow[])
+    return brandData
       .map((row) => mapBrandRowToRecord(row, statsByBrandId.get(row.id)))
       .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  },
+
+  async listBrandDirectory(): Promise<BrandRecord[]> {
+    const brandData = await fetchAllBrandRows(() => supabase.from("brands").select("*"));
+
+    return brandData
+      .map((row) => mapBrandRowToRecord(row))
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  },
+
+  async listBrandsByIds(ids: string[]): Promise<BrandRecord[]> {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase.from("brands").select("*").in("id", uniqueIds);
+
+    if (error) {
+      throw error;
+    }
+
+    const rows = (data || []) as BrandRow[];
+    const statsByBrandId = await fetchBrandStatsByIds(rows.map((row) => row.id));
+    const orderById = new Map(uniqueIds.map((id, index) => [id, index]));
+
+    return rows
+      .map((row) => mapBrandRowToRecord(row, statsByBrandId.get(row.id)))
+      .sort((left, right) => (orderById.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (orderById.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+  },
+
+  async getBrandById(id: string): Promise<BrandRecord | null> {
+    const trimmedId = id.trim();
+
+    if (!trimmedId) {
+      return null;
+    }
+
+    const brands = await this.listBrandsByIds([trimmedId]);
+    return brands[0] || null;
+  },
+
+  async listBrandOptions(): Promise<string[]> {
+    const rows = await fetchAllBrandRows(() => supabase.from("brands").select("name"));
+
+    return Array.from(
+      new Set(
+        (rows as Array<BrandRow | BrandNameRow>)
+          .map((row) => normalizeString(("name" in row ? row.name : null) || ""))
+          .filter(Boolean)
+      )
+    ).sort((left, right) => left.localeCompare(right, "zh-CN"));
+  },
+
+  async getBrandCount(): Promise<number> {
+    const { count, error } = await supabase.from("brands").select("id", { count: "exact", head: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return count ?? 0;
   },
 
   async createBrand(input: CreateBrandInput): Promise<BrandRecord> {

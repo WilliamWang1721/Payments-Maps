@@ -17,7 +17,9 @@ interface DraftInput {
   address?: string;
   brand?: string;
   city?: string;
-  bin?: string;
+  contactInfo?: string;
+  weekdayBusinessHours?: string;
+  weekendBusinessHours?: string;
   status?: string;
   transactionStatus?: string;
   lat?: number;
@@ -313,7 +315,9 @@ function normalizeDraftPatch(value: unknown, brandCandidates: string[]): Record<
     "name",
     "address",
     "city",
-    "bin",
+    "contactInfo",
+    "weekdayBusinessHours",
+    "weekendBusinessHours",
     "acquirer",
     "posModel",
     "attemptYear",
@@ -431,9 +435,9 @@ Deno.serve(async (request) => {
             "The assistantMessage must be concise, natural Chinese and ask at most one follow-up question. Never output Markdown tables, code blocks, or bullet lists for final confirmation. " +
             "When the user mentions a merchant, district, road, mall, station, airport, or any location clue, generate a short searchQuery for AMap place search. " +
             "Only fill fields you are confident about. Do not invent coordinates or addresses. " +
-            "Field semantics: brand is merchant brand; bin is the user's payment card BIN; network is the card organization; paymentMethod is how the payment was presented; transactionStatus is the payment result; status is the device availability; acquirer is the merchant's acquiring institution or POS service provider; acquiringMode is EDC/DCC; posModel is hardware model. cardCandidates describe cards in the user's card album, where issuer means the card issuer. Never confuse issuer with acquirer. " +
+            "Field semantics: brand is merchant brand; network is the card organization; paymentMethod is how the payment was presented; transactionStatus is the payment result; status is the device availability; acquirer is the merchant's acquiring institution or POS service provider; acquiringMode is EDC/DCC; posModel is hardware model. cardCandidates describe cards in the user's card album, where issuer means the card issuer. Never confuse issuer with acquirer. " +
             "Unless the user explicitly says the transaction failed, default transactionStatus to Success. Unless the user explicitly says the device is broken or unavailable, default status to active. " +
-            "If cardCandidates are provided and one candidate is clearly the card the user means, set matchedCardId to that exact id. In that case prefer leaving BIN/network exact values to the client instead of guessing. If ambiguous, keep matchedCardId null and ask which card they mean. " +
+            "If cardCandidates are provided and one candidate is clearly the card the user means, set matchedCardId to that exact id. In that case prefer leaving the exact network value to the client instead of guessing. If ambiguous, keep matchedCardId null and ask which card they mean. " +
             "Respect merchantKnowledge. If a rule says to confirm a likely acquirer or special POS, ask that follow-up before final confirmation unless the user already clarified it or said unknown. " +
             "Set readyToSubmit to true only when the record has enough info to show a final confirmation card: merchant/location intent is clear, payment result is clear or defaulted, payment method/network are known, and any merchantKnowledge follow-up is already resolved. " +
             "When readyToSubmit is true, confirmationPrompt must be an object for UI rendering, and assistantMessage should only briefly state that the card is ready for confirmation. Do not say that you have already submitted anything. " +

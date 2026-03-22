@@ -200,6 +200,7 @@ export class SessionService {
       .from("mcp_sessions")
       .select("id, session_label, client_type, scope_template, scopes, token_hint, last_used_at, expires_at, revoked_at, created_at")
       .eq("user_id", userId)
+      .is("revoked_at", null)
       .order("created_at", { ascending: false });
 
     if (!modernResult.error) {
@@ -214,6 +215,7 @@ export class SessionService {
       .from("mcp_sessions")
       .select("id, user_id, session_name, session_token, client_type, permissions, is_active, last_active, expires_at, created_at")
       .eq("user_id", userId)
+      .eq("is_active", true)
       .order("created_at", { ascending: false });
 
     if (legacyResult.error) {

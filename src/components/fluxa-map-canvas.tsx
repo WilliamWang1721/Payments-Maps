@@ -12,22 +12,25 @@ import {
   ListFilter,
   Mail,
   MapPin,
-  MoreHorizontal,
   Sparkles,
   SquarePen,
   Trash2,
   UserRound
 } from "lucide-react";
 
-import { FluxaAmapView } from "@/components/fluxa-amap-view";
+import { FluxaAmapView, type MapViewportSnapshot } from "@/components/fluxa-amap-view";
+import { useFluxaBrandCatalog } from "@/hooks/use-fluxa-brand-catalog";
 import { useBrowsingHistory } from "@/hooks/use-browsing-history";
+import { useFluxaListLocations } from "@/hooks/use-fluxa-list-locations";
+import type { MapPartitionSummary } from "@/hooks/use-fluxa-map-partitions";
 import { buildBrandInitials, buildBrandPreviewImage } from "@/lib/brand-visuals";
 import { filterLocationsBySearch, normalizeLocationSearchQuery } from "@/lib/location-search";
 import type { MapThemeKey } from "@/lib/map-theme";
+import type { LocationCounts, LocationMapIndexRecord, LocationSearchRecord } from "@/services/location-service";
 import type { UpdateViewerProfileInput, ViewerProfileRecord } from "@/services/viewer-profile-service";
 import type { SidebarTab } from "@/components/fluxa-sidebar";
 import { useI18n } from "@/i18n";
-import type { BrandRecord } from "@/types/brand";
+import type { BrandRecord, BrandSegment } from "@/types/brand";
 import type { LocationRecord } from "@/types/location";
 
 type BrandCategoryLabel = "Coffee" | "Fast Food" | "Retail" | "Convenience";
@@ -43,7 +46,6 @@ interface BrandMerchantCard {
   imageUrl?: string;
   issues: string;
   owner: string;
-  searchText: string;
 }
 
 type ProfileFieldKey = "name" | "email" | "location" | "joined";
@@ -97,7 +99,7 @@ interface CurrentPosition {
   lng: number;
 }
 
-const BRAND_PAGE_SIZE = 6;
+const BRAND_CARD_HEIGHT = 184;
 const LIST_CARD_HEIGHT = 144;
 const LIST_CARD_GAP = 10;
 const LIST_CARD_MIN_WIDTH = 340;
@@ -195,10 +197,6 @@ function formatHourRange(hour: number): string {
   return `${String(startHour).padStart(2, "0")}:00 - ${String(endHour).padStart(2, "0")}:00`;
 }
 
-function getStableNumberSeed(value: string): number {
-  return Array.from(value).reduce((total, char) => total + char.charCodeAt(0), 0);
-}
-
 function normalizeNetworkLabel(network: string): string {
   const normalized = network.trim().toLowerCase();
 
@@ -243,72 +241,12 @@ function inferSupportedNetworks(location: LocationRecord): string {
   return "Unknown";
 }
 
-function inferSuccessRate(location: LocationRecord): string {
+function inferSuccessRate(location: LocationRecord): string | null {
   if (typeof location.successRate === "number" && Number.isFinite(location.successRate)) {
     return `${location.successRate.toFixed(1)}%`;
   }
 
-  const seed = getStableNumberSeed(`${location.id}-${location.bin}-${location.brand}`);
-  const baseRate = location.status === "active" ? 92 : 81;
-  const decimal = seed % 10;
-  const offset = (seed % 7) - 3;
-  return `${Math.max(70, Math.min(99, baseRate + offset))}.${decimal}%`;
-}
-
-function inferBrandCategory(brand: string): BrandCategoryLabel {
-  const normalized = brand.toLowerCase();
-  if (normalized.includes("starbucks") || normalized.includes("coffee")) {
-    return "Coffee";
-  }
-  if (normalized.includes("mcd") || normalized.includes("kfc") || normalized.includes("subway") || normalized.includes("burger")) {
-    return "Fast Food";
-  }
-  if (normalized.includes("familymart") || normalized.includes("lawson") || normalized.includes("7-eleven")) {
-    return "Convenience";
-  }
-  return "Retail";
-}
-
-function groupBrands(locations: LocationRecord[], t: (text: string) => string): BrandMerchantCard[] {
-  const groups = new Map<string, LocationRecord[]>();
-
-  locations.forEach((location) => {
-    const key = location.brand || "Unknown";
-    const bucket = groups.get(key);
-    if (bucket) {
-      bucket.push(location);
-      return;
-    }
-    groups.set(key, [location]);
-  });
-
-  return Array.from(groups.entries()).map(([brand, items]) => {
-    const activeCount = items.filter((item) => item.status === "active").length;
-    const inactiveCount = items.length - activeCount;
-    const category = inferBrandCategory(brand);
-    const latestUpdate = items
-      .map((item) => item.updatedAt)
-      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
-
-    return {
-      id: brand.toLowerCase().replace(/\s+/g, "-"),
-      brand,
-      category:
-        category === "Coffee"
-          ? "Coffee & Beverage"
-          : category === "Fast Food"
-            ? "Quick Service"
-            : category === "Convenience"
-              ? "Convenience"
-              : "Retail",
-      segment: category,
-      coverage: `${t("Coverage")} ${items.length} ${t("stores")} · ${Math.round((activeCount / items.length) * 100)}% ${t("active")}`,
-      description: `${t("Primary city")}: ${items[0]?.city || t("Unknown")}`,
-      issues: `${t("Issue stores")} ${inactiveCount} · ${t("Last sync")} ${formatRelativeTime(latestUpdate, t)}`,
-      owner: `${t("Primary city")}: ${items[0]?.city || t("Unknown")}`,
-      searchText: [brand, category, items[0]?.city || "Unknown"].join(" ").toLowerCase()
-    };
-  });
+  return null;
 }
 
 function mapBrandRecordToCard(brand: BrandRecord, t: (text: string) => string): BrandMerchantCard {
@@ -326,17 +264,7 @@ function mapBrandRecordToCard(brand: BrandRecord, t: (text: string) => string): 
     description: brand.description || brand.notes || `${t("Primary city")}: ${brand.primaryCity || t("Unknown")}`,
     imageUrl: preview.imageUrl || undefined,
     issues: `${t("Issue stores")} ${brand.inactiveStoreCount} · ${t("Last sync")} ${formatRelativeTime(lastSyncSource, t)}`,
-    owner: `${t("Primary city")}: ${brand.primaryCity || t("Unknown")}`,
-    searchText: [
-      brand.name,
-      brand.uiCategoryLabel,
-      brand.primaryCity,
-      brand.website || "",
-      brand.description || "",
-      brand.notes || ""
-    ]
-      .join(" ")
-      .toLowerCase()
+    owner: `${t("Primary city")}: ${brand.primaryCity || t("Unknown")}`
   };
 }
 
@@ -396,8 +324,9 @@ function EmptyState({ message }: { message: string }): React.JSX.Element {
 
 interface FluxaMapCanvasProps {
   activeTab: SidebarTab;
-  brands?: BrandRecord[];
   brandDraftCount?: number;
+  listCounts?: LocationCounts | null;
+  listDirectoryLocations?: LocationRecord[];
   locations: LocationRecord[];
   loading?: boolean;
   error?: string | null;
@@ -410,7 +339,12 @@ interface FluxaMapCanvasProps {
   locateRequestKey?: number;
   mapFocusLocation?: LocationRecord | null;
   mapFocusRequestKey?: number;
+  mapIndexPoints?: LocationMapIndexRecord[];
+  locationSearchDirectory?: LocationSearchRecord[];
+  mapSummary?: MapPartitionSummary;
+  onMapViewportChange?: (viewport: MapViewportSnapshot) => void;
   onLocatingChange?: (locating: boolean) => void;
+  searchMatchedIds?: string[];
   searchQuery?: string;
   viewerProfile?: ViewerProfileRecord | null;
   viewerProfileError?: string | null;
@@ -421,8 +355,9 @@ interface FluxaMapCanvasProps {
 
 export function FluxaMapCanvas({
   activeTab,
-  brands = [],
   brandDraftCount = 0,
+  listCounts = null,
+  listDirectoryLocations = [],
   locations,
   loading = false,
   error = null,
@@ -435,7 +370,17 @@ export function FluxaMapCanvas({
   locateRequestKey = 0,
   mapFocusLocation = null,
   mapFocusRequestKey = 0,
+  mapIndexPoints = [],
+  locationSearchDirectory = [],
+  mapSummary = {
+    visibleLocationCount: 0,
+    totalLocationCount: 0,
+    visiblePartitionCount: 0,
+    totalPartitionCount: 0
+  },
+  onMapViewportChange,
   onLocatingChange,
+  searchMatchedIds = [],
   searchQuery = "",
   viewerProfile = null,
   viewerProfileError = null,
@@ -450,12 +395,16 @@ export function FluxaMapCanvas({
   const [quickAccessTarget, setQuickAccessTarget] = useState<string | null>(null);
   const [brandCategory, setBrandCategory] = useState<BrandCategoryLabel>("Coffee");
   const [brandPage, setBrandPage] = useState(1);
-  const [brandActionTarget, setBrandActionTarget] = useState<string | null>(null);
+  const [brandPagingMode, setBrandPagingMode] = useState<"paged" | "scroll">("scroll");
+  const [brandSort, setBrandSort] = useState<"updated" | "name">("updated");
+  const [brandItemsPerViewport, setBrandItemsPerViewport] = useState(6);
   const [listPage, setListPage] = useState(1);
   const [listColumnCount, setListColumnCount] = useState(1);
   const [listItemsPerViewport, setListItemsPerViewport] = useState(6);
   const [currentPosition, setCurrentPosition] = useState<CurrentPosition | null>(null);
   const [searchFocusRequestKey, setSearchFocusRequestKey] = useState(0);
+  const [cachedMapLocations, setCachedMapLocations] = useState<LocationRecord[]>([]);
+  const brandViewportRef = useRef<HTMLDivElement | null>(null);
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const listDistanceLocateRequestedRef = useRef(false);
   const {
@@ -468,7 +417,6 @@ export function FluxaMapCanvas({
     enabled: activeTab === "history"
   });
   const normalizedSearchQuery = normalizeLocationSearchQuery(searchQuery);
-  const normalizedBrandSearchQuery = searchQuery.trim().toLowerCase();
   const profileStats = viewerProfile?.stats || [];
   const profileQuickAccessItems = viewerProfile?.quickAccessItems || [];
   const profileRecentActivity = viewerProfile?.recentActivity || [];
@@ -498,12 +446,58 @@ export function FluxaMapCanvas({
     () => filterLocationsBySearch(locations, normalizedSearchQuery),
     [locations, normalizedSearchQuery]
   );
-  const searchFocusLocation = activeTab === "map" && normalizedSearchQuery ? filteredLocations[0] ?? null : null;
-  const activeCount = filteredLocations.filter((location) => location.status === "active").length;
-  const inactiveCount = filteredLocations.length - activeCount;
+  const {
+    locations: listPagedLocations,
+    loading: listPagedLoading,
+    error: listPagedError,
+    totalCount: listTotalCount,
+    activeCount: listActiveCount,
+    inactiveCount: listInactiveCount,
+    pageCount: listPagedPageCount,
+    hasMore: listHasMore,
+    loadMore: loadMoreListLocations
+  } = useFluxaListLocations({
+    counts: listCounts,
+    currentPosition,
+    directoryLocations: listDirectoryLocations,
+    enabled: activeTab === "list",
+    indexPoints: mapIndexPoints,
+    listPagingMode,
+    page: listPage,
+    pageSize: Math.max(1, listItemsPerViewport),
+    searchMatchedIds,
+    searchQuery,
+    sort: listSort
+  });
+  const {
+    brands: visibleBrandRecords,
+    loading: brandCatalogLoading,
+    error: brandCatalogError,
+    totalCount: brandTotalCount,
+    summaryTotalCount: brandSummaryTotalCount,
+    summaryCountLoading: brandSummaryCountLoading,
+    pageCount: brandPageCount,
+    hasMore: brandHasMore,
+    loadMore: loadMoreBrands
+  } = useFluxaBrandCatalog({
+    enabled: activeTab === "brands",
+    page: brandPage,
+    pageSize: Math.max(1, brandItemsPerViewport),
+    pagingMode: brandPagingMode,
+    searchQuery,
+    segment: brandCategory as BrandSegment,
+    sort: brandSort
+  });
+  const mapLocations = activeTab === "map" ? filteredLocations : cachedMapLocations;
+  const searchFocusLocation = activeTab === "map" && normalizedSearchQuery ? mapLocations[0] ?? null : null;
+  const listSummaryTotalCount = activeTab === "list" ? listTotalCount : filteredLocations.length;
+  const listSummaryActiveCount = activeTab === "list" ? listActiveCount : filteredLocations.filter((location) => location.status === "active").length;
+  const listSummaryInactiveCount = activeTab === "list" ? listInactiveCount : filteredLocations.length - listSummaryActiveCount;
 
   const listRecords = useMemo(() => {
-    const enrichedRecords = filteredLocations.map((location) => {
+    const baseLocations = activeTab === "list" ? listPagedLocations : filteredLocations;
+
+    return baseLocations.map((location) => {
       const distanceKm = currentPosition
         ? calculateDistanceKm(currentPosition, { lat: location.lat, lng: location.lng })
         : null;
@@ -513,32 +507,15 @@ export function FluxaMapCanvas({
         distanceKm,
         distanceMeta: distanceKm === null ? formatRelativeTime(location.updatedAt, t) : formatDistanceLabel(distanceKm),
         createdAtText: `${t("Added")}: ${formatExactDate(location.createdAt, "zh-CN")}`,
-        capabilityMeta: `${t("Success Rate")} ${inferSuccessRate(location)} · ${t("Supported Networks")}: ${inferSupportedNetworks(location)}`,
+        capabilityMeta: `${t("Success Rate")} ${inferSuccessRate(location) || t("Unknown")} · ${t("Supported Networks")}: ${inferSupportedNetworks(location)}`,
         addedByText: `由 ${location.addedBy || "Unknown"} 添加`
       };
     });
+  }, [activeTab, currentPosition, filteredLocations, listPagedLocations, t]);
 
-    return enrichedRecords.sort((left, right) => {
-      if (listSort === "distance") {
-        if (left.distanceKm === null && right.distanceKm === null) {
-          return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-        }
-        if (left.distanceKm === null) {
-          return 1;
-        }
-        if (right.distanceKm === null) {
-          return -1;
-        }
-        return left.distanceKm - right.distanceKm;
-      }
-
-      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-    });
-  }, [currentPosition, filteredLocations, listSort, t]);
-
-  const brandCards = useMemo(
-    () => (brands.length > 0 ? brands.map((brand) => mapBrandRecordToCard(brand, t)) : groupBrands(locations, t)),
-    [brands, locations, t]
+  const visibleBrandCards = useMemo(
+    () => visibleBrandRecords.map((brand) => mapBrandRecordToCard(brand, t)),
+    [t, visibleBrandRecords]
   );
 
   const locationsById = useMemo(() => {
@@ -604,28 +581,24 @@ export function FluxaMapCanvas({
     ];
   }, [historyEntries, t]);
 
-  const filteredBrandCards = useMemo(() => {
-    const cards = brandCards.filter((card) => (brandCategory === "Retail" ? card.segment === "Retail" : card.segment === brandCategory));
-
-    if (!normalizedBrandSearchQuery) {
-      return cards;
-    }
-
-    return cards.filter((card) => card.searchText.includes(normalizedBrandSearchQuery));
-  }, [brandCards, brandCategory, normalizedBrandSearchQuery]);
-
-  const brandPageCount = Math.max(1, Math.ceil(filteredBrandCards.length / BRAND_PAGE_SIZE));
-  const pagedBrandCards = filteredBrandCards.slice((brandPage - 1) * BRAND_PAGE_SIZE, brandPage * BRAND_PAGE_SIZE);
   const listItemsPerPage = Math.max(1, listItemsPerViewport);
-  const listPageCount = listPagingMode === "paged" ? Math.max(1, Math.ceil(listRecords.length / listItemsPerPage)) : 1;
-  const visibleListRecords =
-    listPagingMode === "paged" ? listRecords.slice((listPage - 1) * listItemsPerPage, listPage * listItemsPerPage) : listRecords;
-  const listStart = listRecords.length === 0 ? 0 : listPagingMode === "paged" ? (listPage - 1) * listItemsPerPage + 1 : 1;
-  const listEnd = listStart === 0 ? 0 : listStart + visibleListRecords.length - 1;
+  const listPageCount = activeTab === "list" ? listPagedPageCount : (listPagingMode === "paged" ? Math.max(1, Math.ceil(listRecords.length / listItemsPerPage)) : 1);
+  const visibleListRecords = listRecords;
+  const listStart = listSummaryTotalCount === 0 ? 0 : listPagingMode === "paged" ? (listPage - 1) * listItemsPerPage + 1 : 1;
+  const listEnd = listStart === 0 ? 0 : Math.min(listSummaryTotalCount, listStart + visibleListRecords.length - 1);
+  const brandItemsPerPage = Math.max(1, brandItemsPerViewport);
+  const brandStart = brandTotalCount === 0 ? 0 : brandPagingMode === "paged" ? (brandPage - 1) * brandItemsPerPage + 1 : 1;
+  const brandEnd = brandStart === 0 ? 0 : Math.min(brandTotalCount, brandStart + visibleBrandCards.length - 1);
+
+  useEffect(() => {
+    if (activeTab === "map") {
+      setCachedMapLocations(filteredLocations);
+    }
+  }, [activeTab, filteredLocations]);
 
   useEffect(() => {
     setBrandPage(1);
-  }, [brandCategory, normalizedBrandSearchQuery]);
+  }, [brandCategory, brandPagingMode, brandSort, searchQuery]);
 
   useEffect(() => {
     if (brandPage > brandPageCount) {
@@ -687,6 +660,35 @@ export function FluxaMapCanvas({
       }
     );
   }, [activeTab, currentPosition, listSort, onLocatingChange]);
+
+  useEffect(() => {
+    if (activeTab !== "brands") {
+      return;
+    }
+
+    const viewport = brandViewportRef.current;
+    if (!viewport || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const updateBrandCapacity = () => {
+      const height = viewport.clientHeight;
+      const rows = Math.max(1, Math.floor((height + LIST_CARD_GAP) / (BRAND_CARD_HEIGHT + LIST_CARD_GAP)));
+      setBrandItemsPerViewport((current) => (current === rows ? current : rows));
+    };
+
+    updateBrandCapacity();
+
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(updateBrandCapacity);
+    });
+
+    observer.observe(viewport);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "list") {
@@ -780,8 +782,10 @@ export function FluxaMapCanvas({
     }
   };
 
-  const dataBanner = error ? (
-    <div className="rounded-m border border-[#f3bbb2] bg-[#fff3f1] px-4 py-3 text-sm text-[#8f291a]">{t(error)}</div>
+  const effectiveError = activeTab === "list" ? listPagedError || error : activeTab === "brands" ? brandCatalogError || error : error;
+  const effectiveLoading = activeTab === "list" ? loading || listPagedLoading : activeTab === "brands" ? loading || brandCatalogLoading : loading;
+  const dataBanner = effectiveError ? (
+    <div className="rounded-m border border-[#f3bbb2] bg-[#fff3f1] px-4 py-3 text-sm text-[#8f291a]">{t(effectiveError)}</div>
   ) : null;
 
   const mapPanel = (
@@ -796,16 +800,21 @@ export function FluxaMapCanvas({
       {dataBanner}
       <div className="min-h-0 flex-1">
         <FluxaAmapView
+          active={activeTab === "map"}
           loading={loading}
           locateRequestKey={locateRequestKey}
-          locations={filteredLocations}
+          locations={mapLocations}
           mapFocusLocation={searchFocusLocation ?? mapFocusLocation}
           mapFocusRequestKey={searchFocusLocation ? searchFocusRequestKey : mapFocusRequestKey}
+          mapIndexPoints={mapIndexPoints}
+          locationSearchDirectory={locationSearchDirectory}
+          mapSummary={mapSummary}
           mapTheme={mapTheme}
           onLocatingChange={onLocatingChange}
           onLocationResolved={setCurrentPosition}
           onOpenDetail={onOpenDetail}
           onRefresh={onRefresh}
+          onViewportChange={onMapViewportChange}
         />
       </div>
     </section>
@@ -1294,68 +1303,120 @@ export function FluxaMapCanvas({
           ) : null}
         </div>
 
-        {pagedBrandCards.length === 0 ? (
-          <EmptyState message="No brand coverage yet for this category." />
-        ) : (
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-2.5">
-            {pagedBrandCards.map((item) => (
-              <article
-                className="flex min-h-[182px] min-w-0 flex-col rounded-m border border-[var(--border)] bg-[var(--muted-hover)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--secondary)]"
-                key={item.id}
-              >
-                <button
-                  className="flex min-h-0 flex-1 cursor-pointer flex-col text-left"
-                  onClick={() => {
-                    const targetBrand = brands.find((brand) => brand.id === item.id);
-                    if (targetBrand) {
-                      onOpenBrandDetail?.(targetBrand);
-                    }
-                  }}
-                  type="button"
-                >
-                  <div className="flex min-h-20 items-center gap-3 px-3 pb-1.5 pt-3">
-                    <BrandAvatar card={item} />
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-base font-semibold leading-6 text-[var(--foreground)]">{item.brand}</h3>
-                      <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.category)}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1 px-3 pb-2.5">
-                    <p className="line-clamp-2 min-h-[32px] text-[13px] leading-[1.25] text-[var(--foreground)]">{t(item.description)}</p>
-                    <p className="truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{t(item.coverage)}</p>
-                    <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.issues)}</p>
-                    <p className="truncate text-xs leading-[1.2] text-[var(--muted-foreground)]">{t(item.owner)}</p>
-                    {brandActionTarget === item.id ? <p className="truncate text-xs leading-[1.2] text-[var(--foreground)]">{t("Actions opened")}</p> : null}
-                  </div>
-                </button>
-
-                <div className="mt-auto flex items-center justify-between px-3 pb-3">
-                  <span className="text-xs font-medium leading-[1.2] text-[var(--muted-foreground)]">{t("Trend")}</span>
-                  <button
-                    aria-label={`更多操作：${item.brand}`}
-                    className="ui-hover-shadow inline-flex h-10 w-10 items-center justify-center rounded-pill bg-[var(--secondary)] text-[var(--foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setBrandActionTarget((prev) => (prev === item.id ? null : item.id));
-                    }}
-                    type="button"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
-                </div>
-              </article>
-            ))}
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <div className="inline-flex h-8 items-center justify-center rounded-pill bg-[var(--color-info)] px-3 py-2 text-sm font-medium leading-[1.142857] text-[var(--color-info-foreground)]">
+            {brandSummaryCountLoading ? t("Loading...") : `${brandSummaryTotalCount} ${t("brands")}`}
           </div>
-        )}
+          <button
+            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+            onClick={() => setBrandSort((prev) => (prev === "updated" ? "name" : "updated"))}
+            type="button"
+          >
+            <ListFilter className="h-4 w-4" />
+            <span>{brandSort === "updated" ? t("Sort: Updated") : t("Sort: Name")}</span>
+          </button>
+          <button
+            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+            onClick={() => setBrandPagingMode((prev) => (prev === "scroll" ? "paged" : "scroll"))}
+            type="button"
+          >
+            <ListFilter className="h-4 w-4" />
+            <span>{brandPagingMode === "scroll" ? t("Scroll Mode") : t("Paged Mode")}</span>
+          </button>
+        </div>
 
-        <div className="mt-auto flex w-full flex-col gap-3 pt-1 lg:flex-row lg:items-center lg:justify-between">
-          <p className="text-[13px] font-normal text-[var(--muted-foreground)]">
-            {t("Showing")} {pagedBrandCards.length} {t("of")} {filteredBrandCards.length} {t("brands")}
-          </p>
-          <div className="flex items-center gap-2">
+        <div
+          className={`min-h-0 flex-1 ${brandPagingMode === "scroll" ? "overflow-auto pr-1" : "overflow-hidden"}`}
+          onScroll={(event) => {
+            if (brandPagingMode !== "scroll" || !brandHasMore || brandCatalogLoading) {
+              return;
+            }
+
+            const target = event.currentTarget;
+            if (target.scrollHeight - target.scrollTop - target.clientHeight <= 120) {
+              loadMoreBrands();
+            }
+          }}
+          ref={brandViewportRef}
+        >
+          {visibleBrandCards.length === 0 ? (
+            <EmptyState message={brandCatalogLoading ? "Loading brands..." : searchQuery.trim() ? "No matching brands found." : "No brand coverage yet for this category."} />
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {visibleBrandCards.map((item) => {
+                const targetBrand = visibleBrandRecords.find((brand) => brand.id === item.id);
+
+                return (
+                  <article
+                    className="flex min-h-[184px] min-w-0 flex-col rounded-m border border-[var(--border)] bg-[var(--card)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--card-hover)]"
+                    key={item.id}
+                  >
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 pb-5 pt-5 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex min-w-0 flex-1 gap-4">
+                          <BrandAvatar card={item} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <h3 className="truncate text-[18px] font-semibold leading-6 text-[var(--foreground)]">{item.brand}</h3>
+                              <span className="inline-flex h-8 items-center rounded-pill bg-[var(--secondary)] px-3 text-sm font-medium text-[var(--secondary-foreground)]">
+                                {t(item.category)}
+                              </span>
+                            </div>
+                            <p className="mt-3 line-clamp-2 text-[14px] leading-[1.5] text-[var(--foreground)]">{t(item.description)}</p>
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <p className="truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{t(item.coverage)}</p>
+                              <p className="truncate text-[13px] leading-[1.2] text-[var(--muted-foreground)]">{t(item.issues)}</p>
+                              <p className="truncate text-[13px] leading-[1.2] text-[var(--muted-foreground)]">{t(item.owner)}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2 self-start">
+                          <button
+                            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-m border border-[var(--input)] px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (targetBrand) {
+                                onOpenBrandDetail?.(targetBrand);
+                              }
+                            }}
+                            type="button"
+                          >
+                            <ArrowUpRight className="h-4 w-4" />
+                            <span>{t("Detail")}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-4 text-xs leading-[1.2] text-[var(--muted-foreground)]">
+                        <span className="truncate">{t(item.coverage)}</span>
+                        <span className="truncate">{t(item.issues)}</span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex w-full flex-col gap-3 pt-1">
+          <div className="overflow-x-auto">
+            <div className="flex min-w-max items-center gap-4 whitespace-nowrap pr-1 text-[13px] font-normal text-[var(--muted-foreground)]">
+              <p>
+                显示第 {brandStart} 到 {brandEnd} 个品牌，共 {brandTotalCount} 个品牌
+              </p>
+              <p>
+                {brandPagingMode === "paged"
+                  ? `分页模式，共 ${brandPageCount} 页，当前每页显示 ${brandItemsPerPage} 个品牌`
+                  : `连续滚动模式，滚动到下方时继续加载，当前已显示 ${visibleBrandCards.length} / ${brandTotalCount} 个品牌`}
+              </p>
+            </div>
+          </div>
+          {brandPagingMode === "paged" && brandPageCount > 1 ? (
+            <div className="flex w-full items-center gap-2">
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-2 rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+              className="ui-hover-shadow inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
               disabled={brandPage === 1}
               onClick={() => setBrandPage((prev) => Math.max(1, prev - 1))}
               type="button"
@@ -1364,23 +1425,27 @@ export function FluxaMapCanvas({
               <span>{t("Previous")}</span>
             </button>
 
-            {Array.from({ length: brandPageCount }, (_, index) => index + 1).map((page) => (
-              <button
-                className={`ui-hover-shadow inline-flex h-10 w-10 items-center justify-center rounded-pill border text-sm transition-colors duration-200 ${
-                  brandPage === page
-                    ? "border-[var(--primary)] bg-white text-[var(--primary)]"
-                    : "border-[var(--border)] text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--secondary-hover)]"
-                }`}
-                key={page}
-                onClick={() => setBrandPage(page)}
-                type="button"
-              >
-                {page}
-              </button>
-            ))}
+            <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+              <div className="flex min-w-max items-center gap-2 px-1">
+                {Array.from({ length: brandPageCount }, (_, index) => index + 1).map((page) => (
+                  <button
+                    className={`ui-hover-shadow inline-flex h-10 w-10 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border text-sm transition-colors duration-200 ${
+                      brandPage === page
+                        ? "border-[var(--primary)] bg-white text-[var(--primary)]"
+                        : "border-transparent text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                    }`}
+                    key={page}
+                    onClick={() => setBrandPage(page)}
+                    type="button"
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-2 rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+              className="ui-hover-shadow inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
               disabled={brandPage === brandPageCount}
               onClick={() => setBrandPage((prev) => Math.min(brandPageCount, prev + 1))}
               type="button"
@@ -1388,7 +1453,8 @@ export function FluxaMapCanvas({
               <span>{t("Next")}</span>
               <ChevronRight className="h-5 w-5" />
             </button>
-          </div>
+            </div>
+          ) : null}
         </div>
         </section>
       </div>
@@ -1402,19 +1468,32 @@ export function FluxaMapCanvas({
       {dataBanner}
       <div className="flex w-full flex-wrap items-center gap-2">
         <div className="inline-flex h-8 items-center justify-center rounded-pill bg-[var(--color-info)] px-3 py-2 text-sm font-medium leading-[1.142857] text-[var(--color-info-foreground)]">
-          {loading ? t("Loading...") : `${listRecords.length} 所有`}
+          {effectiveLoading ? t("Loading...") : `${listSummaryTotalCount} 所有`}
         </div>
         <div className="inline-flex h-8 items-center justify-center rounded-pill bg-[var(--color-success)] px-3 py-2 text-sm font-medium leading-[1.142857] text-[var(--color-success-foreground)]">
-          {activeCount} 可用
+          {listSummaryActiveCount} 可用
         </div>
         <div className="inline-flex h-8 items-center justify-center rounded-pill bg-[var(--color-warning)] px-3 py-2 text-sm font-medium leading-[1.142857] text-[var(--color-warning-foreground)]">
-          {inactiveCount} 不可用
+          {listSummaryInactiveCount} 不可用
         </div>
       </div>
 
-      <div className={`min-h-0 flex-1 ${listPagingMode === "scroll" ? "overflow-auto pr-1" : "overflow-hidden"}`} ref={listViewportRef}>
+      <div
+        className={`min-h-0 flex-1 ${listPagingMode === "scroll" ? "overflow-auto pr-1" : "overflow-hidden"}`}
+        onScroll={(event) => {
+          if (listPagingMode !== "scroll" || !listHasMore || listPagedLoading) {
+            return;
+          }
+
+          const target = event.currentTarget;
+          if (target.scrollHeight - target.scrollTop - target.clientHeight <= 120) {
+            loadMoreListLocations();
+          }
+        }}
+        ref={listViewportRef}
+      >
         {visibleListRecords.length === 0 ? (
-          <EmptyState message={loading ? "Loading locations..." : normalizedSearchQuery ? "No matching locations found." : "No locations saved yet."} />
+          <EmptyState message={effectiveLoading ? "Loading locations..." : normalizedSearchQuery ? "No matching locations found." : "No locations saved yet."} />
         ) : (
           <div
             className="grid content-start gap-2.5"
@@ -1460,21 +1539,23 @@ export function FluxaMapCanvas({
         )}
       </div>
 
-      <div className="flex w-full flex-col gap-3 pt-1 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-col gap-1">
-          <p className="text-[13px] font-normal text-[var(--muted-foreground)]">
-            {t("Showing")} {listStart}-{listEnd} {t("of")} {listRecords.length} {t("records")}
-          </p>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {listPagingMode === "paged"
-              ? `分页模式 · 共 ${listPageCount} 页 · 每页 ${listItemsPerPage} 张`
-              : `单界面模式 · 连续滚动 · 当前显示全部 ${listRecords.length} 张`}
-          </p>
+      <div className="flex w-full flex-col gap-3 pt-1">
+        <div className="overflow-x-auto">
+          <div className="flex min-w-max items-center gap-4 whitespace-nowrap pr-1 text-[13px] font-normal text-[var(--muted-foreground)]">
+            <p>
+              显示第 {listStart} 到 {listEnd} 个项目，共 {listSummaryTotalCount} 条记录
+            </p>
+            <p>
+              {listPagingMode === "paged"
+                ? `分页模式，共 ${listPageCount} 页，当前每页显示 ${listItemsPerPage} 个项目`
+                : `连续滚动模式，滚动到下方时继续加载，当前已显示 ${visibleListRecords.length} / ${listSummaryTotalCount} 个项目`}
+            </p>
+          </div>
         </div>
         {listPagingMode === "paged" && listPageCount > 1 ? (
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-2">
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-2 rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+              className="ui-hover-shadow inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
               disabled={listPage === 1}
               onClick={() => setListPage((prev) => Math.max(1, prev - 1))}
               type="button"
@@ -1483,23 +1564,27 @@ export function FluxaMapCanvas({
               <span>{t("Previous")}</span>
             </button>
 
-            {Array.from({ length: listPageCount }, (_, index) => index + 1).map((page) => (
-              <button
-                className={`ui-hover-shadow inline-flex h-10 w-10 items-center justify-center rounded-pill border text-sm transition-colors duration-200 ${
-                  listPage === page
-                    ? "border-[var(--primary)] bg-white text-[var(--primary)]"
-                    : "border-transparent text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
-                }`}
-                key={page}
-                onClick={() => setListPage(page)}
-                type="button"
-              >
-                {page}
-              </button>
-            ))}
+            <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+              <div className="flex min-w-max items-center gap-2 px-1">
+                {Array.from({ length: listPageCount }, (_, index) => index + 1).map((page) => (
+                  <button
+                    className={`ui-hover-shadow inline-flex h-10 w-10 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border text-sm transition-colors duration-200 ${
+                      listPage === page
+                        ? "border-[var(--primary)] bg-white text-[var(--primary)]"
+                        : "border-transparent text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                    }`}
+                    key={page}
+                    onClick={() => setListPage(page)}
+                    type="button"
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-2 rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+              className="ui-hover-shadow inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
               disabled={listPage === listPageCount}
               onClick={() => setListPage((prev) => Math.min(listPageCount, prev + 1))}
               type="button"

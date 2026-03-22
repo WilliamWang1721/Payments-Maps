@@ -1,8 +1,9 @@
-import express, { type Request } from "express";
+import { Readable } from "node:stream";
+import express, { type Request as ExpressRequest } from "express";
 import cors from "cors";
 import * as z from "zod/v4";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
 import { AuditLogService } from "./audit-log-service.js";
 import { type MCPScopeKey, SESSION_TEMPLATE_DEFINITIONS } from "./constants.js";
@@ -50,7 +51,7 @@ function getForwardedHeaderValue(value: string | string[] | undefined): string |
   return value || null;
 }
 
-function resolvePublicBaseUrl(request?: Request): string {
+function resolvePublicBaseUrl(request?: ExpressRequest): string {
   const configured = getConfiguredPublicBaseUrl();
   if (configured) {
     return configured;
@@ -86,7 +87,7 @@ function getErrorStatus(error: unknown, fallback: number): number {
   return error instanceof ConfigurationError ? 503 : fallback;
 }
 
-function getBearerToken(request: Request): string {
+function getBearerToken(request: ExpressRequest): string {
   const authorization = request.headers.authorization || "";
   if (!authorization.startsWith("Bearer ")) {
     throw new Error("Missing Authorization bearer token.");
@@ -95,14 +96,112 @@ function getBearerToken(request: Request): string {
   return authorization.slice("Bearer ".length).trim();
 }
 
-async function authenticateUserRequest(request: Request) {
+async function authenticateUserRequest(request: ExpressRequest) {
   const accessToken = getBearerToken(request);
   const user = await sessionService.authenticateBearerToken(accessToken);
   return user;
 }
 
-function buildSessionConnectionUrl(request: Request, sessionToken: string): string {
+function getSessionIdFromRequest(request: ExpressRequest): string {
+  const bodyId =
+    request.body && typeof request.body === "object" && "id" in (request.body as Record<string, unknown>)
+      ? (request.body as Record<string, unknown>).id
+      : null;
+  const queryId = request.query?.id;
+  const candidates = [
+    typeof bodyId === "string" ? bodyId : null,
+    typeof queryId === "string" ? queryId : Array.isArray(queryId) ? queryId[0] : null
+  ];
+
+  const sessionId = candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (!sessionId) {
+    throw new Error("Missing MCP session id.");
+  }
+
+  return sessionId.trim();
+}
+
+function buildSessionConnectionUrl(request: ExpressRequest, sessionToken: string): string {
   return `${resolvePublicBaseUrl(request)}/mcp/${sessionToken}`;
+}
+
+function getMcpSessionTokenFromRequest(request: ExpressRequest): string {
+  const pathToken = request.params.sessionToken;
+  const queryToken = request.query?.sessionToken;
+  const candidates = [
+    Array.isArray(pathToken) ? pathToken[0] : pathToken,
+    typeof queryToken === "string" ? queryToken : Array.isArray(queryToken) ? queryToken[0] : null
+  ];
+
+  const sessionToken = candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (!sessionToken) {
+    throw new Error("Missing MCP session token.");
+  }
+
+  return sessionToken.trim();
+}
+
+function normalizeMcpAcceptHeader(method: string, headers: Headers): void {
+  const currentAccept = headers.get("accept") || "";
+  const normalizedAccept = currentAccept.toLowerCase();
+  const upperMethod = method.toUpperCase();
+
+  if (upperMethod === "GET" || upperMethod === "HEAD") {
+    if (!normalizedAccept.includes("text/event-stream")) {
+      headers.set("accept", currentAccept ? `${currentAccept}, text/event-stream` : "text/event-stream");
+    }
+    return;
+  }
+
+  if (upperMethod === "POST") {
+    const acceptsJson = normalizedAccept.includes("application/json");
+    const acceptsEventStream = normalizedAccept.includes("text/event-stream");
+    if (!acceptsJson || !acceptsEventStream) {
+      headers.set(
+        "accept",
+        currentAccept ? `${currentAccept}, application/json, text/event-stream` : "application/json, text/event-stream"
+      );
+    }
+  }
+}
+
+function buildWebRequestFromExpress(request: ExpressRequest): globalThis.Request {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (Array.isArray(value)) {
+      headers.set(key, value.join(", "));
+    } else if (typeof value === "string") {
+      headers.set(key, value);
+    }
+  }
+
+  normalizeMcpAcceptHeader(request.method, headers);
+  const url = new URL(request.originalUrl || request.url, resolvePublicBaseUrl(request));
+  return new Request(url.toString(), {
+    method: request.method,
+    headers
+  });
+}
+
+async function sendWebResponseToExpress(webResponse: Response, response: express.Response): Promise<void> {
+  response.status(webResponse.status);
+  webResponse.headers.forEach((value, key) => {
+    response.setHeader(key, value);
+  });
+
+  if (!webResponse.body) {
+    response.end();
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const nodeStream = Readable.fromWeb(webResponse.body as any);
+    nodeStream.on("error", reject);
+    response.on("close", resolve);
+    response.on("finish", resolve);
+    response.on("error", reject);
+    nodeStream.pipe(response);
+  });
 }
 
 function jsonText(data: unknown): string {
@@ -139,6 +238,78 @@ function errorContent(message: string) {
 function ensureScope(session: AuthenticatedSession, scope: MCPScopeKey): void {
   sessionService.requireScope(session, scope);
 }
+
+const createLocationInputShape = {
+  name: z.string().min(1),
+  address: z.string().min(1),
+  brand: z.string().min(1),
+  bin: z.string().min(1),
+  city: z.string().optional(),
+  status: z.enum(["active", "inactive"]),
+  lat: z.number(),
+  lng: z.number(),
+  notes: z.string().optional(),
+  transactionStatus: z.enum(["Success", "Fault", "Unknown"]).optional(),
+  network: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  cvm: z.string().optional(),
+  acquiringMode: z.string().optional(),
+  acquirer: z.string().optional(),
+  posModel: z.string().optional(),
+  checkoutLocation: z.enum(["Staffed Checkout", "Self-checkout"]).optional(),
+  attemptedAt: z.string().optional()
+} satisfies z.ZodRawShape;
+
+const mapBrandSearchInputShape = {
+  brand: z.string().min(1),
+  area: z.string().min(1),
+  brand_aliases: z.array(z.string().min(1)).max(5).optional(),
+  country_code: z.string().length(2).optional(),
+  limit: z.number().int().min(1).max(1000).optional()
+} satisfies z.ZodRawShape;
+
+const mapBrandImportInputShape = {
+  ...mapBrandSearchInputShape,
+  bin: z.string().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  notes: z.string().optional(),
+  transactionStatus: z.enum(["Success", "Fault", "Unknown"]).optional(),
+  network: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  cvm: z.string().optional(),
+  acquiringMode: z.string().optional(),
+  acquirer: z.string().optional(),
+  posModel: z.string().optional(),
+  checkoutLocation: z.enum(["Staffed Checkout", "Self-checkout"]).optional(),
+  attemptedAt: z.string().optional(),
+  skip_existing: z.boolean().optional(),
+  create_as_shell: z.boolean().optional()
+} satisfies z.ZodRawShape;
+
+const adminMapBrandSearchRequestSchema = z.object({
+  brand: z.string().trim().min(1),
+  area: z.string().trim().min(1),
+  brandAliases: z.array(z.string().trim().min(1)).max(5).optional(),
+  countryCode: z.string().trim().length(2).optional(),
+  limit: z.number().int().min(1).max(1000).optional()
+});
+
+const adminMapBrandImportRequestSchema = adminMapBrandSearchRequestSchema.extend({
+  bin: z.string().trim().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  notes: z.string().trim().optional(),
+  transactionStatus: z.enum(["Success", "Fault", "Unknown"]).optional(),
+  network: z.string().trim().optional(),
+  paymentMethod: z.string().trim().optional(),
+  cvm: z.string().trim().optional(),
+  acquiringMode: z.string().trim().optional(),
+  acquirer: z.string().trim().optional(),
+  posModel: z.string().trim().optional(),
+  checkoutLocation: z.enum(["Staffed Checkout", "Self-checkout"]).optional(),
+  attemptedAt: z.string().trim().optional(),
+  skipExisting: z.boolean().optional(),
+  createAsShell: z.boolean().optional()
+});
 
 async function withAudit<T>(
   authSession: AuthenticatedSession,
@@ -266,6 +437,102 @@ function createMcpServer(sessionToken: string): McpServer {
   );
 
   server.registerTool(
+    "search_brand_locations_on_map",
+    {
+      description:
+        "Search map POI data for all matching stores of a brand inside a named area, returning normalized addresses and coordinates.",
+      inputSchema: mapBrandSearchInputShape
+    },
+    async ({ brand, area, brand_aliases, country_code, limit }) => {
+      const liveSession = await sessionService.authenticateMcpSession(sessionToken);
+      ensureScope(liveSession, "locations.read");
+      return withAudit(
+        liveSession,
+        "search_brand_locations_on_map",
+        { brand, area, brand_aliases, country_code, limit },
+        async () => {
+          const search = await fluxaService.searchBrandLocationsOnMap({
+            brand,
+            area,
+            brandAliases: brand_aliases,
+            countryCode: country_code,
+            limit
+          });
+          return {
+            summary: `Found ${search.total} ${brand} map matches inside ${search.resolvedArea.name}.`,
+            data: search
+          };
+        }
+      );
+    }
+  );
+
+  server.registerTool(
+    "bulk_import_brand_locations_from_map",
+    {
+      description:
+        "Admin-only. Search a named area for a brand's stores on the map, then dedupe and bulk-create Fluxa locations from those results. Set create_as_shell=true to seed shell locations without any attempt record.",
+      inputSchema: mapBrandImportInputShape
+    },
+    async ({ brand, area, brand_aliases, country_code, limit, bin, status, notes, transactionStatus, network, paymentMethod, cvm, acquiringMode, acquirer, posModel, checkoutLocation, attemptedAt, skip_existing, create_as_shell }) => {
+      const liveSession = await sessionService.authenticateMcpSession(sessionToken);
+      ensureScope(liveSession, "locations.write");
+      return withAudit(
+        liveSession,
+        "bulk_import_brand_locations_from_map",
+        {
+          brand,
+          area,
+          brand_aliases,
+          country_code,
+          limit,
+          bin,
+          status,
+          notes,
+          transactionStatus,
+          network,
+          paymentMethod,
+          cvm,
+          acquiringMode,
+          acquirer,
+          posModel,
+          checkoutLocation,
+          attemptedAt,
+          skip_existing,
+          create_as_shell
+        },
+        async () => {
+          const result = await fluxaService.bulkImportBrandLocationsFromMap(liveSession.userId, {
+            brand,
+            area,
+            brandAliases: brand_aliases,
+            countryCode: country_code,
+            limit,
+            bin,
+            status,
+            notes,
+            transactionStatus,
+            network,
+            paymentMethod,
+            cvm,
+            acquiringMode,
+            acquirer,
+            posModel,
+            checkoutLocation,
+            attemptedAt,
+            skipExisting: skip_existing,
+            createAsShell: create_as_shell
+          });
+          return {
+            summary: `Map import finished: ${result.createdCount} created, ${result.skippedCount} skipped, ${result.failureCount} failed.`,
+            data: result
+          };
+        }
+      );
+    }
+  );
+
+  server.registerTool(
     "search_locations",
     {
       description: "Search Fluxa locations across merged Fluxa and POS data.",
@@ -319,35 +586,70 @@ function createMcpServer(sessionToken: string): McpServer {
     "create_location",
     {
       description: "Create a new Fluxa location. This writes to pos_machines and creates the first attempt.",
-      inputSchema: {
-        name: z.string().min(1),
-        address: z.string().min(1),
-        brand: z.string().min(1),
-        bin: z.string().min(1),
-        city: z.string().min(1),
-        status: z.enum(["active", "inactive"]),
-        lat: z.number(),
-        lng: z.number(),
-        notes: z.string().optional(),
-        transactionStatus: z.enum(["Success", "Fault", "Unknown"]).optional(),
-        network: z.string().optional(),
-        paymentMethod: z.string().optional(),
-        cvm: z.string().optional(),
-        acquiringMode: z.string().optional(),
-        acquirer: z.string().optional(),
-        posModel: z.string().optional(),
-        checkoutLocation: z.enum(["Staffed Checkout", "Self-checkout"]).optional(),
-        attemptedAt: z.string().optional()
-      }
+      inputSchema: createLocationInputShape
     },
     async (args) => {
       const liveSession = await sessionService.authenticateMcpSession(sessionToken);
       ensureScope(liveSession, "locations.write");
       return withAudit(liveSession, "create_location", args, async () => {
-        const location = await fluxaService.createLocation(liveSession.userId, args);
+        const location = await fluxaService.createLocation(liveSession.userId, args, {
+          allowMissingCity: await fluxaService.isAdminUser(liveSession.userId)
+        });
         return {
           summary: `Created location ${location.name}.`,
           data: location
+        };
+      });
+    }
+  );
+
+  server.registerTool(
+    "create_shell_location",
+    {
+      description: "Create a new shell Fluxa location in fluxa_locations without writing any payment attempt record.",
+      inputSchema: createLocationInputShape
+    },
+    async (args) => {
+      const liveSession = await sessionService.authenticateMcpSession(sessionToken);
+      ensureScope(liveSession, "locations.write");
+      return withAudit(liveSession, "create_shell_location", args, async () => {
+        const location = await fluxaService.createShellLocation(liveSession.userId, args, {
+          allowMissingCity: await fluxaService.isAdminUser(liveSession.userId)
+        });
+        return {
+          summary: `Created shell location ${location.name}.`,
+          data: location
+        };
+      });
+    }
+  );
+
+  server.registerTool(
+    "bulk_create_locations",
+    {
+      description:
+        "Admin-only. Batch create multiple Fluxa locations in one call. City can be omitted and will be inferred from address when possible. Set create_as_shell=true to seed shell locations without any attempt record.",
+      inputSchema: {
+        locations: z.array(z.object(createLocationInputShape)).min(1).max(100),
+        create_as_shell: z.boolean().optional()
+      }
+    },
+    async ({ locations, create_as_shell }) => {
+      const liveSession = await sessionService.authenticateMcpSession(sessionToken);
+      ensureScope(liveSession, "locations.write");
+      return withAudit(liveSession, "bulk_create_locations", { locations, create_as_shell }, async () => {
+        const results = await fluxaService.bulkCreateLocations(liveSession.userId, locations, {
+          createAsShell: create_as_shell
+        });
+        const successCount = results.filter((item) => item.success).length;
+        return {
+          summary: `Bulk create finished: ${successCount}/${results.length} locations created.`,
+          data: {
+            total: results.length,
+            successCount,
+            failureCount: results.length - successCount,
+            results
+          }
         };
       });
     }
@@ -699,11 +1001,82 @@ app.post("/api/mcp/sessions/:id/revoke", async (request, response) => {
   }
 });
 
-app.all(["/mcp/:sessionToken", "/api/mcp/:sessionToken"], async (request, response) => {
-  const sessionTokenParam = request.params.sessionToken;
-  const rawSessionToken = Array.isArray(sessionTokenParam) ? sessionTokenParam[0]?.trim() : sessionTokenParam?.trim();
-  if (!rawSessionToken) {
-    response.status(400).json({ error: "Missing MCP session token in path." });
+app.post("/api/mcp/sessions/revoke", async (request, response) => {
+  try {
+    const user = await authenticateUserRequest(request);
+    const sessionId = getSessionIdFromRequest(request);
+    await sessionService.revokeSession(user.id, sessionId);
+    response.status(204).end();
+  } catch (error) {
+    response.status(getErrorStatus(error, 400)).json({
+      error: getErrorMessage(error, "Unable to revoke MCP session.")
+    });
+  }
+});
+
+app.post("/api/admin/brand-map-search", async (request, response) => {
+  try {
+    const user = await authenticateUserRequest(request);
+    await fluxaService.requireAdminUser(user.id);
+    const parsed = adminMapBrandSearchRequestSchema.parse(request.body);
+    const result = await fluxaService.searchBrandLocationsOnMap({
+      brand: parsed.brand,
+      area: parsed.area,
+      brandAliases: parsed.brandAliases,
+      countryCode: parsed.countryCode,
+      limit: parsed.limit
+    });
+
+    response.json(result);
+  } catch (error) {
+    response.status(getErrorStatus(error, 400)).json({
+      error: getErrorMessage(error, "Unable to search brand locations on the map.")
+    });
+  }
+});
+
+app.post("/api/admin/brand-map-import", async (request, response) => {
+  try {
+    const user = await authenticateUserRequest(request);
+    const parsed = adminMapBrandImportRequestSchema.parse(request.body);
+    const result = await fluxaService.bulkImportBrandLocationsFromMap(user.id, {
+      brand: parsed.brand,
+      area: parsed.area,
+      brandAliases: parsed.brandAliases,
+      countryCode: parsed.countryCode,
+      limit: parsed.limit,
+      bin: parsed.bin,
+      status: parsed.status,
+      notes: parsed.notes,
+      transactionStatus: parsed.transactionStatus,
+      network: parsed.network,
+      paymentMethod: parsed.paymentMethod,
+      cvm: parsed.cvm,
+      acquiringMode: parsed.acquiringMode,
+      acquirer: parsed.acquirer,
+      posModel: parsed.posModel,
+      checkoutLocation: parsed.checkoutLocation,
+      attemptedAt: parsed.attemptedAt,
+      skipExisting: parsed.skipExisting,
+      createAsShell: parsed.createAsShell
+    });
+
+    response.json(result);
+  } catch (error) {
+    response.status(getErrorStatus(error, 400)).json({
+      error: getErrorMessage(error, "Unable to import brand locations from the map.")
+    });
+  }
+});
+
+app.all(["/mcp/:sessionToken", "/api/mcp/:sessionToken", "/mcp", "/api/mcp/connect"], async (request, response) => {
+  let rawSessionToken = "";
+  try {
+    rawSessionToken = getMcpSessionTokenFromRequest(request);
+  } catch (error) {
+    response.status(getErrorStatus(error, 400)).json({
+      error: getErrorMessage(error, "Missing MCP session token.")
+    });
     return;
   }
 
@@ -717,18 +1090,33 @@ app.all(["/mcp/:sessionToken", "/api/mcp/:sessionToken"], async (request, respon
   }
 
   try {
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true
     });
     const server = createMcpServer(rawSessionToken);
-
-    transport.onclose = () => {
-      void server.close();
+    let isClosingServer = false;
+    const closeServer = () => {
+      if (isClosingServer) {
+        return;
+      }
+      isClosingServer = true;
+      void server.close().catch((closeError) => {
+        console.error("Failed to close MCP server.", closeError);
+      });
     };
 
+    transport.onclose = closeServer;
+
     await server.connect(transport);
-    await transport.handleRequest(request, response, request.body);
+    const webRequest = buildWebRequestFromExpress(request);
+    const webResponse = await transport.handleRequest(webRequest, {
+      parsedBody: request.body
+    });
+    void response.on("close", () => {
+      closeServer();
+    });
+    await sendWebResponseToExpress(webResponse, response);
   } catch (error) {
     console.error("Failed to handle MCP request.", error);
     if (!response.headersSent) {

@@ -16,6 +16,8 @@ const securityJsCode =
 
 let amapLoadPromise: Promise<any> | null = null;
 const globalWindow = window as unknown as Record<string, unknown>;
+const AMAP_LOAD_TIMEOUT_MS = 15000;
+const AMAP_PROXY_PATH = "/api/amap/js";
 
 export const DEFAULT_FLUXA_MAP_CENTER: [number, number] = [121.4737, 31.2304];
 export const SHANGHAI_GOVERNMENT_FALLBACK = {
@@ -46,6 +48,91 @@ function mapErrorMessage(message: string): Error {
   return new Error(message);
 }
 
+function buildAMapScriptSearchParams(callbackName: string): URLSearchParams {
+  const config = getAMapConfig();
+  const searchParams = new URLSearchParams({
+    v: config.version,
+    key: config.key ?? "",
+    callback: callbackName
+  });
+
+  if (config.plugins.length > 0) {
+    searchParams.set("plugin", config.plugins.join(","));
+  }
+
+  return searchParams;
+}
+
+function buildAMapScriptUrl(callbackName: string, useProxy: boolean): string {
+  const searchParams = buildAMapScriptSearchParams(callbackName);
+  const query = searchParams.toString();
+  return useProxy ? `${AMAP_PROXY_PATH}?${query}` : `https://webapi.amap.com/maps?${query}`;
+}
+
+function injectScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      script.remove();
+      reject(new Error(`Script load failed: ${src}`));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+async function injectProxyScript(src: string): Promise<void> {
+  const response = await fetch(src, {
+    cache: "no-store",
+    credentials: "same-origin"
+  });
+
+  if (!response.ok) {
+    throw new Error(`同源代理返回 ${response.status}`);
+  }
+
+  const scriptText = await response.text();
+  const normalizedScript = scriptText.trimStart();
+  if (!normalizedScript) {
+    throw new Error("同源代理返回空脚本");
+  }
+  if (normalizedScript.startsWith("<!DOCTYPE") || normalizedScript.startsWith("<html")) {
+    throw new Error("同源代理返回了 HTML，而不是 JS SDK");
+  }
+
+  const blobUrl = URL.createObjectURL(new Blob([scriptText], { type: "application/javascript" }));
+
+  try {
+    await injectScript(blobUrl);
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+async function loadAMapScript(callbackName: string): Promise<void> {
+  const errors: string[] = [];
+
+  try {
+    await injectProxyScript(buildAMapScriptUrl(callbackName, true));
+    return;
+  } catch (error) {
+    errors.push(`同源代理失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    await injectScript(buildAMapScriptUrl(callbackName, false));
+    return;
+  } catch (error) {
+    errors.push(`官方域名失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  throw new Error(
+    `高德地图脚本加载失败。${errors.join("；")}。请检查浏览器拦截、企业代理或 CSP；如果控制台显示 ERR_CONNECTION_CLOSED，请优先排查对 webapi.amap.com 的拦截。`
+  );
+}
+
 export const loadAMap = async (): Promise<any> => {
   if (window.AMap) {
     return window.AMap;
@@ -71,7 +158,7 @@ export const loadAMap = async (): Promise<any> => {
     const timeoutId = window.setTimeout(() => {
       delete globalWindow[callbackName];
       reject(new Error("高德地图加载超时，请检查网络或 Key 配置。"));
-    }, 15000);
+    }, AMAP_LOAD_TIMEOUT_MS);
 
     globalWindow[callbackName] = () => {
       window.clearTimeout(timeoutId);
@@ -83,16 +170,11 @@ export const loadAMap = async (): Promise<any> => {
       resolve(window.AMap);
     };
 
-    const script = document.createElement("script");
-    const config = getAMapConfig();
-    script.src = `https://webapi.amap.com/maps?v=${config.version}&key=${config.key}&plugin=${config.plugins.join(",")}&callback=${callbackName}`;
-    script.async = true;
-    script.onerror = () => {
+    void loadAMapScript(callbackName).catch((error) => {
       window.clearTimeout(timeoutId);
       delete globalWindow[callbackName];
-      reject(new Error("高德地图脚本加载失败，请检查网络、CSP 或浏览器拦截。"));
-    };
-    document.head.appendChild(script);
+      reject(error);
+    });
   }).catch((error) => {
     amapLoadPromise = null;
     throw mapErrorMessage(error instanceof Error ? error.message : String(error));

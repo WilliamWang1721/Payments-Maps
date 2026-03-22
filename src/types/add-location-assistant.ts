@@ -1,4 +1,4 @@
-import type { LocationStatus } from "@/types/location";
+import type { LocationSpecialDateHours, LocationStatus, StaffProficiencyLevel } from "@/types/location";
 import type { SmartAddCardCandidate } from "@/lib/smart-add-card-search";
 import type { SmartAddReviewPrompt } from "@/lib/smart-add-review";
 
@@ -7,7 +7,6 @@ export interface AddLocationAssistantDraft {
   address: string;
   brand: string;
   city: string;
-  bin: string;
   status: LocationStatus;
   transactionStatus: "Success" | "Fault" | "Unknown";
   lat: number;
@@ -22,6 +21,11 @@ export interface AddLocationAssistantDraft {
   attemptYear: string;
   attemptMonth: string;
   attemptDay: string;
+  contactInfo: string;
+  weekdayBusinessHours: string;
+  weekendBusinessHours: string;
+  specialDateHours: LocationSpecialDateHours[];
+  staffProficiencyLevel: StaffProficiencyLevel | null;
   notes: string;
 }
 

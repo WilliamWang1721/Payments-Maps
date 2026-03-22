@@ -2,6 +2,20 @@ export type ViewMode = "map" | "list" | "brands";
 
 export type LocationStatus = "active" | "inactive";
 export type LocationSource = "fluxa_locations" | "pos_machines";
+export type SupportEvidenceStatus = "supported" | "unsupported" | "limited" | "unknown";
+export type SupportEvidenceKind = "attempt" | "official";
+export type StaffProficiencyLevel = 1 | 2 | 3 | 4 | 5;
+
+export interface LocationSpecialDateHours {
+  date: string;
+  hours: string;
+}
+
+export interface LocationBusinessHours {
+  weekday?: string;
+  weekend?: string;
+  specialDates?: LocationSpecialDateHours[];
+}
 
 export interface LocationAttemptRecord {
   id: string;
@@ -13,6 +27,12 @@ export interface LocationAttemptRecord {
   method: string;
   status: "success" | "declined" | "failed";
   notes?: string;
+  paymentMethod?: string;
+  cvm?: string;
+  acquiringMode?: string;
+  deviceStatus?: LocationStatus;
+  checkoutLocation?: string;
+  isConclusiveFailure?: boolean;
 }
 
 export interface LocationReviewRecord {
@@ -29,7 +49,6 @@ export interface LocationRecord {
   name: string;
   address: string;
   brand: string;
-  bin: string;
   city: string;
   addedBy?: string;
   supportedNetworks?: string[];
@@ -39,8 +58,45 @@ export interface LocationRecord {
   lng: number;
   createdAt: string;
   updatedAt: string;
+  businessHours?: LocationBusinessHours;
+  contactInfo?: string;
   notes?: string;
+  staffProficiencyLevel?: StaffProficiencyLevel | null;
+  staffProficiencyUpdatedAt?: string;
   source?: LocationSource;
+}
+
+export interface LocationSupportEvidenceItem {
+  id: string;
+  kind: SupportEvidenceKind;
+  title: string;
+  summary?: string;
+  status: SupportEvidenceStatus;
+  createdAt?: string;
+  addedBy?: string;
+  notes?: string;
+  disputed?: boolean;
+  invalidated?: boolean;
+}
+
+export interface LocationSupportInsightCounters {
+  supportingAttempts: number;
+  conflictingAttempts: number;
+  officialSources: number;
+}
+
+export interface LocationSupportInsight {
+  key: string;
+  title: string;
+  status: SupportEvidenceStatus;
+  rationale?: string;
+  evidence: LocationSupportEvidenceItem[];
+  counters: LocationSupportInsightCounters;
+}
+
+export interface LocationSupportInsights {
+  networks: LocationSupportInsight[];
+  paymentMethods: LocationSupportInsight[];
 }
 
 export interface LocationDetailRecord extends LocationRecord {
@@ -53,6 +109,7 @@ export interface LocationDetailRecord extends LocationRecord {
   totalAttempts: number;
   attempts: LocationAttemptRecord[];
   reviews: LocationReviewRecord[];
+  supportInsights?: LocationSupportInsights;
 }
 
 export interface CreateLocationAttemptInput {
@@ -74,12 +131,14 @@ export interface CreateLocationInput {
   name: string;
   address: string;
   brand: string;
-  bin: string;
-  city: string;
+  city?: string;
   status: LocationStatus;
   lat: number;
   lng: number;
+  businessHours?: LocationBusinessHours;
+  contactInfo?: string;
   notes?: string;
+  staffProficiencyLevel?: StaffProficiencyLevel | null;
   transactionStatus?: "Success" | "Fault" | "Unknown";
   network?: string;
   paymentMethod?: string;

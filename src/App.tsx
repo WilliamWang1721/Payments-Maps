@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { AddBrandSuccess } from "@/components/add-brand-success";
 import { AddBrandWizard } from "@/components/add-brand-wizard";
@@ -13,12 +13,20 @@ import { WebMcpSettings } from "@/components/web-mcp-settings";
 import { PlaceDetailWeb } from "@/components/place-detail-web";
 import { FluxaSidebar, type SidebarTab } from "@/components/fluxa-sidebar";
 import { WebSettings } from "@/components/web-settings";
+import { invalidateFluxaBrandDirectoryCache } from "@/hooks/use-fluxa-brand-catalog";
+import { useFluxaBrandRecord } from "@/hooks/use-fluxa-brand-record";
 import { useFluxaBrands } from "@/hooks/use-fluxa-brands";
+import { invalidateFluxaLocationCountsCache, useFluxaLocationCounts } from "@/hooks/use-fluxa-location-counts";
+import { invalidateFluxaLocationDirectoryCache, useFluxaLocationDirectory } from "@/hooks/use-fluxa-location-directory";
+import { invalidateFluxaLocationMapIndexCache, useFluxaLocationMapIndex } from "@/hooks/use-fluxa-location-map-index";
+import { invalidateFluxaLocationSearchDirectoryCache, useFluxaLocationSearchDirectory } from "@/hooks/use-fluxa-location-search-directory";
+import { invalidateFluxaMapPartitionCaches, useFluxaMapPartitions } from "@/hooks/use-fluxa-map-partitions";
 import { useFluxaLocations } from "@/hooks/use-fluxa-locations";
 import { useViewerProfile } from "@/hooks/use-viewer-profile";
-import { buildLocationSearchResults } from "@/lib/location-search";
+import { buildLocationSearchIndex, searchLocationSearchIndex } from "@/lib/location-search";
 import { buildFluxaPagePath, isSidebarTab, parseFluxaPageRoute, type FluxaPageRoute, type FluxaPageView } from "@/lib/fluxa-routes";
 import { DEFAULT_MAP_THEME, isMapThemeKey, MAP_THEME_STORAGE_KEY, type MapThemeKey } from "@/lib/map-theme";
+import { locationService } from "@/services/location-service";
 import type { BrandRecord, CreateBrandInput } from "@/types/brand";
 import type { CreateLocationInput, LocationRecord } from "@/types/location";
 
@@ -30,6 +38,8 @@ type OverlayView = "cards" | "addLocation" | "addLocationSuccess" | "addBrand" |
 type AppView = FluxaPageView | OverlayView;
 type ListPagingMode = "paged" | "scroll";
 type SearchableSidebarTab = Extract<SidebarTab, "map" | "list" | "brands">;
+
+let hasAutoLocatedMapInPageSession = false;
 
 interface AppProps {
   accessToken?: string;
@@ -71,7 +81,8 @@ export default function App({
   const [selectedBrand, setSelectedBrand] = useState<BrandRecord | null>(null);
   const [locateRequestKey, setLocateRequestKey] = useState(0);
   const [locating, setLocating] = useState(false);
-  const [hasAutoLocatedMap, setHasAutoLocatedMap] = useState(false);
+  const [hasVisitedMap, setHasVisitedMap] = useState(() => pageRoute.view === "map");
+  const [shouldWarmMapPartitions, setShouldWarmMapPartitions] = useState(() => pageRoute.view === "map");
   const [mapTheme, setMapTheme] = useState<MapThemeKey>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_MAP_THEME;
@@ -101,8 +112,71 @@ export default function App({
 
     return window.localStorage.getItem(MCP_BETA_STORAGE_KEY) === "true";
   });
-  const { locations, loading, saving, error, refreshLocations, createLocation } = useFluxaLocations();
-  const { brands, brandOptions, loading: brandsLoading, saving: brandsSaving, error: brandsError, createBrand } = useFluxaBrands();
+  const activeView: AppView = overlayView ?? pageRoute.view;
+  const sidebarActiveTab: SidebarTab = isSidebarTab(activeView)
+    ? activeView
+    : isSidebarTab(pageRoute.view)
+      ? pageRoute.view
+      : pageRoute.view === "brandDetail"
+        ? pageRoute.from || "brands"
+        : pageRoute.from || "map";
+  const currentSearchQuery =
+    sidebarActiveTab === "map" || sidebarActiveTab === "list" || sidebarActiveTab === "brands"
+      ? searchQueries[sidebarActiveTab]
+      : "";
+  const deferredSearchQuery = useDeferredValue(currentSearchQuery);
+  const listUsesFullDirectory = activeView === "list" && listPagingMode === "scroll";
+  const listUsesLightIndex = activeView === "list" && !listUsesFullDirectory;
+  const fullLocationsEnabled =
+    activeView === "history" ||
+    activeView === "detail";
+  const mapPartitionsEnabled = hasVisitedMap || activeView === "map" || shouldWarmMapPartitions;
+  const listDirectoryEnabled = listUsesFullDirectory;
+  const { locations, loading, saving, error, refreshLocations, createLocation, deleteLocation } = useFluxaLocations({
+    enabled: fullLocationsEnabled
+  });
+  const {
+    locations: listDirectoryLocations,
+    loading: listDirectoryLoading,
+    error: listDirectoryError,
+    refreshDirectory: refreshListDirectory
+  } = useFluxaLocationDirectory({
+    enabled: listDirectoryEnabled
+  });
+  const {
+    counts: listCounts,
+    loading: listCountsLoading,
+    error: listCountsError,
+    refreshCounts: refreshListCounts
+  } = useFluxaLocationCounts({
+    enabled: listUsesLightIndex
+  });
+  const {
+    indexPoints: listIndexPoints,
+    loading: listIndexLoading,
+    error: listIndexError,
+    refreshIndex: refreshListIndex
+  } = useFluxaLocationMapIndex({
+    enabled: listUsesLightIndex
+  });
+  const {
+    locations: locationSearchDirectory,
+    loading: locationSearchLoading
+  } = useFluxaLocationSearchDirectory({
+    enabled: sidebarActiveTab === "map" || sidebarActiveTab === "list"
+  });
+  const {
+    indexPoints: mapIndexPoints,
+    locations: mapLocations,
+    loading: mapLoading,
+    error: mapError,
+    summary: mapSummary,
+    handleViewportChange: handleMapViewportChange,
+    refreshVisiblePartitions
+  } = useFluxaMapPartitions({
+    enabled: mapPartitionsEnabled
+  });
+  const { brandOptions, saving: brandsSaving, createBrand } = useFluxaBrands();
 
   const navigatePage = (nextRoute: FluxaPageRoute, options?: { replace?: boolean }): void => {
     if (typeof window !== "undefined") {
@@ -157,6 +231,11 @@ export default function App({
 
   const handleCreateLocation = async (input: CreateLocationInput): Promise<void> => {
     const createdLocation = await createLocation(input);
+    invalidateFluxaLocationCountsCache();
+    invalidateFluxaLocationDirectoryCache();
+    invalidateFluxaLocationMapIndexCache();
+    invalidateFluxaLocationSearchDirectoryCache();
+    invalidateFluxaMapPartitionCaches();
     setLastCreatedLocation(createdLocation);
     setSelectedLocation(createdLocation);
     setOverlayView("addLocationSuccess");
@@ -164,36 +243,80 @@ export default function App({
 
   const handleCreateBrand = async (input: CreateBrandInput): Promise<void> => {
     const createdBrand = await createBrand(input);
+    invalidateFluxaBrandDirectoryCache();
     setLastCreatedBrand(createdBrand);
     setOverlayView("addBrandSuccess");
   };
 
-  const activeView: AppView = overlayView ?? pageRoute.view;
-  const sidebarActiveTab: SidebarTab = isSidebarTab(activeView)
-    ? activeView
-    : isSidebarTab(pageRoute.view)
-      ? pageRoute.view
-      : pageRoute.view === "brandDetail"
-        ? pageRoute.from || "brands"
-        : pageRoute.from || "map";
-  const currentSearchQuery =
-    sidebarActiveTab === "map" || sidebarActiveTab === "list" || sidebarActiveTab === "brands"
-      ? searchQueries[sidebarActiveTab]
-      : "";
-  const currentSearchSuggestions = useMemo(
-    () => (sidebarActiveTab === "map" || sidebarActiveTab === "list" ? buildLocationSearchResults(locations, currentSearchQuery) : []),
-    [currentSearchQuery, locations, sidebarActiveTab]
+  const handleDeleteLocation = async (locationToDelete: LocationRecord): Promise<void> => {
+    await deleteLocation(locationToDelete.id);
+    invalidateFluxaLocationCountsCache();
+    invalidateFluxaLocationDirectoryCache();
+    invalidateFluxaLocationMapIndexCache();
+    invalidateFluxaLocationSearchDirectoryCache();
+    invalidateFluxaMapPartitionCaches();
+
+    setSelectedLocation((current) => (current?.id === locationToDelete.id ? null : current));
+    setMapFocusLocation((current) => (current?.id === locationToDelete.id ? null : current));
+    setLastCreatedLocation((current) => (current?.id === locationToDelete.id ? null : current));
+
+    const nextView = pageRoute.view === "detail" ? pageRoute.from || "map" : "map";
+    navigatePage({ view: nextView });
+  };
+
+  const refreshListLightMode = async (): Promise<void> => {
+    invalidateFluxaLocationCountsCache();
+    invalidateFluxaLocationMapIndexCache();
+    await Promise.all([refreshListCounts(), refreshListIndex()]);
+  };
+
+  const searchableLocations =
+    sidebarActiveTab === "map"
+      ? mapLocations
+      : sidebarActiveTab === "list"
+        ? listUsesFullDirectory
+          ? listDirectoryLocations
+          : []
+        : locations;
+  const canvasLocations = activeView === "map" ? mapLocations : locations;
+  const locationSearchIndex = useMemo(() => buildLocationSearchIndex(locationSearchDirectory), [locationSearchDirectory]);
+  const searchResults = useMemo(
+    () =>
+      sidebarActiveTab === "map" || sidebarActiveTab === "list"
+        ? searchLocationSearchIndex(locationSearchIndex, deferredSearchQuery)
+        : [],
+    [deferredSearchQuery, locationSearchIndex, sidebarActiveTab]
   );
+  const currentSearchSuggestions = useMemo(() => searchResults.slice(0, 8), [searchResults]);
+  const currentSearchMatchedIds = useMemo(() => searchResults.map((result) => result.location.id), [searchResults]);
+  const searchDirectoryById = useMemo(
+    () => new Map(locationSearchDirectory.map((location) => [location.id, location])),
+    [locationSearchDirectory]
+  );
+  const searchQuerySettled = deferredSearchQuery === currentSearchQuery;
+  const displayedSearchSuggestions = searchQuerySettled ? currentSearchSuggestions : [];
+  const searchSuggestionsLoading =
+    (sidebarActiveTab === "map" || sidebarActiveTab === "list")
+    && currentSearchQuery.trim().length > 0
+    && (locationSearchLoading || !searchQuerySettled);
   const detailLocation = pageRoute.view === "detail" && pageRoute.locationId
     ? locations.find((location) => location.id === pageRoute.locationId)
       || (selectedLocation?.id === pageRoute.locationId ? selectedLocation : null)
       || (lastCreatedLocation?.id === pageRoute.locationId ? lastCreatedLocation : null)
     : null;
-  const detailBrand = pageRoute.view === "brandDetail" && pageRoute.brandId
-    ? brands.find((brand) => brand.id === pageRoute.brandId)
-      || (selectedBrand?.id === pageRoute.brandId ? selectedBrand : null)
+  const detailBrandFallback = pageRoute.view === "brandDetail" && pageRoute.brandId
+    ? (selectedBrand?.id === pageRoute.brandId ? selectedBrand : null)
       || (lastCreatedBrand?.id === pageRoute.brandId ? lastCreatedBrand : null)
     : null;
+  const {
+    brand: detailBrand,
+    loading: detailBrandLoading,
+    error: detailBrandError
+  } = useFluxaBrandRecord({
+    brandId: pageRoute.view === "brandDetail" ? pageRoute.brandId : null,
+    enabled: activeView === "brandDetail",
+    initialBrand: detailBrandFallback
+  });
   const {
     profile: viewerProfile,
     loading: viewerProfileLoading,
@@ -243,11 +366,44 @@ export default function App({
   }, [locations, pageRoute.locationId, pageRoute.view]);
 
   useEffect(() => {
-    if (activeView === "map" && !hasAutoLocatedMap) {
-      setLocateRequestKey((prev) => prev + 1);
-      setHasAutoLocatedMap(true);
+    if (activeView === "map") {
+      setHasVisitedMap(true);
     }
-  }, [activeView, hasAutoLocatedMap]);
+  }, [activeView]);
+
+  useEffect(() => {
+    if (shouldWarmMapPartitions || hasVisitedMap || activeView === "map" || typeof window === "undefined") {
+      return;
+    }
+
+    let timeoutId: number | null = null;
+    let idleCallbackId: number | null = null;
+    const warmMapPartitions = () => setShouldWarmMapPartitions(true);
+    const requestIdleCallback = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback.bind(window) : null;
+    const cancelIdleCallback = typeof window.cancelIdleCallback === "function" ? window.cancelIdleCallback.bind(window) : null;
+
+    if (requestIdleCallback) {
+      idleCallbackId = requestIdleCallback(warmMapPartitions, { timeout: 1800 });
+    } else {
+      timeoutId = window.setTimeout(warmMapPartitions, 1200);
+    }
+
+    return () => {
+      if (idleCallbackId !== null && cancelIdleCallback) {
+        cancelIdleCallback(idleCallbackId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeView, hasVisitedMap, shouldWarmMapPartitions]);
+
+  useEffect(() => {
+    if (activeView === "map" && !hasAutoLocatedMapInPageSession) {
+      hasAutoLocatedMapInPageSession = true;
+      setLocateRequestKey((prev) => prev + 1);
+    }
+  }, [activeView]);
 
   const handleMapThemeChange = (theme: MapThemeKey): void => {
     setMapTheme(theme);
@@ -282,23 +438,35 @@ export default function App({
   };
 
   const handleSearchSuggestionSelect = (locationId: string): void => {
-    const matchedLocation = locations.find((location) => location.id === locationId);
-    if (!matchedLocation) {
-      return;
-    }
+    void (async () => {
+      let matchedLocation =
+        searchableLocations.find((location) => location.id === locationId)
+        || locations.find((location) => location.id === locationId)
+        || mapLocations.find((location) => location.id === locationId);
+      const searchRecord = searchDirectoryById.get(locationId);
 
-    if (sidebarActiveTab === "map" || sidebarActiveTab === "list") {
-      setSearchQueries((prev) => ({
-        ...prev,
-        [sidebarActiveTab]: matchedLocation.name
-      }));
-    }
+      if (!matchedLocation) {
+        const fetchedLocations = await locationService.listLocationsByIds([locationId]);
+        matchedLocation = fetchedLocations[0];
+      }
 
-    if (sidebarActiveTab === "map") {
-      setSelectedLocation(matchedLocation);
-      setMapFocusLocation(matchedLocation);
-      setMapFocusRequestKey((prev) => prev + 1);
-    }
+      if (sidebarActiveTab === "map" || sidebarActiveTab === "list") {
+        setSearchQueries((prev) => ({
+          ...prev,
+          [sidebarActiveTab]: matchedLocation?.name || searchRecord?.name || prev[sidebarActiveTab]
+        }));
+      }
+
+      if (!matchedLocation) {
+        return;
+      }
+
+      if (sidebarActiveTab === "map") {
+        setSelectedLocation(matchedLocation);
+        setMapFocusLocation(matchedLocation);
+        setMapFocusRequestKey((prev) => prev + 1);
+      }
+    })();
   };
 
   return (
@@ -326,6 +494,7 @@ export default function App({
             <PlaceDetailWeb
               location={detailLocation}
               locationLoading={pageRoute.view === "detail" && Boolean(pageRoute.locationId) && loading && !detailLocation}
+              onDeleteLocation={handleDeleteLocation}
               onViewMap={() => {
                 if (detailLocation) {
                   setSelectedLocation(detailLocation);
@@ -342,7 +511,8 @@ export default function App({
           <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
             <BrandDetailWeb
               brand={detailBrand}
-              locations={locations}
+              error={detailBrandError}
+              loading={detailBrandLoading}
               onBack={() => navigatePage({ view: "brands" })}
               onOpenLocation={openLocationDetail}
             />
@@ -444,7 +614,8 @@ export default function App({
                 listSort={listSort}
                 locating={locating}
                 searchQuery={currentSearchQuery}
-                searchSuggestions={currentSearchSuggestions}
+                searchLoading={searchSuggestionsLoading}
+                searchSuggestions={displayedSearchSuggestions}
                 onListPagingModeToggle={handleListPagingModeToggle}
                 onListSortChange={setListSort}
                 onLocate={() => setLocateRequestKey((prev) => prev + 1)}
@@ -465,21 +636,43 @@ export default function App({
               <div className="flex min-h-0 w-full flex-1">
                 <FluxaMapCanvas
                   activeTab={sidebarActiveTab}
-                  brands={brands}
                   brandDraftCount={brandDraftCount}
-                  error={sidebarActiveTab === "brands" ? brandsError || error : error}
+                  error={
+                    activeView === "map"
+                      ? mapError
+                      : activeView === "list"
+                        ? listUsesFullDirectory
+                          ? listDirectoryError
+                          : listCountsError || listIndexError
+                        : error
+                  }
                   listPagingMode={listPagingMode}
                   listSort={listSort}
-                  loading={sidebarActiveTab === "brands" ? brandsLoading : loading}
+                  listDirectoryLocations={listDirectoryLocations}
+                  loading={
+                    activeView === "map"
+                      ? mapLoading
+                      : activeView === "list"
+                        ? listUsesFullDirectory
+                          ? listDirectoryLoading
+                          : listCountsLoading || listIndexLoading
+                        : loading
+                  }
+                  listCounts={listCounts}
                   locateRequestKey={locateRequestKey}
-                  locations={locations}
+                  locations={canvasLocations}
+                  mapIndexPoints={activeView === "list" ? listIndexPoints : mapIndexPoints}
+                  locationSearchDirectory={locationSearchDirectory}
+                  mapSummary={mapSummary}
                   mapTheme={mapTheme}
                   mapFocusLocation={mapFocusLocation}
                   mapFocusRequestKey={mapFocusRequestKey}
                   onLocatingChange={setLocating}
+                  onMapViewportChange={handleMapViewportChange}
                   onOpenBrandDetail={openBrandDetail}
                   onOpenDetail={openLocationDetail}
-                  onRefresh={refreshLocations}
+                  onRefresh={activeView === "map" ? refreshVisiblePartitions : activeView === "list" ? (listUsesFullDirectory ? refreshListDirectory : refreshListLightMode) : refreshLocations}
+                  searchMatchedIds={currentSearchMatchedIds}
                   searchQuery={currentSearchQuery}
                   viewerProfile={viewerProfile}
                   viewerProfileError={viewerProfileError}

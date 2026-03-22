@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { brandService } from "@/services/brand-service";
 import type { BrandRecord, CreateBrandInput } from "@/types/brand";
@@ -27,6 +27,7 @@ function formatErrorMessage(error: unknown): string {
 
 export function useFluxaBrands(): UseFluxaBrandsResult {
   const [brands, setBrands] = useState<BrandRecord[]>([]);
+  const [brandOptions, setBrandOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,8 +35,9 @@ export function useFluxaBrands(): UseFluxaBrandsResult {
   const refreshBrands = useCallback(async () => {
     setLoading(true);
     try {
-      const nextBrands = await brandService.listBrands();
-      setBrands(nextBrands);
+      const nextBrandOptions = await brandService.listBrandOptions();
+      setBrands([]);
+      setBrandOptions(nextBrandOptions);
       setError(null);
     } catch (err) {
       setError(formatErrorMessage(err));
@@ -53,16 +55,17 @@ export function useFluxaBrands(): UseFluxaBrandsResult {
     try {
       const created = await brandService.createBrand(input);
       try {
-        const nextBrands = await brandService.listBrands();
-        setBrands(nextBrands);
-        const syncedBrand =
-          nextBrands.find((brand) => brand.id === created.id) ||
-          nextBrands.find((brand) => brand.name === created.name) ||
-          created;
+        const nextBrandOptions = await brandService.listBrandOptions();
+        setBrands([]);
+        setBrandOptions(nextBrandOptions);
         setError(null);
-        return syncedBrand;
+        return created;
       } catch {
-        setBrands((prev) => [created, ...prev.filter((brand) => brand.id !== created.id)]);
+        setBrandOptions((prev) =>
+          Array.from(new Set([created.name, ...prev.filter((option) => option !== created.name)])).sort((left, right) =>
+            left.localeCompare(right, "zh-CN")
+          )
+        );
       }
 
       setError(null);
@@ -75,14 +78,6 @@ export function useFluxaBrands(): UseFluxaBrandsResult {
       setSaving(false);
     }
   }, []);
-
-  const brandOptions = useMemo(
-    () =>
-      Array.from(new Set(brands.map((brand) => brand.name).filter(Boolean))).sort((left, right) =>
-        left.localeCompare(right, "zh-CN")
-      ),
-    [brands]
-  );
 
   return {
     brands,

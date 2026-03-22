@@ -3,7 +3,10 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase.js";
 import type {
   BrandRecord,
+  BulkImportBrandLocationsFromMapInput,
+  BulkImportBrandLocationsFromMapResult,
   BrowsingHistoryRecord,
+  BulkCreateLocationResult,
   CardAlbumCard,
   ContributorRankingRecord,
   CreateCardAlbumCardInput,
@@ -14,10 +17,12 @@ import type {
   LocationDetailRecord,
   LocationRecord,
   LocationReviewRecord,
+  MapBrandLocationSearchRecord,
   SiteStatisticsRecord,
   UpdateViewerProfileInput,
   ViewerProfileRecord
 } from "./types.js";
+import { MapSearchService } from "./map-search-service.js";
 
 type RecordValue = Record<string, unknown>;
 
@@ -253,9 +258,499 @@ const CARD_ALBUM_COLUMNS = `
 
 const IGNORABLE_ERROR_CODES = new Set(["PGRST116", "PGRST205", "42P01", "42703", "406"]);
 const MISSING_RPC_ERROR_CODES = new Set(["PGRST202", "42883"]);
+const mapSearchService = new MapSearchService();
 
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function normalizeComparisonText(value: unknown): string {
+  return normalizeString(value)
+    .toLocaleLowerCase("zh-CN")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function normalizeStoreToken(value: unknown): string {
+  const normalized = normalizeString(value)
+    .replaceAll("零", "0")
+    .replaceAll("〇", "0")
+    .replaceAll("一", "1")
+    .replaceAll("二", "2")
+    .replaceAll("两", "2")
+    .replaceAll("三", "3")
+    .replaceAll("四", "4")
+    .replaceAll("五", "5")
+    .replaceAll("六", "6")
+    .replaceAll("七", "7")
+    .replaceAll("八", "8")
+    .replaceAll("九", "9");
+
+  return normalizeComparisonText(normalized);
+}
+
+function buildAdministrativeTokenVariants(value: unknown): string[] {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const stripped = normalized.replace(/(特别行政区|自治区|自治州|地区|盟|省|市|区|县|旗)$/u, "");
+  return Array.from(new Set([normalizeStoreToken(normalized), normalizeStoreToken(stripped)].filter(Boolean)));
+}
+
+function buildRoundedCoordinateKey(lat: number, lng: number): string {
+  return `${lat.toFixed(5)}|${lng.toFixed(5)}`;
+}
+
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceMeters(
+  left: { lat: number; lng: number },
+  right: { lat: number; lng: number }
+): number {
+  const earthRadiusMeters = 6_371_000;
+  const deltaLat = toRadians(right.lat - left.lat);
+  const deltaLng = toRadians(right.lng - left.lng);
+  const leftLat = toRadians(left.lat);
+  const rightLat = toRadians(right.lat);
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(leftLat) * Math.cos(rightLat) * Math.sin(deltaLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
+function extractCommercialComplexToken(value: string): string {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const sourceCandidates = [normalized];
+  const afterHouseNumber = normalized.replace(/^.*\d+号/u, "").trim();
+  if (afterHouseNumber && afterHouseNumber !== normalized) {
+    sourceCandidates.unshift(afterHouseNumber);
+  }
+
+  const patterns = [
+    /([\p{Script=Han}A-Za-z0-9]{2,20}(?:购物中心|奥特莱斯|奥莱|万象城|万象汇|万达广场|广场|商城|商场|中心|天地))/gu,
+    /([\p{Script=Han}A-Za-z0-9]{2,20}(?:机场|火车站|高铁站|航站楼))/gu
+  ];
+
+  for (const source of sourceCandidates) {
+    for (const pattern of patterns) {
+      const matches = Array.from(source.matchAll(pattern)).map((match) => match[1]).filter(Boolean);
+      if (matches.length > 0) {
+        const token = matches.sort((left, right) => left.length - right.length)[0];
+        return normalizeComparisonText(token);
+      }
+    }
+  }
+
+  return "";
+}
+
+function buildAmbiguousCandidateIndex(candidates: Array<{ name: string; address: string; lat: number; lng: number }>) {
+  const ambiguousIndexes = new Set<number>();
+
+  candidates.forEach((candidate, index) => {
+    const leftComplexToken =
+      extractCommercialComplexToken(candidate.address) || extractCommercialComplexToken(candidate.name);
+    if (!leftComplexToken) {
+      return;
+    }
+
+    for (let nextIndex = index + 1; nextIndex < candidates.length; nextIndex += 1) {
+      const other = candidates[nextIndex];
+      const rightComplexToken =
+        extractCommercialComplexToken(other.address) || extractCommercialComplexToken(other.name);
+      if (!rightComplexToken || leftComplexToken !== rightComplexToken) {
+        continue;
+      }
+
+      if (normalizeComparisonText(candidate.name) === normalizeComparisonText(other.name)) {
+        continue;
+      }
+
+      const distanceMeters = calculateDistanceMeters(candidate, other);
+      if (distanceMeters > 120) {
+        continue;
+      }
+
+      ambiguousIndexes.add(index);
+      ambiguousIndexes.add(nextIndex);
+    }
+  });
+
+  return {
+    isAmbiguous(index: number) {
+      return ambiguousIndexes.has(index);
+    }
+  };
+}
+
+function buildLocationImportNotes(existingNotes: string | undefined, brand: string, area: string): string {
+  const parts = [normalizeString(existingNotes), `Imported from map search for ${brand} within ${area}.`].filter(Boolean);
+  return parts.join("\n\n");
+}
+
+function buildLocationStoreIdentityKey(location: Pick<LocationRecord, "name" | "brand" | "city" | "address">): string {
+  let normalized = normalizeStoreToken(location.name);
+  const removableParts = [
+    ...buildAdministrativeTokenVariants(location.brand),
+    ...buildAdministrativeTokenVariants(location.city),
+    ...buildAdministrativeTokenVariants(extractCommercialComplexToken(location.address)),
+    ...buildAdministrativeTokenVariants(extractCommercialComplexToken(location.name))
+  ];
+
+  for (const part of removableParts) {
+    normalized = normalized.replaceAll(part, "");
+  }
+
+  normalized = normalized
+    .replaceAll(normalizeStoreToken("咖啡"), "")
+    .replaceAll(normalizeStoreToken("coffee"), "");
+
+  return normalized || normalizeStoreToken(location.name);
+}
+
+function collectAddressTokens(value: string, pattern: RegExp): string[] {
+  return Array.from(normalizeString(value).matchAll(pattern))
+    .map((match) => normalizeStoreToken(match[0]))
+    .filter(Boolean);
+}
+
+function buildAddressTokenSet(location: Pick<LocationRecord, "address" | "name">): Set<string> {
+  const tokens = new Set<string>();
+  const complexToken = extractCommercialComplexToken(location.address) || extractCommercialComplexToken(location.name);
+
+  if (complexToken) {
+    tokens.add(complexToken);
+  }
+
+  [
+    ...collectAddressTokens(location.address, /[\p{Script=Han}A-Za-z0-9]{2,24}(?:路|街|大道|大街|道|巷|胡同|弄|里)/gu),
+    ...collectAddressTokens(location.address, /\d+[A-Za-z0-9-]*(?:号|号院|号楼|号门|号口)/gu),
+    ...collectAddressTokens(location.address, /(?:[A-Za-z]?\d+[A-Za-z0-9-]*|[零〇一二两三四五六七八九十]{1,4})(?:层|楼|座|栋|期|单元|室|铺|号门)/gu)
+  ].forEach((token) => {
+    tokens.add(token);
+  });
+
+  return tokens;
+}
+
+function buildSpecificAddressTokens(location: Pick<LocationRecord, "address">) {
+  return {
+    houseNumbers: new Set(collectAddressTokens(location.address, /\d+[A-Za-z0-9-]*(?:号|号院|号楼|号门|号口)/gu)),
+    detailTokens: new Set(
+      collectAddressTokens(location.address, /(?:[A-Za-z]?\d+[A-Za-z0-9-]*|[零〇一二两三四五六七八九十]{1,4})(?:层|楼|座|栋|期|单元|室|铺|号门)/gu)
+    )
+  };
+}
+
+function hasTokenIntersection(left: Set<string>, right: Set<string>): boolean {
+  for (const token of left) {
+    if (right.has(token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasConflictingSpecificAddressTokens(
+  left: Pick<LocationRecord, "address">,
+  right: Pick<LocationRecord, "address">
+): boolean {
+  const leftTokens = buildSpecificAddressTokens(left);
+  const rightTokens = buildSpecificAddressTokens(right);
+
+  if (leftTokens.houseNumbers.size > 0 && rightTokens.houseNumbers.size > 0 && !hasTokenIntersection(leftTokens.houseNumbers, rightTokens.houseNumbers)) {
+    return true;
+  }
+
+  if (leftTokens.detailTokens.size > 0 && rightTokens.detailTokens.size > 0 && !hasTokenIntersection(leftTokens.detailTokens, rightTokens.detailTokens)) {
+    return true;
+  }
+
+  return false;
+}
+
+function calculateAddressSimilarity(
+  left: Pick<LocationRecord, "address" | "name" | "city">,
+  right: Pick<LocationRecord, "address" | "name" | "city">
+): number {
+  const leftAddressKey = normalizeStoreToken([left.city, left.address].filter(Boolean).join(""));
+  const rightAddressKey = normalizeStoreToken([right.city, right.address].filter(Boolean).join(""));
+  if (!leftAddressKey || !rightAddressKey) {
+    return 0;
+  }
+
+  if (leftAddressKey === rightAddressKey) {
+    return 1;
+  }
+
+  if (hasConflictingSpecificAddressTokens(left, right)) {
+    return 0;
+  }
+
+  const shorterLength = Math.min(leftAddressKey.length, rightAddressKey.length);
+  if (shorterLength >= 12 && (leftAddressKey.includes(rightAddressKey) || rightAddressKey.includes(leftAddressKey))) {
+    return 0.94;
+  }
+
+  const leftTokens = buildAddressTokenSet(left);
+  const rightTokens = buildAddressTokenSet(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
+    return 0;
+  }
+
+  let sharedCount = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      sharedCount += 1;
+    }
+  }
+
+  const overlapRatio = sharedCount / Math.min(leftTokens.size, rightTokens.size);
+  const sharedComplexToken =
+    extractCommercialComplexToken(left.address) &&
+    extractCommercialComplexToken(left.address) === (extractCommercialComplexToken(right.address) || extractCommercialComplexToken(right.name));
+  const leftSpecificTokens = buildSpecificAddressTokens(left);
+  const rightSpecificTokens = buildSpecificAddressTokens(right);
+  const sharedHouseNumber = hasTokenIntersection(leftSpecificTokens.houseNumbers, rightSpecificTokens.houseNumbers);
+
+  if (overlapRatio >= 0.8 && (sharedComplexToken || sharedHouseNumber || sharedCount >= 3)) {
+    return 0.9;
+  }
+
+  if (overlapRatio >= 0.65 && sharedComplexToken && sharedHouseNumber) {
+    return 0.84;
+  }
+
+  return 0;
+}
+
+function areStoreKeysCompatible(leftStoreKey: string, rightStoreKey: string): boolean {
+  if (!leftStoreKey || !rightStoreKey) {
+    return false;
+  }
+
+  if (leftStoreKey === rightStoreKey) {
+    return true;
+  }
+
+  const shorter = leftStoreKey.length <= rightStoreKey.length ? leftStoreKey : rightStoreKey;
+  const longer = shorter === leftStoreKey ? rightStoreKey : leftStoreKey;
+  return shorter.length >= 4 && longer.includes(shorter);
+}
+
+function isSpecificStoreKey(storeKey: string): boolean {
+  return storeKey.length >= 6 || /\d/u.test(storeKey);
+}
+
+function hasStrongNameMatch(
+  left: Pick<LocationRecord, "name">,
+  right: Pick<LocationRecord, "name">
+): boolean {
+  const leftName = normalizeStoreToken(left.name);
+  const rightName = normalizeStoreToken(right.name);
+  if (!leftName || !rightName) {
+    return false;
+  }
+
+  if (leftName === rightName) {
+    return true;
+  }
+
+  const shorter = leftName.length <= rightName.length ? leftName : rightName;
+  const longer = shorter === leftName ? rightName : leftName;
+  return shorter.length >= 6 && longer.includes(shorter);
+}
+
+function scoreLocationQuality(location: Pick<LocationRecord, "name" | "address" | "source">): number {
+  let score = 0;
+  const address = normalizeString(location.address);
+
+  score += Math.min(address.length, 80);
+  if (/\d+号/u.test(address)) {
+    score += 20;
+  }
+  if (/(层|座|栋|铺|单元|号门|航站楼|登机口)/u.test(address)) {
+    score += 15;
+  }
+  if (extractCommercialComplexToken(address) || extractCommercialComplexToken(location.name)) {
+    score += 12;
+  }
+  if (address.includes(",")) {
+    score -= 12;
+  }
+  if (location.source === "pos_machines") {
+    score += 8;
+  }
+
+  return score;
+}
+
+function areLikelyDuplicateLocations(left: LocationRecord, right: LocationRecord): boolean {
+  if (normalizeComparisonText(left.brand) !== normalizeComparisonText(right.brand)) {
+    return false;
+  }
+
+  const addressSimilarity = calculateAddressSimilarity(left, right);
+  const leftStoreKey = buildLocationStoreIdentityKey(left);
+  const rightStoreKey = buildLocationStoreIdentityKey(right);
+  const exactNameMatch = normalizeStoreToken(left.name) === normalizeStoreToken(right.name);
+  const strongNameMatch = hasStrongNameMatch(left, right);
+  if (addressSimilarity >= 0.94 && areStoreKeysCompatible(leftStoreKey, rightStoreKey)) {
+    return true;
+  }
+
+  if (!areStoreKeysCompatible(leftStoreKey, rightStoreKey)) {
+    return false;
+  }
+
+  if (addressSimilarity >= 0.84) {
+    return true;
+  }
+
+  const leftComplexToken = extractCommercialComplexToken(left.address) || extractCommercialComplexToken(left.name);
+  const rightComplexToken = extractCommercialComplexToken(right.address) || extractCommercialComplexToken(right.name);
+  if (leftComplexToken && rightComplexToken && leftComplexToken === rightComplexToken && strongNameMatch) {
+    return true;
+  }
+
+  const distanceMeters = calculateDistanceMeters(left, right);
+  if (exactNameMatch && distanceMeters <= 1_000) {
+    return true;
+  }
+
+  if (strongNameMatch && distanceMeters <= 120) {
+    return true;
+  }
+
+  return isSpecificStoreKey(leftStoreKey) && isSpecificStoreKey(rightStoreKey) && distanceMeters <= 40;
+}
+
+function mergeDuplicateLocationRecords(left: LocationRecord, right: LocationRecord): LocationRecord {
+  const sourcePreferred =
+    left.source === "pos_machines"
+      ? left
+      : right.source === "pos_machines"
+        ? right
+        : scoreLocationQuality(left) >= scoreLocationQuality(right)
+          ? left
+          : right;
+  const qualityPreferred = scoreLocationQuality(left) >= scoreLocationQuality(right) ? left : right;
+
+  return {
+    ...sourcePreferred,
+    name: scoreLocationQuality(qualityPreferred) > scoreLocationQuality(sourcePreferred) ? qualityPreferred.name : sourcePreferred.name,
+    address: scoreLocationQuality(qualityPreferred) > scoreLocationQuality(sourcePreferred) ? qualityPreferred.address : sourcePreferred.address,
+    city: qualityPreferred.city || sourcePreferred.city,
+    lat: scoreLocationQuality(qualityPreferred) > scoreLocationQuality(sourcePreferred) ? qualityPreferred.lat : sourcePreferred.lat,
+    lng: scoreLocationQuality(qualityPreferred) > scoreLocationQuality(sourcePreferred) ? qualityPreferred.lng : sourcePreferred.lng,
+    notes: sourcePreferred.notes || qualityPreferred.notes,
+    addedBy: sourcePreferred.addedBy || qualityPreferred.addedBy,
+    supportedNetworks:
+      sourcePreferred.supportedNetworks && sourcePreferred.supportedNetworks.length > 0
+        ? sourcePreferred.supportedNetworks
+        : qualityPreferred.supportedNetworks,
+    createdAt: new Date(sourcePreferred.createdAt).getTime() <= new Date(qualityPreferred.createdAt).getTime()
+      ? sourcePreferred.createdAt
+      : qualityPreferred.createdAt,
+    updatedAt: new Date(sourcePreferred.updatedAt).getTime() >= new Date(qualityPreferred.updatedAt).getTime()
+      ? sourcePreferred.updatedAt
+      : qualityPreferred.updatedAt
+  };
+}
+
+function collapseDuplicateLocations(locations: LocationRecord[]): LocationRecord[] {
+  const deduped: LocationRecord[] = [];
+
+  for (const location of locations) {
+    const existingIndex = deduped.findIndex((existing) => areLikelyDuplicateLocations(existing, location));
+    if (existingIndex === -1) {
+      deduped.push(location);
+      continue;
+    }
+
+    deduped[existingIndex] = mergeDuplicateLocationRecords(deduped[existingIndex], location);
+  }
+
+  return deduped;
+}
+
+function buildExistingLocationLookup(locations: LocationRecord[], brand: string) {
+  const normalizedBrand = normalizeComparisonText(brand);
+  const addressKeys = new Set<string>();
+  const coordinateKeys = new Set<string>();
+  const nameCoordinateKeys = new Set<string>();
+  const brandLocations: LocationRecord[] = [];
+
+  const indexLocation = (location: LocationRecord) => {
+    if (normalizeComparisonText(location.brand) !== normalizedBrand) {
+      return;
+    }
+
+    const coordinateKey = buildRoundedCoordinateKey(location.lat, location.lng);
+    coordinateKeys.add(coordinateKey);
+
+    const normalizedAddress = normalizeComparisonText(location.address);
+    if (normalizedAddress) {
+      addressKeys.add(normalizedAddress);
+    }
+
+    const normalizedName = normalizeComparisonText(location.name);
+    if (normalizedName) {
+      nameCoordinateKeys.add(`${normalizedName}|${coordinateKey}`);
+    }
+
+    brandLocations.push(location);
+  };
+
+  locations.forEach(indexLocation);
+
+  return {
+    isDuplicate(candidate: { name: string; address: string; lat: number; lng: number; city?: string }) {
+      const coordinateKey = buildRoundedCoordinateKey(candidate.lat, candidate.lng);
+      const normalizedAddress = normalizeComparisonText(candidate.address);
+      const normalizedName = normalizeComparisonText(candidate.name);
+
+      if (
+        coordinateKeys.has(coordinateKey) ||
+        (normalizedAddress ? addressKeys.has(normalizedAddress) : false) ||
+        (normalizedName ? nameCoordinateKeys.has(`${normalizedName}|${coordinateKey}`) : false)
+      ) {
+        return true;
+      }
+
+      const candidateLikeLocation: LocationRecord = {
+        id: "candidate",
+        name: candidate.name,
+        address: candidate.address,
+        brand,
+        bin: "N/A",
+        city: normalizeString(candidate.city),
+        status: "active",
+        lat: candidate.lat,
+        lng: candidate.lng,
+        notes: "",
+        source: "fluxa_locations",
+        addedBy: undefined,
+        supportedNetworks: [],
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString()
+      };
+
+      return brandLocations.some((location) => areLikelyDuplicateLocations(location, candidateLikeLocation));
+    },
+    add(candidate: LocationRecord) {
+      indexLocation(candidate);
+    }
+  };
 }
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -411,6 +906,11 @@ function isMissingRpcError(error: unknown): boolean {
   return MISSING_RPC_ERROR_CODES.has(code);
 }
 
+function isUniqueViolationError(error: unknown): boolean {
+  const code = typeof (error as { code?: unknown })?.code === "string" ? String((error as { code: string }).code) : "";
+  return code === "23505";
+}
+
 function mapFluxaRowToLocation(row: FluxaLocationRow): LocationRecord {
   return {
     id: row.id,
@@ -493,6 +993,22 @@ function buildDetailRecord(
     totalAttempts: attempts.length,
     attempts,
     reviews
+  };
+}
+
+function buildLocationInputFromRecord(
+  location: Pick<LocationRecord, "name" | "address" | "brand" | "bin" | "city" | "status" | "lat" | "lng" | "notes">
+): CreateLocationInput {
+  return {
+    name: location.name,
+    address: location.address,
+    brand: location.brand,
+    bin: location.bin,
+    city: location.city,
+    status: location.status,
+    lat: location.lat,
+    lng: location.lng,
+    notes: location.notes
   };
 }
 
@@ -636,6 +1152,66 @@ function normalizeMetadata(user: User): RecordValue {
   }
 
   return {};
+}
+
+function readBooleanFlag(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  return false;
+}
+
+function normalizeRoleValues(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function isAdminUserRecord(user: User): boolean {
+  const userMetadata = normalizeMetadata(user);
+  const appMetadata =
+    user.app_metadata && typeof user.app_metadata === "object" && !Array.isArray(user.app_metadata)
+      ? (user.app_metadata as RecordValue)
+      : {};
+
+  if (
+    readBooleanFlag(userMetadata.is_admin)
+    || readBooleanFlag(userMetadata.admin)
+    || readBooleanFlag(appMetadata.is_admin)
+    || readBooleanFlag(appMetadata.admin)
+  ) {
+    return true;
+  }
+
+  const roleValues = [
+    ...normalizeRoleValues(userMetadata.role),
+    ...normalizeRoleValues(userMetadata.roles),
+    ...normalizeRoleValues(appMetadata.role),
+    ...normalizeRoleValues(appMetadata.roles)
+  ];
+
+  return roleValues.some((role) => role === "admin" || role === "super_admin" || role === "superadmin");
 }
 
 function readUserRecordValue(record: RecordValue | null, key: string): string {
@@ -964,15 +1540,47 @@ async function getCurrentUserIdentity(userId: string): Promise<{ id: string; lab
   };
 }
 
-function buildPosMachineInsertPayload(input: CreateLocationInput, userId: string, brandId: string | null) {
+async function getCurrentSupabaseUser(userId: string): Promise<User> {
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+  if (error || !data.user) {
+    throw error || new Error("Unable to resolve current user.");
+  }
+
+  return data.user;
+}
+
+function buildFluxaLocationInsertPayload(input: CreateLocationInput, options?: { id?: string }) {
+  const city = inferCity(input.address, input.city || "");
+
+  return {
+    ...(options?.id ? { id: options.id } : {}),
+    merchant_name: input.name.trim(),
+    address: input.address.trim(),
+    brand: input.brand.trim() || "Unknown",
+    bin: input.bin.trim() || "N/A",
+    city,
+    status: input.status,
+    latitude: Number(input.lat.toFixed(6)),
+    longitude: Number(input.lng.toFixed(6)),
+    notes: input.notes?.trim() || null
+  };
+}
+
+function buildPosMachineInsertPayload(
+  input: CreateLocationInput,
+  userId: string,
+  brandId: string | null,
+  options?: { id?: string; sourceFlow?: string }
+) {
   const paymentMethod = normalizePaymentMethod(input.paymentMethod);
   const acquiringMode = normalizeAcquiringMode(input.acquiringMode);
   const checkoutLocation = normalizeCheckoutLocation(input.checkoutLocation);
   const normalizedNetwork = normalizeString(input.network);
-  const city = inferCity(input.address, input.city);
+  const city = inferCity(input.address, input.city || "");
   const trimmedBrand = input.brand.trim() || "Unknown";
 
   return {
+    ...(options?.id ? { id: options.id } : {}),
     name: input.name.trim(),
     merchant_name: input.name.trim(),
     address: input.address.trim(),
@@ -1005,7 +1613,7 @@ function buildPosMachineInsertPayload(input: CreateLocationInput, userId: string
     },
     extended_fields: {
       source_app: "fluxa_map",
-      source_flow: "mcp",
+      source_flow: options?.sourceFlow || "mcp",
       city,
       bin: input.bin.trim() || "N/A",
       transaction_status: input.transactionStatus || "Unknown"
@@ -1228,7 +1836,7 @@ export class FluxaService {
       }
     });
 
-    return Array.from(mergedById.values()).sort(
+    return collapseDuplicateLocations(Array.from(mergedById.values())).sort(
       (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
     );
   }
@@ -1300,6 +1908,113 @@ export class FluxaService {
           source: filters.source || null
         }
       },
+      results
+    };
+  }
+
+  async searchBrandLocationsOnMap(options: {
+    brand: string;
+    area: string;
+    brandAliases?: string[];
+    countryCode?: string;
+    limit?: number;
+  }): Promise<MapBrandLocationSearchRecord> {
+    return mapSearchService.searchBrandLocations(options);
+  }
+
+  async bulkImportBrandLocationsFromMap(
+    userId: string,
+    input: BulkImportBrandLocationsFromMapInput
+  ): Promise<BulkImportBrandLocationsFromMapResult> {
+    await this.requireAdminUser(userId);
+
+    const search = await this.searchBrandLocationsOnMap({
+      brand: input.brand,
+      area: input.area,
+      brandAliases: input.brandAliases,
+      countryCode: input.countryCode,
+      limit: input.limit
+    });
+
+    const skipExisting = input.skipExisting !== false;
+    const existingLocations = skipExisting ? await this.loadMergedLocations() : [];
+    const existingLookup = buildExistingLocationLookup(existingLocations, input.brand);
+    const ambiguousLookup = buildAmbiguousCandidateIndex(search.results);
+    const results: BulkImportBrandLocationsFromMapResult["results"] = [];
+
+    for (const [index, candidate] of search.results.entries()) {
+      if (ambiguousLookup.isAmbiguous(index)) {
+        results.push({
+          index,
+          action: "skipped",
+          candidate,
+          reason: "Skipped because this looks like an in-mall multi-branch POI cluster with insufficient point precision."
+        });
+        continue;
+      }
+
+      if (skipExisting && existingLookup.isDuplicate(candidate)) {
+        results.push({
+          index,
+          action: "skipped",
+          candidate,
+          reason: "Matching location already exists in Fluxa."
+        });
+        continue;
+      }
+
+      try {
+        const createInput: CreateLocationInput = {
+          name: candidate.name,
+          address: candidate.address,
+          brand: input.brand,
+          bin: normalizeString(input.bin, "N/A"),
+          city: candidate.city || search.resolvedArea.name,
+          status: input.status || "active",
+          lat: candidate.lat,
+          lng: candidate.lng,
+          notes: buildLocationImportNotes(input.notes, input.brand, input.area),
+          transactionStatus: input.transactionStatus || "Unknown",
+          network: input.network,
+          paymentMethod: input.paymentMethod,
+          cvm: input.cvm,
+          acquiringMode: input.acquiringMode,
+          acquirer: input.acquirer,
+          posModel: input.posModel,
+          checkoutLocation: input.checkoutLocation,
+          attemptedAt: input.attemptedAt
+        };
+        const location = input.createAsShell
+          ? await this.createShellLocation(userId, createInput, { allowMissingCity: true })
+          : await this.createLocation(userId, createInput, { allowMissingCity: true });
+
+        existingLookup.add(location);
+        results.push({
+          index,
+          action: "created",
+          candidate,
+          location
+        });
+      } catch (error) {
+        results.push({
+          index,
+          action: "failed",
+          candidate,
+          error: error instanceof Error ? error.message : "Unexpected map import error."
+        });
+      }
+    }
+
+    const createdCount = results.filter((item) => item.action === "created").length;
+    const skippedCount = results.filter((item) => item.action === "skipped").length;
+    const failureCount = results.filter((item) => item.action === "failed").length;
+
+    return {
+      search,
+      totalCandidates: search.results.length,
+      createdCount,
+      skippedCount,
+      failureCount,
       results
     };
   }
@@ -1471,101 +2186,132 @@ export class FluxaService {
       throw new Error("location_id is required.");
     }
 
-    const { data: fluxaLocationData } = await supabase.from("fluxa_locations").select(LOCATION_COLUMNS).eq("id", normalizedId).maybeSingle();
+    const [{ data: posData, error: posError }, { data: fluxaLocationData, error: fluxaError }] = await Promise.all([
+      supabase.from("pos_machines").select(POS_MACHINE_COLUMNS).eq("id", normalizedId).maybeSingle(),
+      supabase.from("fluxa_locations").select(LOCATION_COLUMNS).eq("id", normalizedId).maybeSingle()
+    ]);
+
+    if (posError) {
+      throw posError;
+    }
+    if (fluxaError) {
+      throw fluxaError;
+    }
+
+    if (posData) {
+      const row = posData as PosMachineRow;
+      const brandIds = row.brand_id ? [row.brand_id] : [];
+      const creatorIds = row.created_by ? [row.created_by] : [];
+      const [brandsById, creatorMap] = await Promise.all([fetchBrandMap(brandIds), fetchUserMap(creatorIds)]);
+      const base = mapPosMachineToLocation(row, brandsById, creatorMap);
+
+      const [attemptResult, reviewResult, commentResult] = await Promise.allSettled([
+        supabase.from("pos_attempts").select(POS_ATTEMPT_COLUMNS).eq("pos_id", normalizedId).order("attempted_at", { ascending: false }),
+        supabase.from("reviews").select(REVIEW_COLUMNS).eq("pos_machine_id", normalizedId).order("created_at", { ascending: false }),
+        supabase.from("comments").select(COMMENT_COLUMNS).eq("pos_id", normalizedId).order("created_at", { ascending: false })
+      ]);
+
+      const attemptRows =
+        attemptResult.status === "fulfilled" && !attemptResult.value.error ? ((attemptResult.value.data || []) as PosAttemptRow[]) : [];
+      const reviewRows =
+        reviewResult.status === "fulfilled" && !reviewResult.value.error ? ((reviewResult.value.data || []) as ReviewRow[]) : [];
+      const commentRows =
+        commentResult.status === "fulfilled" && !commentResult.value.error ? ((commentResult.value.data || []) as CommentRow[]) : [];
+      const relatedUserIds = Array.from(
+        new Set(
+          [
+            ...attemptRows.flatMap((rowItem) => [rowItem.user_id, rowItem.created_by]),
+            ...reviewRows.map((rowItem) => rowItem.user_id),
+            ...commentRows.map((rowItem) => rowItem.user_id)
+          ].filter((value): value is string => Boolean(value))
+        )
+      );
+      const usersById = await fetchUserMap(relatedUserIds);
+
+      const attempts = attemptRows.map((attempt) => ({
+        id: attempt.id,
+        occurredAt: attempt.attempted_at || attempt.created_at || undefined,
+        dateTime: formatDateTime(attempt.attempted_at || attempt.created_at),
+        addedBy: resolveUserName(attempt.created_by || attempt.user_id, usersById),
+        cardName: normalizeString(attempt.card_name, "Unknown card"),
+        network: normalizeString(attempt.card_network, "Unknown"),
+        method: normalizeString(attempt.payment_method, "Unknown"),
+        status: mapAttemptStatus(attempt.result || attempt.attempt_result),
+        notes: normalizeString(attempt.notes)
+      }));
+
+      const reviews = [
+        ...reviewRows.map((review) => {
+          const name = resolveUserName(review.user_id, usersById);
+          const timestamp = review.created_at || review.updated_at;
+          return {
+            sortKey: timestamp ? new Date(timestamp).getTime() : 0,
+            item: {
+              id: review.id,
+              initials: buildInitials(name),
+              name,
+              time: formatDateTime(timestamp),
+              content: normalizeString(review.comment, "No review content."),
+              rating: review.rating
+            } satisfies LocationReviewRecord
+          };
+        }),
+        ...commentRows.map((comment) => {
+          const name = resolveUserName(comment.user_id, usersById);
+          const timestamp = comment.created_at || comment.updated_at;
+          return {
+            sortKey: timestamp ? new Date(timestamp).getTime() : 0,
+            item: {
+              id: comment.id,
+              initials: buildInitials(name),
+              name,
+              time: formatDateTime(timestamp),
+              content: normalizeString(comment.content, "No comment content."),
+              rating: comment.rating
+            } satisfies LocationReviewRecord
+          };
+        })
+      ]
+        .sort((left, right) => right.sortKey - left.sortKey)
+        .map((entry) => entry.item);
+
+      const deviceName = normalizeString(row.name, "POS Device");
+      return buildDetailRecord(base, deviceName, attempts, reviews, buildMetaLine(base.brand, base.city, `设备：${deviceName}`));
+    }
+
     if (fluxaLocationData) {
       const base = mapFluxaRowToLocation(fluxaLocationData as FluxaLocationRow);
       return buildDetailRecord(base, "Fluxa Location", [], [], buildMetaLine(base.brand, base.city, `BIN：${base.bin}`));
     }
 
-    const { data: posData, error: posError } = await supabase.from("pos_machines").select(POS_MACHINE_COLUMNS).eq("id", normalizedId).maybeSingle();
-    if (posError) {
-      throw posError;
-    }
-    if (!posData) {
-      throw new Error("Location not found.");
-    }
-
-    const row = posData as PosMachineRow;
-    const brandIds = row.brand_id ? [row.brand_id] : [];
-    const creatorIds = row.created_by ? [row.created_by] : [];
-    const [brandsById, creatorMap] = await Promise.all([fetchBrandMap(brandIds), fetchUserMap(creatorIds)]);
-    const base = mapPosMachineToLocation(row, brandsById, creatorMap);
-
-    const [attemptResult, reviewResult, commentResult] = await Promise.allSettled([
-      supabase.from("pos_attempts").select(POS_ATTEMPT_COLUMNS).eq("pos_id", normalizedId).order("attempted_at", { ascending: false }),
-      supabase.from("reviews").select(REVIEW_COLUMNS).eq("pos_machine_id", normalizedId).order("created_at", { ascending: false }),
-      supabase.from("comments").select(COMMENT_COLUMNS).eq("pos_id", normalizedId).order("created_at", { ascending: false })
-    ]);
-
-    const attemptRows = attemptResult.status === "fulfilled" && !attemptResult.value.error ? ((attemptResult.value.data || []) as PosAttemptRow[]) : [];
-    const reviewRows = reviewResult.status === "fulfilled" && !reviewResult.value.error ? ((reviewResult.value.data || []) as ReviewRow[]) : [];
-    const commentRows = commentResult.status === "fulfilled" && !commentResult.value.error ? ((commentResult.value.data || []) as CommentRow[]) : [];
-    const relatedUserIds = Array.from(
-      new Set(
-        [
-          ...attemptRows.flatMap((rowItem) => [rowItem.user_id, rowItem.created_by]),
-          ...reviewRows.map((rowItem) => rowItem.user_id),
-          ...commentRows.map((rowItem) => rowItem.user_id)
-        ].filter((value): value is string => Boolean(value))
-      )
-    );
-    const usersById = await fetchUserMap(relatedUserIds);
-
-    const attempts = attemptRows.map((attempt) => ({
-      id: attempt.id,
-      occurredAt: attempt.attempted_at || attempt.created_at || undefined,
-      dateTime: formatDateTime(attempt.attempted_at || attempt.created_at),
-      addedBy: resolveUserName(attempt.created_by || attempt.user_id, usersById),
-      cardName: normalizeString(attempt.card_name, "Unknown card"),
-      network: normalizeString(attempt.card_network, "Unknown"),
-      method: normalizeString(attempt.payment_method, "Unknown"),
-      status: mapAttemptStatus(attempt.result || attempt.attempt_result),
-      notes: normalizeString(attempt.notes)
-    }));
-
-    const reviews = [
-      ...reviewRows.map((review) => {
-        const name = resolveUserName(review.user_id, usersById);
-        const timestamp = review.created_at || review.updated_at;
-        return {
-          sortKey: timestamp ? new Date(timestamp).getTime() : 0,
-          item: {
-            id: review.id,
-            initials: buildInitials(name),
-            name,
-            time: formatDateTime(timestamp),
-            content: normalizeString(review.comment, "No review content."),
-            rating: review.rating
-          } satisfies LocationReviewRecord
-        };
-      }),
-      ...commentRows.map((comment) => {
-        const name = resolveUserName(comment.user_id, usersById);
-        const timestamp = comment.created_at || comment.updated_at;
-        return {
-          sortKey: timestamp ? new Date(timestamp).getTime() : 0,
-          item: {
-            id: comment.id,
-            initials: buildInitials(name),
-            name,
-            time: formatDateTime(timestamp),
-            content: normalizeString(comment.content, "No comment content."),
-            rating: comment.rating
-          } satisfies LocationReviewRecord
-        };
-      })
-    ]
-      .sort((left, right) => right.sortKey - left.sortKey)
-      .map((entry) => entry.item);
-
-    const deviceName = normalizeString(row.name, "POS Device");
-    return buildDetailRecord(base, deviceName, attempts, reviews, buildMetaLine(base.brand, base.city, `设备：${deviceName}`));
+    throw new Error("Location not found.");
   }
 
-  async createLocation(userId: string, input: CreateLocationInput): Promise<LocationRecord> {
+  async isAdminUser(userId: string): Promise<boolean> {
+    const user = await getCurrentSupabaseUser(userId);
+    return isAdminUserRecord(user);
+  }
+
+  async requireAdminUser(userId: string): Promise<void> {
+    const isAdmin = await this.isAdminUser(userId);
+    if (!isAdmin) {
+      throw new Error("This MCP tool is only available to admin users.");
+    }
+  }
+
+  async createLocation(
+    userId: string,
+    input: CreateLocationInput,
+    options?: { allowMissingCity?: boolean }
+  ): Promise<LocationRecord> {
+    const normalizedCity = input.city?.trim() || "";
+    if (!normalizedCity && !options?.allowMissingCity) {
+      throw new Error("city is required for non-admin location creation.");
+    }
+
     const user = await getCurrentUserIdentity(userId);
     const brandId = await resolveBrandId(input.brand);
-    const insertPayload = buildPosMachineInsertPayload(input, userId, brandId);
+    const insertPayload = buildPosMachineInsertPayload({ ...input, city: normalizedCity }, userId, brandId);
 
     const { data, error } = await supabase.from("pos_machines").insert(insertPayload).select(POS_MACHINE_COLUMNS).single();
     if (error || !data) {
@@ -1574,7 +2320,9 @@ export class FluxaService {
 
     const createdRow = data as PosMachineRow;
     try {
-      const { error: attemptError } = await supabase.from("pos_attempts").insert(buildPosAttemptInsertPayload(input, createdRow.id, userId));
+      const { error: attemptError } = await supabase
+        .from("pos_attempts")
+        .insert(buildPosAttemptInsertPayload({ ...input, city: normalizedCity }, createdRow.id, userId));
       if (attemptError) {
         throw attemptError;
       }
@@ -1588,13 +2336,100 @@ export class FluxaService {
     return mapPosMachineToLocation(createdRow, brandMap, userMap);
   }
 
-  async createLocationAttempt(userId: string, locationId: string, input: CreateLocationAttemptInput): Promise<LocationAttemptRecord> {
-    const detail = await this.getLocationDetail(locationId);
-    if (detail.source !== "pos_machines") {
-      throw new Error("Only POS-backed locations can accept new attempt records.");
+  async createShellLocation(
+    _userId: string,
+    input: CreateLocationInput,
+    options?: { allowMissingCity?: boolean }
+  ): Promise<LocationRecord> {
+    void _userId;
+    const normalizedCity = input.city?.trim() || "";
+    if (!normalizedCity && !options?.allowMissingCity) {
+      throw new Error("city is required for non-admin location creation.");
     }
 
-    return createPosMachineAttempt(userId, detail, input);
+    const insertPayload = buildFluxaLocationInsertPayload({ ...input, city: normalizedCity });
+    const { data, error } = await supabase.from("fluxa_locations").insert(insertPayload).select(LOCATION_COLUMNS).single();
+    if (error || !data) {
+      throw error || new Error("Failed to create shell location.");
+    }
+
+    return mapFluxaRowToLocation(data as FluxaLocationRow);
+  }
+
+  private async materializeShellLocation(
+    userId: string,
+    location: Pick<LocationRecord, "id" | "name" | "address" | "brand" | "bin" | "city" | "status" | "lat" | "lng" | "notes">
+  ): Promise<LocationRecord> {
+    const brandId = await resolveBrandId(location.brand);
+    const insertPayload = buildPosMachineInsertPayload(
+      {
+        ...buildLocationInputFromRecord(location),
+        transactionStatus: "Unknown"
+      },
+      userId,
+      brandId,
+      {
+        id: location.id,
+        sourceFlow: "shell_materialization"
+      }
+    );
+
+    const { data, error } = await supabase.from("pos_machines").insert(insertPayload).select(POS_MACHINE_COLUMNS).single();
+    if (error) {
+      if (!isUniqueViolationError(error)) {
+        throw error;
+      }
+
+      const existingDetail = await this.getLocationDetail(location.id);
+      if (existingDetail.source !== "pos_machines") {
+        throw error;
+      }
+
+      return existingDetail;
+    }
+
+    const user = await getCurrentUserIdentity(userId);
+    const brandMap = brandId && location.brand.trim() ? new Map([[brandId, location.brand.trim()]]) : new Map<string, string>();
+    const userMap = new Map([[user.id, user.label]]);
+    return mapPosMachineToLocation(data as PosMachineRow, brandMap, userMap);
+  }
+
+  async bulkCreateLocations(
+    userId: string,
+    locations: CreateLocationInput[],
+    options?: { createAsShell?: boolean }
+  ): Promise<BulkCreateLocationResult[]> {
+    await this.requireAdminUser(userId);
+
+    const results: BulkCreateLocationResult[] = [];
+    for (const [index, input] of locations.entries()) {
+      try {
+        const location = options?.createAsShell
+          ? await this.createShellLocation(userId, input, { allowMissingCity: true })
+          : await this.createLocation(userId, input, { allowMissingCity: true });
+        results.push({
+          index,
+          success: true,
+          inputName: input.name?.trim() || `location-${index + 1}`,
+          location
+        });
+      } catch (error) {
+        results.push({
+          index,
+          success: false,
+          inputName: input.name?.trim() || `location-${index + 1}`,
+          error: error instanceof Error ? error.message : "Unexpected bulk create error."
+        });
+      }
+    }
+
+    return results;
+  }
+
+  async createLocationAttempt(userId: string, locationId: string, input: CreateLocationAttemptInput): Promise<LocationAttemptRecord> {
+    const detail = await this.getLocationDetail(locationId);
+    const targetLocation = detail.source === "pos_machines" ? detail : await this.materializeShellLocation(userId, detail);
+    return createPosMachineAttempt(userId, targetLocation, input);
   }
 
   async listBrands(filters: { query?: string; segment?: BrandRecord["uiSegment"]; status?: BrandRecord["status"]; limit?: number }): Promise<BrandRecord[]> {

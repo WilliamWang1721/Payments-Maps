@@ -10,6 +10,11 @@ interface UseFluxaLocationsResult {
   error: string | null;
   refreshLocations: () => Promise<void>;
   createLocation: (input: CreateLocationInput) => Promise<LocationRecord>;
+  deleteLocation: (locationId: string) => Promise<void>;
+}
+
+interface UseFluxaLocationsOptions {
+  enabled?: boolean;
 }
 
 function formatErrorMessage(error: unknown): string {
@@ -19,13 +24,22 @@ function formatErrorMessage(error: unknown): string {
   return "Unable to reach Fluxa backend.";
 }
 
-export function useFluxaLocations(): UseFluxaLocationsResult {
+export function useFluxaLocations({
+  enabled = true
+}: UseFluxaLocationsOptions = {}): UseFluxaLocationsResult {
   const [locations, setLocations] = useState<LocationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshLocations = useCallback(async () => {
+    if (!enabled) {
+      setLocations([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     try {
       const nextLocations = await locationService.listLocations();
@@ -36,11 +50,18 @@ export function useFluxaLocations(): UseFluxaLocationsResult {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLocations([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     void refreshLocations();
-  }, [refreshLocations]);
+  }, [enabled, refreshLocations]);
 
   const createLocation = useCallback(async (input: CreateLocationInput) => {
     setSaving(true);
@@ -58,12 +79,28 @@ export function useFluxaLocations(): UseFluxaLocationsResult {
     }
   }, []);
 
+  const deleteLocation = useCallback(async (locationId: string) => {
+    setSaving(true);
+    try {
+      await locationService.deleteLocation(locationId);
+      setLocations((prev) => prev.filter((location) => location.id !== locationId));
+      setError(null);
+    } catch (err) {
+      const message = formatErrorMessage(err);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
   return {
     locations,
     loading,
     saving,
     error,
     refreshLocations,
-    createLocation
+    createLocation,
+    deleteLocation
   };
 }

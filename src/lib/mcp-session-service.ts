@@ -90,8 +90,9 @@ export async function createMcpSession(input: {
 }
 
 export async function revokeMcpSession(sessionId: string): Promise<void> {
-  await request<void>(`/api/mcp/sessions/${sessionId}/revoke`, {
-    method: "POST"
+  await request<void>("/api/mcp/sessions/revoke", {
+    method: "POST",
+    body: JSON.stringify({ id: sessionId })
   });
 }
 

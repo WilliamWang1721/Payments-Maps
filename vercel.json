@@ -10,7 +10,7 @@
     },
     {
       "source": "/mcp/:sessionToken",
-      "destination": "/api/mcp/:sessionToken"
+      "destination": "/api/mcp/connect?sessionToken=:sessionToken"
     },
     {
       "source": "/(.*)",
