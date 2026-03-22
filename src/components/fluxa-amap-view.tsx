@@ -1035,14 +1035,19 @@ export function FluxaAmapView({
           };
         };
 
-        const handleViewportChange = () => {
+        const handleMoveEnd = () => {
+          persistViewport();
+          emitViewportSnapshotRef.current?.();
+        };
+
+        const handleZoomEnd = () => {
           persistViewport();
           renderVisibleMarkersRef.current?.();
           emitViewportSnapshotRef.current?.();
         };
 
-        map.on?.("moveend", handleViewportChange);
-        map.on?.("zoomend", handleViewportChange);
+        map.on?.("moveend", handleMoveEnd);
+        map.on?.("zoomend", handleZoomEnd);
         setMapReady(true);
         renderVisibleMarkersRef.current?.();
         emitViewportSnapshotRef.current?.();
