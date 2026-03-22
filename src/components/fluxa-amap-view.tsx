@@ -1210,8 +1210,7 @@ export function FluxaAmapView({
 
   const config = getAMapConfig();
   const missingKey = !config.key;
-  const hasWarmCache = Boolean(cachedMapViewport || locations.length > 0 || mapIndexPoints.length > 0 || mapSummary.totalLocationCount > 0);
-  const showBlockingOverlay = missingKey || mapError || ((!mapReady || loading) && !hasWarmCache);
+  const showBlockingOverlay = missingKey || Boolean(mapError) || !mapReady;
   const totalCountLoading = mapSummary.totalCountLoading ?? (loading && mapSummary.totalLocationCount === 0 && mapIndexPoints.length === 0);
   const summaryVisibleCount = mapSummary.totalLocationCount > 0 || totalCountLoading ? mapSummary.visibleLocationCount : visibleLocationCount;
   const summaryTotalCount = mapSummary.totalLocationCount;
@@ -1278,7 +1277,7 @@ export function FluxaAmapView({
             </p>
             {loading && !missingKey && !mapError ? (
               <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-                地图索引与当前位置附近数据正在并行载入
+                底图会先显示，地点数据随后补齐
               </p>
             ) : null}
           </div>
