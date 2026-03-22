@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 
 import { locationService, type LocationBounds, type LocationCounts, type LocationMapIndexRecord } from "@/services/location-service";
 import type { LocationRecord } from "@/types/location";
@@ -11,11 +11,12 @@ interface MapViewportBounds extends LocationBounds {
 interface PartitionDescriptor {
   key: string;
   bounds: LocationBounds;
+  distanceKm: number;
 }
 
-interface PartitionCacheEntry {
+interface PartitionCacheEntry<T> {
   bounds: LocationBounds;
-  locations: LocationRecord[];
+  items: T[];
   loadedAt: number;
 }
 
@@ -45,11 +46,10 @@ const PARTITION_FETCH_BATCH_SIZE = 6;
 const PRELOAD_PADDING_RATIO = 0.35;
 const RETAIN_PADDING_RATIO = 1.1;
 const VIEWPORT_APPLY_DEBOUNCE_MS = 120;
-const BACKGROUND_PREFETCH_LIMIT = 12;
-const MAX_SHARED_PARTITION_CACHE_SIZE = 72;
-const MAP_INDEX_SESSION_STORAGE_KEY = "fluxa_map_index_cache_v3";
-const MAP_INDEX_SESSION_TTL_MS = 15 * 60 * 1000;
+const MAX_SHARED_PARTITION_CACHE_SIZE = 96;
+const FETCH_RADIUS_KM = 3;
 export const DETAIL_LOCATION_ZOOM_THRESHOLD = 14;
+
 const EMPTY_SUMMARY: MapPartitionSummary = {
   visibleLocationCount: 0,
   totalLocationCount: 0,
@@ -58,32 +58,37 @@ const EMPTY_SUMMARY: MapPartitionSummary = {
   totalCountLoading: false
 };
 
-interface StoredMapIndexCachePayload {
-  cachedAt: number;
-  points: LocationMapIndexRecord[];
-}
-
-let sharedMapIndexCache: LocationMapIndexRecord[] | null = null;
-let sharedMapIndexPromise: Promise<LocationMapIndexRecord[]> | null = null;
-let sharedPartitionCache = new Map<string, PartitionCacheEntry>();
-let didHydrateMapIndexSessionCache = false;
-let sharedMapIndexCountValidationPromise: Promise<boolean> | null = null;
+let sharedIndexPartitionCache = new Map<string, PartitionCacheEntry<LocationMapIndexRecord>>();
+let sharedDetailPartitionCache = new Map<string, PartitionCacheEntry<LocationRecord>>();
 let sharedLocationCountsCache: LocationCounts | null = null;
 let sharedLocationCountsPromise: Promise<LocationCounts> | null = null;
 
 export function invalidateFluxaMapPartitionCaches(): void {
-  sharedMapIndexCache = null;
-  sharedMapIndexPromise = null;
-  sharedPartitionCache = new Map<string, PartitionCacheEntry>();
-  didHydrateMapIndexSessionCache = false;
-  sharedMapIndexCountValidationPromise = null;
+  sharedIndexPartitionCache = new Map<string, PartitionCacheEntry<LocationMapIndexRecord>>();
+  sharedDetailPartitionCache = new Map<string, PartitionCacheEntry<LocationRecord>>();
   sharedLocationCountsCache = null;
   sharedLocationCountsPromise = null;
-  clearMapIndexSessionCache();
 }
 
 function clampNumber(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
+}
+
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceKm(from: [number, number], to: [number, number]): number {
+  const earthRadiusKm = 6371;
+  const fromLat = toRadians(from[1]);
+  const toLat = toRadians(to[1]);
+  const deltaLat = toRadians(to[1] - from[1]);
+  const deltaLng = toRadians(to[0] - from[0]);
+  const haversine =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2)
+    + Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 }
 
 function formatErrorMessage(error: unknown): string {
@@ -94,7 +99,7 @@ function formatErrorMessage(error: unknown): string {
   return "Unable to load map partitions.";
 }
 
-function trimPartitionCache(cache: Map<string, PartitionCacheEntry>): void {
+function trimPartitionCache<T>(cache: Map<string, PartitionCacheEntry<T>>): void {
   if (cache.size <= MAX_SHARED_PARTITION_CACHE_SIZE) {
     return;
   }
@@ -107,82 +112,6 @@ function trimPartitionCache(cache: Map<string, PartitionCacheEntry>): void {
   removableKeys.forEach((key) => {
     cache.delete(key);
   });
-}
-
-function readMapIndexSessionCache(): LocationMapIndexRecord[] | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const rawValue = window.sessionStorage.getItem(MAP_INDEX_SESSION_STORAGE_KEY);
-    if (!rawValue) {
-      return null;
-    }
-
-    const parsed = JSON.parse(rawValue) as StoredMapIndexCachePayload;
-    if (!parsed || !Array.isArray(parsed.points) || typeof parsed.cachedAt !== "number") {
-      window.sessionStorage.removeItem(MAP_INDEX_SESSION_STORAGE_KEY);
-      return null;
-    }
-
-    if (Date.now() - parsed.cachedAt > MAP_INDEX_SESSION_TTL_MS) {
-      window.sessionStorage.removeItem(MAP_INDEX_SESSION_STORAGE_KEY);
-      return null;
-    }
-
-    return parsed.points.filter((point): point is LocationMapIndexRecord => (
-      typeof point?.id === "string"
-      && typeof point?.lat === "number"
-      && typeof point?.lng === "number"
-      && typeof point?.updatedAt === "string"
-    ));
-  } catch {
-    try {
-      window.sessionStorage.removeItem(MAP_INDEX_SESSION_STORAGE_KEY);
-    } catch {
-      // Ignore storage cleanup failures.
-    }
-    return null;
-  }
-}
-
-function clearMapIndexSessionCache(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.sessionStorage.removeItem(MAP_INDEX_SESSION_STORAGE_KEY);
-  } catch {
-    // Ignore storage cleanup failures.
-  }
-}
-
-function persistMapIndexSessionCache(points: LocationMapIndexRecord[]): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    const payload: StoredMapIndexCachePayload = {
-      cachedAt: Date.now(),
-      points
-    };
-    window.sessionStorage.setItem(MAP_INDEX_SESSION_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // Ignore storage quota errors.
-  }
-}
-
-function buildDetailLayerKey(zoom: number): string {
-  return `detail:${String(getPartitionSpan(zoom)).replace(".", "_")}`;
-}
-
-function buildBootstrapLayerKey(viewport: MapViewportBounds): string {
-  const span = getPartitionSpan(viewport.zoom);
-  const [centerLng, centerLat] = resolveViewportCenter(viewport);
-  return `bootstrap:${String(span).replace(".", "_")}:${Math.round(centerLat / span)}:${Math.round(centerLng / span)}`;
 }
 
 function getPartitionSpan(zoom: number): number {
@@ -230,26 +159,41 @@ function resolveViewportCenter(viewport: MapViewportBounds): [number, number] {
   ];
 }
 
-function buildCenteredBounds(viewport: MapViewportBounds, zoom: number, radiusMultiplier = 2): LocationBounds {
-  const [centerLng, centerLat] = resolveViewportCenter(viewport);
-  const span = getPartitionSpan(zoom) * radiusMultiplier;
+function buildRadiusCapBounds(center: [number, number], radiusKm: number): LocationBounds {
+  const [lng, lat] = center;
+  const latDelta = radiusKm / 111.32;
+  const lngDelta = radiusKm / Math.max(111.32 * Math.cos(toRadians(lat)), 0.0001);
 
   return normalizeBounds({
-    south: centerLat - span,
-    west: centerLng - span,
-    north: centerLat + span,
-    east: centerLng + span
+    south: lat - latDelta,
+    west: lng - lngDelta,
+    north: lat + latDelta,
+    east: lng + lngDelta
   });
 }
 
-function buildPartitionKey(lat: number, lng: number, zoom: number): string {
-  const span = getPartitionSpan(zoom);
-  const latIndex = Math.floor(clampNumber(lat, -90, 90) / span);
-  const lngIndex = Math.floor(clampNumber(lng, -180, 180) / span);
-  return `${String(span).replace(".", "_")}:${latIndex}:${lngIndex}`;
+function intersectBounds(left: LocationBounds, right: LocationBounds): LocationBounds | null {
+  const nextBounds = normalizeBounds({
+    south: Math.max(left.south, right.south),
+    west: Math.max(left.west, right.west),
+    north: Math.min(left.north, right.north),
+    east: Math.min(left.east, right.east)
+  });
+
+  if (nextBounds.south > nextBounds.north || nextBounds.west > nextBounds.east) {
+    return null;
+  }
+
+  return nextBounds;
 }
 
-function buildPartitionDescriptors(bounds: LocationBounds, zoom: number): PartitionDescriptor[] {
+function buildFetchBounds(viewport: MapViewportBounds, paddingRatio: number, zoom = viewport.zoom): LocationBounds | null {
+  const expandedBounds = expandBounds(viewport, paddingRatio, getPartitionSpan(zoom));
+  const radiusCapBounds = buildRadiusCapBounds(resolveViewportCenter(viewport), FETCH_RADIUS_KM);
+  return intersectBounds(expandedBounds, radiusCapBounds);
+}
+
+function buildPartitionDescriptors(bounds: LocationBounds, zoom: number, center: [number, number]): PartitionDescriptor[] {
   const span = getPartitionSpan(zoom);
   const normalizedBounds = normalizeBounds(bounds);
   const latStart = Math.floor(normalizedBounds.south / span);
@@ -257,7 +201,7 @@ function buildPartitionDescriptors(bounds: LocationBounds, zoom: number): Partit
   const lngStart = Math.floor(normalizedBounds.west / span);
   const lngEnd = Math.floor(normalizedBounds.east / span);
   const scaleKey = String(span).replace(".", "_");
-  const partitions: PartitionDescriptor[] = [];
+  const descriptors: PartitionDescriptor[] = [];
 
   for (let latIndex = latStart; latIndex <= latEnd; latIndex += 1) {
     for (let lngIndex = lngStart; lngIndex <= lngEnd; lngIndex += 1) {
@@ -265,48 +209,28 @@ function buildPartitionDescriptors(bounds: LocationBounds, zoom: number): Partit
       const west = clampNumber(lngIndex * span, -180, 180);
       const north = clampNumber((latIndex + 1) * span, -90, 90);
       const east = clampNumber((lngIndex + 1) * span, -180, 180);
+      const partitionCenter: [number, number] = [(west + east) / 2, (south + north) / 2];
 
-      partitions.push({
+      descriptors.push({
         key: `${scaleKey}:${latIndex}:${lngIndex}`,
-        bounds: { south, west, north, east }
+        bounds: { south, west, north, east },
+        distanceKm: calculateDistanceKm(center, partitionCenter)
       });
     }
   }
 
-  return partitions;
+  return descriptors.sort((left, right) => left.distanceKm - right.distanceKm);
 }
 
 function isPointInsideBounds(point: Pick<LocationMapIndexRecord, "lat" | "lng">, bounds: LocationBounds): boolean {
   return point.lat >= bounds.south && point.lat <= bounds.north && point.lng >= bounds.west && point.lng <= bounds.east;
 }
 
-function collectPartitionKeys(points: LocationMapIndexRecord[], zoom: number): Set<string> {
-  return new Set(points.map((point) => buildPartitionKey(point.lat, point.lng, zoom)));
-}
-
-function buildSummary(points: LocationMapIndexRecord[], viewport: MapViewportBounds): MapPartitionSummary {
-  const normalizedViewport = normalizeBounds(viewport);
-  const visiblePoints = points.filter((point) => isPointInsideBounds(point, normalizedViewport));
-
-  return {
-    visibleLocationCount: visiblePoints.length,
-    totalLocationCount: points.length,
-    visiblePartitionCount: collectPartitionKeys(visiblePoints, viewport.zoom).size,
-    totalPartitionCount: collectPartitionKeys(points, viewport.zoom).size
-  };
-}
-
-function filterDescriptorsWithPoints(
-  descriptors: PartitionDescriptor[],
-  points: LocationMapIndexRecord[],
-  zoom: number
-): PartitionDescriptor[] {
-  const populatedKeys = collectPartitionKeys(points, zoom);
-  return descriptors.filter(({ key }) => populatedKeys.has(key));
-}
-
-function mergePartitionLocations(keys: string[], cache: Map<string, PartitionCacheEntry>): LocationRecord[] {
-  const mergedById = new Map<string, LocationRecord>();
+function mergePartitionPayload<T extends { id: string; updatedAt: string }>(
+  keys: string[],
+  cache: Map<string, PartitionCacheEntry<T>>
+): T[] {
+  const mergedById = new Map<string, T>();
 
   keys.forEach((key) => {
     const entry = cache.get(key);
@@ -314,10 +238,10 @@ function mergePartitionLocations(keys: string[], cache: Map<string, PartitionCac
       return;
     }
 
-    entry.locations.forEach((location) => {
-      const existing = mergedById.get(location.id);
-      if (!existing || new Date(location.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
-        mergedById.set(location.id, location);
+    entry.items.forEach((item) => {
+      const existing = mergedById.get(item.id);
+      if (!existing || new Date(item.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+        mergedById.set(item.id, item);
       }
     });
   });
@@ -329,37 +253,98 @@ function mergePartitionLocations(keys: string[], cache: Map<string, PartitionCac
   });
 }
 
+function prunePartitionCache<T>(
+  cacheRef: MutableRefObject<Map<string, PartitionCacheEntry<T>>>,
+  sharedCache: Map<string, PartitionCacheEntry<T>>,
+  retainKeys: Set<string>
+): void {
+  Array.from(cacheRef.current.keys()).forEach((key) => {
+    if (retainKeys.has(key)) {
+      return;
+    }
+
+    cacheRef.current.delete(key);
+    sharedCache.delete(key);
+  });
+}
+
+function buildSummary(
+  viewport: MapViewportBounds | null,
+  indexPoints: LocationMapIndexRecord[],
+  locations: LocationRecord[],
+  activeIndexCount: number,
+  activeDetailCount: number,
+  totalLocationCount: number,
+  totalCountLoading: boolean
+): MapPartitionSummary {
+  if (!viewport) {
+    return {
+      ...EMPTY_SUMMARY,
+      totalLocationCount,
+      totalCountLoading
+    };
+  }
+
+  const normalizedViewport = normalizeBounds(viewport);
+  const visibleIndexCount = indexPoints.filter((point) => isPointInsideBounds(point, normalizedViewport)).length;
+  const visibleDetailCount = locations.filter((location) => isPointInsideBounds(location, normalizedViewport)).length;
+  const usingDetailLayer = viewport.zoom >= DETAIL_LOCATION_ZOOM_THRESHOLD && locations.length > 0;
+
+  return {
+    visibleLocationCount: usingDetailLayer ? visibleDetailCount : visibleIndexCount,
+    totalLocationCount,
+    visiblePartitionCount: usingDetailLayer ? activeDetailCount : activeIndexCount,
+    totalPartitionCount: usingDetailLayer ? activeDetailCount : activeIndexCount,
+    totalCountLoading
+  };
+}
+
 export function useFluxaMapPartitions({
   enabled = false
 }: UseFluxaMapPartitionsOptions = {}): UseFluxaMapPartitionsResult {
-  const [indexPoints, setIndexPoints] = useState<LocationMapIndexRecord[]>(sharedMapIndexCache || []);
+  const [indexPoints, setIndexPoints] = useState<LocationMapIndexRecord[]>([]);
   const [locations, setLocations] = useState<LocationRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<MapPartitionSummary>(EMPTY_SUMMARY);
-  const cacheRef = useRef<Map<string, PartitionCacheEntry>>(new Map(sharedPartitionCache));
-  const pendingKeysRef = useRef<Set<string>>(new Set());
-  const activeKeysRef = useRef<string[]>([]);
-  const activeDescriptorsRef = useRef<PartitionDescriptor[]>([]);
-  const lastSignatureRef = useRef("");
-  const generationRef = useRef(0);
-  const mapIndexRef = useRef<LocationMapIndexRecord[] | null>(sharedMapIndexCache);
-  const mapIndexPromiseRef = useRef<Promise<LocationMapIndexRecord[]> | null>(sharedMapIndexPromise);
+  const [summary, setSummary] = useState<MapPartitionSummary>({
+    ...EMPTY_SUMMARY,
+    totalLocationCount: sharedLocationCountsCache?.total ?? 0,
+    totalCountLoading: enabled && !sharedLocationCountsCache
+  });
+
+  const indexCacheRef = useRef<Map<string, PartitionCacheEntry<LocationMapIndexRecord>>>(new Map(sharedIndexPartitionCache));
+  const detailCacheRef = useRef<Map<string, PartitionCacheEntry<LocationRecord>>>(new Map(sharedDetailPartitionCache));
+  const pendingIndexKeysRef = useRef<Set<string>>(new Set());
+  const pendingDetailKeysRef = useRef<Set<string>>(new Set());
+  const activeIndexDescriptorsRef = useRef<PartitionDescriptor[]>([]);
+  const activeDetailDescriptorsRef = useRef<PartitionDescriptor[]>([]);
+  const activeIndexKeysRef = useRef<string[]>([]);
+  const activeDetailKeysRef = useRef<string[]>([]);
   const lastViewportRef = useRef<MapViewportBounds | null>(null);
   const viewportTimerRef = useRef<number | null>(null);
-  const prefetchTimerRef = useRef<number | null>(null);
-  const detailLayerKeyRef = useRef<string | null>(null);
-  const bootstrapLayerKeyRef = useRef<string | null>(null);
-  const bootstrapInFlightKeyRef = useRef<string | null>(null);
-  const bootstrapPendingRef = useRef(false);
+  const generationRef = useRef(0);
   const locationCountsRef = useRef<LocationCounts | null>(sharedLocationCountsCache);
+  const locationCountsLoadingRef = useRef(enabled && !sharedLocationCountsCache);
 
-  const syncVisibleLocations = useCallback(() => {
-    const nextLocations = mergePartitionLocations(activeKeysRef.current, cacheRef.current);
-    const hasPendingActivePartitions = activeKeysRef.current.some((key) => pendingKeysRef.current.has(key));
+  const syncViewState = useCallback((viewport = lastViewportRef.current) => {
+    const nextIndexPoints = mergePartitionPayload(activeIndexKeysRef.current, indexCacheRef.current);
+    const nextLocations = mergePartitionPayload(activeDetailKeysRef.current, detailCacheRef.current);
+    const hasPendingActivePartitions =
+      activeIndexKeysRef.current.some((key) => pendingIndexKeysRef.current.has(key))
+      || activeDetailKeysRef.current.some((key) => pendingDetailKeysRef.current.has(key));
 
+    setIndexPoints(nextIndexPoints);
     setLocations(nextLocations);
-    setLoading((hasPendingActivePartitions || bootstrapPendingRef.current) && nextLocations.length === 0);
+    setLoading(hasPendingActivePartitions);
+    setSummary(buildSummary(
+      viewport,
+      nextIndexPoints,
+      nextLocations,
+      activeIndexDescriptorsRef.current.length,
+      activeDetailDescriptorsRef.current.length,
+      locationCountsRef.current?.total ?? 0,
+      locationCountsLoadingRef.current
+    ));
   }, []);
 
   const ensureLocationCounts = useCallback(async (): Promise<LocationCounts> => {
@@ -369,48 +354,31 @@ export function useFluxaMapPartitions({
 
     if (sharedLocationCountsCache) {
       locationCountsRef.current = sharedLocationCountsCache;
+      locationCountsLoadingRef.current = false;
+      syncViewState();
       return sharedLocationCountsCache;
     }
 
     if (sharedLocationCountsPromise) {
-      return sharedLocationCountsPromise
-        .then((counts) => {
-          sharedLocationCountsCache = counts;
-          locationCountsRef.current = counts;
-          setSummary((current) => ({
-            ...current,
-            totalLocationCount: counts.total,
-            totalCountLoading: false
-          }));
-          return counts;
-        })
-        .catch((nextError) => {
-          const message = formatErrorMessage(nextError);
-          setError(message);
-          throw nextError;
-        });
+      return sharedLocationCountsPromise;
     }
 
-    setLoading(true);
-    setSummary((current) => ({
-      ...current,
-      totalCountLoading: true
-    }));
+    locationCountsLoadingRef.current = true;
+    syncViewState();
+
     const nextPromise = locationService
       .getLocationCounts()
       .then((counts) => {
         sharedLocationCountsCache = counts;
         locationCountsRef.current = counts;
-        setSummary((current) => ({
-          ...current,
-          totalLocationCount: counts.total,
-          totalCountLoading: false
-        }));
+        locationCountsLoadingRef.current = false;
+        syncViewState();
         return counts;
       })
       .catch((nextError) => {
-        const message = formatErrorMessage(nextError);
-        setError(message);
+        locationCountsLoadingRef.current = false;
+        setError(formatErrorMessage(nextError));
+        syncViewState();
         throw nextError;
       })
       .finally(() => {
@@ -421,173 +389,36 @@ export function useFluxaMapPartitions({
 
     sharedLocationCountsPromise = nextPromise;
     return nextPromise;
-  }, []);
+  }, [syncViewState]);
 
-  const ensureMapIndex = useCallback(async (): Promise<LocationMapIndexRecord[]> => {
-    if (mapIndexRef.current) {
-      return mapIndexRef.current;
-    }
-
-    if (!didHydrateMapIndexSessionCache) {
-      didHydrateMapIndexSessionCache = true;
-      const cachedPoints = readMapIndexSessionCache();
-      if (cachedPoints && cachedPoints.length > 0) {
-        if (!sharedMapIndexCountValidationPromise) {
-          sharedMapIndexCountValidationPromise = locationService
-            .getLocationCounts()
-            .then((counts) => counts.total === cachedPoints.length)
-            .catch(() => true)
-            .finally(() => {
-              sharedMapIndexCountValidationPromise = null;
-            });
-        }
-
-        const isValidCachedPoints = await sharedMapIndexCountValidationPromise;
-        if (isValidCachedPoints) {
-          sharedMapIndexCache = cachedPoints;
-          mapIndexRef.current = cachedPoints;
-          setIndexPoints(cachedPoints);
-          setError(null);
-          return cachedPoints;
-        }
-
-        clearMapIndexSessionCache();
-      }
-    }
-
-    if (sharedMapIndexCache) {
-      mapIndexRef.current = sharedMapIndexCache;
-      setIndexPoints(sharedMapIndexCache);
-      setError(null);
-      return sharedMapIndexCache;
-    }
-
-    if (mapIndexPromiseRef.current) {
-      return mapIndexPromiseRef.current;
-    }
-
-    setLoading(true);
-    const nextPromise = locationService
-      .listLocationMapIndex()
-      .then((points) => {
-        sharedMapIndexCache = points;
-        mapIndexRef.current = points;
-        setIndexPoints(points);
-        persistMapIndexSessionCache(points);
-        setError(null);
-        setSummary((current) => ({
-          ...current,
-          totalLocationCount: locationCountsRef.current?.total ?? current.totalLocationCount,
-          totalCountLoading: !locationCountsRef.current
-        }));
-        return points;
-      })
-      .catch((nextError) => {
-        const message = formatErrorMessage(nextError);
-        setError(message);
-        throw nextError;
-      })
-      .finally(() => {
-        if (sharedMapIndexPromise === nextPromise) {
-          sharedMapIndexPromise = null;
-        }
-        mapIndexPromiseRef.current = null;
-      });
-
-    sharedMapIndexPromise = nextPromise;
-    mapIndexPromiseRef.current = nextPromise;
-    return mapIndexPromiseRef.current;
-  }, []);
-
-  const loadBootstrapViewport = useCallback(async (viewport: MapViewportBounds): Promise<void> => {
-    if (!enabled || viewport.zoom < DETAIL_LOCATION_ZOOM_THRESHOLD) {
-      return;
-    }
-
-    if (activeKeysRef.current.length > 0) {
-      return;
-    }
-
-    const bootstrapKey = buildBootstrapLayerKey(viewport);
-    if (bootstrapLayerKeyRef.current === bootstrapKey || bootstrapInFlightKeyRef.current === bootstrapKey) {
-      return;
-    }
-
-    bootstrapLayerKeyRef.current = bootstrapKey;
-    bootstrapInFlightKeyRef.current = bootstrapKey;
-    bootstrapPendingRef.current = true;
-    setLoading(true);
-
-    const span = getPartitionSpan(viewport.zoom);
-    const bounds = expandBounds(viewport, PRELOAD_PADDING_RATIO, span);
-    const nextPromise = locationService
-      .listLocationsInBounds(bounds)
-      .then((bootstrapLocations) => {
-        if (bootstrapLayerKeyRef.current !== bootstrapKey || activeKeysRef.current.length > 0) {
-          return;
-        }
-
-        const nextEntry = {
-          bounds,
-          locations: bootstrapLocations,
-          loadedAt: Date.now()
-        };
-
-        cacheRef.current.set(bootstrapKey, nextEntry);
-        sharedPartitionCache.set(bootstrapKey, nextEntry);
-        trimPartitionCache(sharedPartitionCache);
-
-        activeDescriptorsRef.current = [{ key: bootstrapKey, bounds }];
-        activeKeysRef.current = [bootstrapKey];
-        setSummary((current) => ({
-          ...current,
-          visibleLocationCount: bootstrapLocations.length,
-          totalLocationCount: locationCountsRef.current?.total ?? current.totalLocationCount,
-          visiblePartitionCount: 1,
-          totalPartitionCount: 1,
-          totalCountLoading: !locationCountsRef.current && current.totalLocationCount === 0
-        }));
-        setError(null);
-        syncVisibleLocations();
-      })
-      .catch((nextError) => {
-        if (bootstrapLayerKeyRef.current === bootstrapKey) {
-          setError(formatErrorMessage(nextError));
-        }
-      })
-      .finally(() => {
-        if (bootstrapLayerKeyRef.current === bootstrapKey) {
-          bootstrapPendingRef.current = false;
-        }
-        if (bootstrapInFlightKeyRef.current === bootstrapKey) {
-          bootstrapInFlightKeyRef.current = null;
-        }
-        syncVisibleLocations();
-      });
-
-    await nextPromise;
-  }, [enabled, syncVisibleLocations]);
-
-  const loadPartitions = useCallback(async (
+  const loadPartitions = useCallback(async <T extends { id: string; updatedAt: string }>(
     descriptors: PartitionDescriptor[],
-    options?: { background?: boolean }
+    options: {
+      cacheRef: MutableRefObject<Map<string, PartitionCacheEntry<T>>>;
+      sharedCache: Map<string, PartitionCacheEntry<T>>;
+      pendingKeysRef: MutableRefObject<Set<string>>;
+      fetchPartition: (bounds: LocationBounds) => Promise<T[]>;
+      background?: boolean;
+    }
   ): Promise<void> => {
     if (!enabled || descriptors.length === 0) {
-      syncVisibleLocations();
+      syncViewState();
       return;
     }
 
-    const background = options?.background ?? false;
+    const background = options.background ?? false;
     const generation = generationRef.current;
-    const queuedDescriptors = descriptors.filter(({ key }) => !pendingKeysRef.current.has(key));
+    const queuedDescriptors = descriptors.filter(({ key }) => (
+      !options.cacheRef.current.has(key) && !options.pendingKeysRef.current.has(key)
+    ));
 
     if (queuedDescriptors.length === 0) {
-      syncVisibleLocations();
+      syncViewState();
       return;
     }
 
-    queuedDescriptors.forEach(({ key }) => pendingKeysRef.current.add(key));
-    syncVisibleLocations();
+    queuedDescriptors.forEach(({ key }) => options.pendingKeysRef.current.add(key));
+    syncViewState();
 
     let nextError: string | null = null;
 
@@ -598,7 +429,7 @@ export function useFluxaMapPartitions({
           batch.map(async ({ key, bounds }) => ({
             key,
             bounds,
-            locations: await locationService.listLocationsInBounds(bounds)
+            items: await options.fetchPartition(bounds)
           }))
         );
 
@@ -608,60 +439,40 @@ export function useFluxaMapPartitions({
 
         results.forEach((result, batchIndex) => {
           const descriptor = batch[batchIndex];
-          pendingKeysRef.current.delete(descriptor.key);
+          options.pendingKeysRef.current.delete(descriptor.key);
 
           if (result.status === "fulfilled") {
-            const nextEntry = {
+            const nextEntry: PartitionCacheEntry<T> = {
               bounds: descriptor.bounds,
-              locations: result.value.locations,
+              items: result.value.items,
               loadedAt: Date.now()
             };
-            cacheRef.current.set(descriptor.key, nextEntry);
-            sharedPartitionCache.set(descriptor.key, nextEntry);
-            trimPartitionCache(sharedPartitionCache);
+
+            options.cacheRef.current.set(descriptor.key, nextEntry);
+            options.sharedCache.set(descriptor.key, nextEntry);
             return;
           }
 
           nextError = formatErrorMessage(result.reason);
         });
 
-        syncVisibleLocations();
+        trimPartitionCache(options.cacheRef.current);
+        trimPartitionCache(options.sharedCache);
+        syncViewState();
       }
     } finally {
       if (generation !== generationRef.current) {
         return;
       }
 
-      queuedDescriptors.forEach(({ key }) => pendingKeysRef.current.delete(key));
-      syncVisibleLocations();
+      queuedDescriptors.forEach(({ key }) => options.pendingKeysRef.current.delete(key));
+      syncViewState();
+
       if (!background) {
         setError(nextError);
       }
     }
-  }, [enabled, syncVisibleLocations]);
-
-  const scheduleBackgroundPrefetch = useCallback((descriptors: PartitionDescriptor[]): void => {
-    if (!enabled || descriptors.length === 0 || typeof window === "undefined") {
-      return;
-    }
-
-    const queuedDescriptors = descriptors
-      .filter(({ key }) => !cacheRef.current.has(key) && !pendingKeysRef.current.has(key))
-      .slice(0, BACKGROUND_PREFETCH_LIMIT);
-
-    if (queuedDescriptors.length === 0) {
-      return;
-    }
-
-    if (prefetchTimerRef.current !== null) {
-      window.clearTimeout(prefetchTimerRef.current);
-    }
-
-    prefetchTimerRef.current = window.setTimeout(() => {
-      prefetchTimerRef.current = null;
-      void loadPartitions(queuedDescriptors, { background: true });
-    }, VIEWPORT_APPLY_DEBOUNCE_MS);
-  }, [enabled, loadPartitions]);
+  }, [enabled, syncViewState]);
 
   const applyViewport = useCallback(async (viewport: MapViewportBounds): Promise<void> => {
     if (!enabled) {
@@ -670,101 +481,80 @@ export function useFluxaMapPartitions({
 
     lastViewportRef.current = viewport;
     void ensureLocationCounts();
-    const pointsPromise = ensureMapIndex();
-    void loadBootstrapViewport(viewport);
-    const points = await pointsPromise;
-    setIndexPoints(points);
-    setSummary((current) => {
-      const totalLocationCount = locationCountsRef.current?.total ?? current.totalLocationCount;
-      return {
-        ...buildSummary(points, viewport),
-        totalLocationCount,
-        totalCountLoading: !locationCountsRef.current
-      };
-    });
 
-    if (viewport.zoom < DETAIL_LOCATION_ZOOM_THRESHOLD) {
-      detailLayerKeyRef.current = null;
-      bootstrapLayerKeyRef.current = null;
-      activeDescriptorsRef.current = [];
-      activeKeysRef.current = [];
-      lastSignatureRef.current = "";
-      syncVisibleLocations();
+    const center = resolveViewportCenter(viewport);
+    const indexZoom = Math.min(Math.max(0, Math.floor(viewport.zoom)), DETAIL_LOCATION_ZOOM_THRESHOLD);
+    const activeIndexBounds = buildFetchBounds(viewport, PRELOAD_PADDING_RATIO, indexZoom);
+    const retainIndexBounds = buildFetchBounds(viewport, RETAIN_PADDING_RATIO, indexZoom);
+    const activeIndexDescriptors = activeIndexBounds ? buildPartitionDescriptors(activeIndexBounds, indexZoom, center) : [];
+    const retainIndexDescriptors = retainIndexBounds ? buildPartitionDescriptors(retainIndexBounds, indexZoom, center) : [];
+    const retainIndexKeys = new Set(retainIndexDescriptors.map(({ key }) => key));
 
-      const futureZoomLevels = Array.from(new Set([
-        Math.min(viewport.zoom + 1, DETAIL_LOCATION_ZOOM_THRESHOLD),
-        Math.min(viewport.zoom + 2, DETAIL_LOCATION_ZOOM_THRESHOLD)
-      ].filter((zoomLevel) => zoomLevel > viewport.zoom)));
+    activeIndexDescriptorsRef.current = activeIndexDescriptors;
+    activeIndexKeysRef.current = activeIndexDescriptors.map(({ key }) => key);
+    prunePartitionCache(indexCacheRef, sharedIndexPartitionCache, retainIndexKeys);
 
-      const deeperDescriptors = futureZoomLevels.flatMap((zoomLevel) => {
-        const centeredBounds = buildCenteredBounds(viewport, zoomLevel);
-        const centeredPoints = points.filter((point) => isPointInsideBounds(point, centeredBounds));
-        return filterDescriptorsWithPoints(buildPartitionDescriptors(centeredBounds, zoomLevel), centeredPoints, zoomLevel);
-      });
+    let activeDetailDescriptors: PartitionDescriptor[] = [];
+    let retainDetailDescriptors: PartitionDescriptor[] = [];
 
-      setError(null);
-      scheduleBackgroundPrefetch(deeperDescriptors);
-      return;
-    }
+    if (viewport.zoom >= DETAIL_LOCATION_ZOOM_THRESHOLD) {
+      const detailZoom = Math.max(DETAIL_LOCATION_ZOOM_THRESHOLD, Math.floor(viewport.zoom));
+      const activeDetailBounds = buildFetchBounds(viewport, PRELOAD_PADDING_RATIO, detailZoom);
+      const retainDetailBounds = buildFetchBounds(viewport, RETAIN_PADDING_RATIO, detailZoom);
+      activeDetailDescriptors = activeDetailBounds ? buildPartitionDescriptors(activeDetailBounds, detailZoom, center) : [];
+      retainDetailDescriptors = retainDetailBounds ? buildPartitionDescriptors(retainDetailBounds, detailZoom, center) : [];
 
-    const span = getPartitionSpan(viewport.zoom);
-    const preloadBounds = expandBounds(viewport, PRELOAD_PADDING_RATIO, span);
-    const retainBounds = expandBounds(viewport, RETAIN_PADDING_RATIO, span);
-    const preloadPoints = points.filter((point) => isPointInsideBounds(point, preloadBounds));
-    const retainPoints = points.filter((point) => isPointInsideBounds(point, retainBounds));
-    const retainKeys = collectPartitionKeys(retainPoints, viewport.zoom);
-    const activeDescriptors = filterDescriptorsWithPoints(buildPartitionDescriptors(preloadBounds, viewport.zoom), preloadPoints, viewport.zoom);
-    const retainDescriptors = filterDescriptorsWithPoints(buildPartitionDescriptors(retainBounds, viewport.zoom), retainPoints, viewport.zoom);
-    const activeKeys = activeDescriptors.map(({ key }) => key);
-    const nextSignature = activeKeys.join("|");
-    const nextDetailLayerKey = buildDetailLayerKey(viewport.zoom);
-    const currentActiveKeys = new Set(activeKeysRef.current);
-    const isSubsetOfCurrentLayer =
-      detailLayerKeyRef.current === nextDetailLayerKey &&
-      activeKeys.length > 0 &&
-      activeKeys.every((key) => currentActiveKeys.has(key));
-
-    const missingDescriptors = activeDescriptors.filter(({ key }) => !cacheRef.current.has(key) && !pendingKeysRef.current.has(key));
-    const backgroundDescriptors = retainDescriptors.filter(({ key }) => !activeKeys.includes(key));
-
-    if (isSubsetOfCurrentLayer && missingDescriptors.length === 0) {
-      setError(null);
-      return;
-    }
-
-    detailLayerKeyRef.current = nextDetailLayerKey;
-    bootstrapLayerKeyRef.current = null;
-    bootstrapInFlightKeyRef.current = null;
-    bootstrapPendingRef.current = false;
-
-    activeDescriptorsRef.current = activeDescriptors;
-    activeKeysRef.current = activeKeys;
-
-    Array.from(cacheRef.current.keys()).forEach((key) => {
-      if (!retainKeys.has(key)) {
-        cacheRef.current.delete(key);
-      }
-    });
-
-    syncVisibleLocations();
-
-    if (nextSignature === lastSignatureRef.current && missingDescriptors.length === 0) {
-      scheduleBackgroundPrefetch(backgroundDescriptors);
-      return;
-    }
-
-    lastSignatureRef.current = nextSignature;
-
-    if (missingDescriptors.length === 0) {
-      setError(null);
-      scheduleBackgroundPrefetch(backgroundDescriptors);
-      return;
+      activeDetailDescriptorsRef.current = activeDetailDescriptors;
+      activeDetailKeysRef.current = activeDetailDescriptors.map(({ key }) => key);
+      prunePartitionCache(
+        detailCacheRef,
+        sharedDetailPartitionCache,
+        new Set(retainDetailDescriptors.map(({ key }) => key))
+      );
+    } else {
+      activeDetailDescriptorsRef.current = [];
+      activeDetailKeysRef.current = [];
+      prunePartitionCache(detailCacheRef, sharedDetailPartitionCache, new Set());
     }
 
     setError(null);
-    await loadPartitions(missingDescriptors);
-    scheduleBackgroundPrefetch(backgroundDescriptors);
-  }, [enabled, ensureLocationCounts, ensureMapIndex, loadBootstrapViewport, loadPartitions, scheduleBackgroundPrefetch, syncVisibleLocations]);
+    syncViewState(viewport);
+
+    await Promise.all([
+      loadPartitions(activeIndexDescriptors, {
+        cacheRef: indexCacheRef,
+        sharedCache: sharedIndexPartitionCache,
+        pendingKeysRef: pendingIndexKeysRef,
+        fetchPartition: (bounds) => locationService.listLocationMapIndexInBounds(bounds)
+      }),
+      loadPartitions(activeDetailDescriptors, {
+        cacheRef: detailCacheRef,
+        sharedCache: sharedDetailPartitionCache,
+        pendingKeysRef: pendingDetailKeysRef,
+        fetchPartition: (bounds) => locationService.listLocationsInBounds(bounds)
+      })
+    ]);
+
+    const activeIndexKeySet = new Set(activeIndexDescriptors.map(({ key }) => key));
+    const backgroundIndexDescriptors = retainIndexDescriptors.filter(({ key }) => !activeIndexKeySet.has(key));
+    void loadPartitions(backgroundIndexDescriptors, {
+      cacheRef: indexCacheRef,
+      sharedCache: sharedIndexPartitionCache,
+      pendingKeysRef: pendingIndexKeysRef,
+      fetchPartition: (bounds) => locationService.listLocationMapIndexInBounds(bounds),
+      background: true
+    });
+
+    const activeDetailKeySet = new Set(activeDetailDescriptors.map(({ key }) => key));
+    const backgroundDetailDescriptors = retainDetailDescriptors.filter(({ key }) => !activeDetailKeySet.has(key));
+    void loadPartitions(backgroundDetailDescriptors, {
+      cacheRef: detailCacheRef,
+      sharedCache: sharedDetailPartitionCache,
+      pendingKeysRef: pendingDetailKeysRef,
+      fetchPartition: (bounds) => locationService.listLocationsInBounds(bounds),
+      background: true
+    });
+  }, [enabled, ensureLocationCounts, loadPartitions, syncViewState]);
 
   const handleViewportChange = useCallback((viewport: MapViewportBounds) => {
     if (!enabled) {
@@ -793,22 +583,37 @@ export function useFluxaMapPartitions({
   }, [applyViewport, enabled]);
 
   const refreshVisiblePartitions = useCallback(async (): Promise<void> => {
-    if (!enabled || activeDescriptorsRef.current.length === 0) {
+    if (!enabled) {
       return;
     }
 
-    await ensureMapIndex();
-    activeDescriptorsRef.current.forEach(({ key }) => {
-      cacheRef.current.delete(key);
+    activeIndexDescriptorsRef.current.forEach(({ key }) => {
+      indexCacheRef.current.delete(key);
+      sharedIndexPartitionCache.delete(key);
     });
-    if (bootstrapLayerKeyRef.current) {
-      cacheRef.current.delete(bootstrapLayerKeyRef.current);
-      sharedPartitionCache.delete(bootstrapLayerKeyRef.current);
-    }
+    activeDetailDescriptorsRef.current.forEach(({ key }) => {
+      detailCacheRef.current.delete(key);
+      sharedDetailPartitionCache.delete(key);
+    });
+
     setError(null);
-    syncVisibleLocations();
-    await loadPartitions(activeDescriptorsRef.current);
-  }, [enabled, ensureMapIndex, loadPartitions, syncVisibleLocations]);
+    syncViewState();
+
+    await Promise.all([
+      loadPartitions(activeIndexDescriptorsRef.current, {
+        cacheRef: indexCacheRef,
+        sharedCache: sharedIndexPartitionCache,
+        pendingKeysRef: pendingIndexKeysRef,
+        fetchPartition: (bounds) => locationService.listLocationMapIndexInBounds(bounds)
+      }),
+      loadPartitions(activeDetailDescriptorsRef.current, {
+        cacheRef: detailCacheRef,
+        sharedCache: sharedDetailPartitionCache,
+        pendingKeysRef: pendingDetailKeysRef,
+        fetchPartition: (bounds) => locationService.listLocationsInBounds(bounds)
+      })
+    ]);
+  }, [enabled, loadPartitions, syncViewState]);
 
   useEffect(() => {
     if (!enabled) {
@@ -816,75 +621,48 @@ export function useFluxaMapPartitions({
     }
 
     void ensureLocationCounts();
-    void ensureMapIndex()
-      .then(() => {
-        if (lastViewportRef.current) {
-          void applyViewport(lastViewportRef.current);
-          return;
-        }
-
-        setSummary({
-          visibleLocationCount: 0,
-          totalLocationCount: locationCountsRef.current?.total ?? 0,
-          visiblePartitionCount: 0,
-          totalPartitionCount: 0,
-          totalCountLoading: !locationCountsRef.current
-        });
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
-      });
-  }, [applyViewport, enabled, ensureLocationCounts, ensureMapIndex]);
+    syncViewState();
+  }, [enabled, ensureLocationCounts, syncViewState]);
 
   useEffect(() => {
     if (enabled) {
       return;
     }
 
-    if (typeof window !== "undefined") {
-      if (viewportTimerRef.current !== null) {
-        window.clearTimeout(viewportTimerRef.current);
-      }
-      if (prefetchTimerRef.current !== null) {
-        window.clearTimeout(prefetchTimerRef.current);
-      }
+    if (typeof window !== "undefined" && viewportTimerRef.current !== null) {
+      window.clearTimeout(viewportTimerRef.current);
     }
 
     viewportTimerRef.current = null;
-    prefetchTimerRef.current = null;
     generationRef.current += 1;
-    cacheRef.current = new Map(sharedPartitionCache);
-    pendingKeysRef.current.clear();
-    activeKeysRef.current = [];
-    activeDescriptorsRef.current = [];
-    lastSignatureRef.current = "";
-    mapIndexRef.current = sharedMapIndexCache;
-    mapIndexPromiseRef.current = sharedMapIndexPromise;
-    detailLayerKeyRef.current = null;
+    pendingIndexKeysRef.current.clear();
+    pendingDetailKeysRef.current.clear();
+    activeIndexDescriptorsRef.current = [];
+    activeDetailDescriptorsRef.current = [];
+    activeIndexKeysRef.current = [];
+    activeDetailKeysRef.current = [];
     lastViewportRef.current = null;
+    locationCountsRef.current = sharedLocationCountsCache;
+    locationCountsLoadingRef.current = false;
+    indexCacheRef.current = new Map(sharedIndexPartitionCache);
+    detailCacheRef.current = new Map(sharedDetailPartitionCache);
+    setIndexPoints([]);
     setLocations([]);
-    setIndexPoints(sharedMapIndexCache || []);
     setLoading(false);
     setError(null);
-    setSummary(EMPTY_SUMMARY);
-    locationCountsRef.current = sharedLocationCountsCache;
-    bootstrapLayerKeyRef.current = null;
-    bootstrapInFlightKeyRef.current = null;
-    bootstrapPendingRef.current = false;
+    setSummary({
+      ...EMPTY_SUMMARY,
+      totalLocationCount: sharedLocationCountsCache?.total ?? 0,
+      totalCountLoading: false
+    });
   }, [enabled]);
 
   useEffect(() => () => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || viewportTimerRef.current === null) {
       return;
     }
 
-    if (viewportTimerRef.current !== null) {
-      window.clearTimeout(viewportTimerRef.current);
-    }
-    if (prefetchTimerRef.current !== null) {
-      window.clearTimeout(prefetchTimerRef.current);
-    }
+    window.clearTimeout(viewportTimerRef.current);
   }, []);
 
   return {

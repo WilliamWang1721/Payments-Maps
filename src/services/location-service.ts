@@ -901,8 +901,7 @@ function buildSupportInsights(
       insight.evidence.push({
         id: `${key}-official-${insight.officialSources}`,
         kind: "official",
-        title: "Structured POS profile",
-        summary: `supported_card_networks contains ${title}.`,
+        title: "Official Data",
         status: "supported"
       });
     });
@@ -939,7 +938,7 @@ function buildSupportInsights(
       insight.evidence.push({
         id: `${key}-official-${insight.officialSources}`,
         kind: "official",
-        title: "Structured POS profile",
+        title: "Official Data",
         summary: signal.summary,
         status: "supported"
       });
@@ -959,8 +958,14 @@ function buildSupportInsights(
         title: buildAttemptEvidenceTitle(attempt),
         summary: buildAttemptEvidenceSummary(attempt),
         status: attemptStatus,
+        attemptId: attempt.id,
+        cardName: attempt.cardName,
         createdAt: attempt.occurredAt,
+        dateTimeLabel: attempt.dateTime,
         addedBy: attempt.addedBy,
+        networkLabel: formatSupportNetworkLabel(attempt.network),
+        paymentMethodLabel: formatSupportPaymentMethodLabel(attempt.paymentMethod || attempt.method),
+        checkoutLocation: attempt.checkoutLocation,
         notes: attempt.notes,
         invalidated: !isSupportingAttempt && networkInsight.officialSources > 0
       });
@@ -982,8 +987,14 @@ function buildSupportInsights(
         title: buildAttemptEvidenceTitle(attempt),
         summary: buildAttemptEvidenceSummary(attempt),
         status: attemptStatus,
+        attemptId: attempt.id,
+        cardName: attempt.cardName,
         createdAt: attempt.occurredAt,
+        dateTimeLabel: attempt.dateTime,
         addedBy: attempt.addedBy,
+        networkLabel: formatSupportNetworkLabel(attempt.network),
+        paymentMethodLabel: formatSupportPaymentMethodLabel(attempt.paymentMethod || attempt.method),
+        checkoutLocation: attempt.checkoutLocation,
         notes: attempt.notes,
         invalidated: !isSupportingAttempt && paymentMethodInsight.officialSources > 0
       });
@@ -1702,6 +1713,23 @@ async function listFluxaLocationMapIndex(): Promise<SourceResult<LocationMapInde
   };
 }
 
+async function listFluxaLocationMapIndexInBounds(bounds: LocationBounds): Promise<SourceResult<LocationMapIndexRecord[]>> {
+  const normalizedBounds = normalizeBounds(bounds);
+  const { data, error } = await executeFluxaLocationSelect<FluxaLocationMapIndexRow[]>((columns) =>
+    applyBoundsFilters(
+      supabase.from("fluxa_locations").select(columns).order("updated_at", { ascending: false }),
+      normalizedBounds,
+      "latitude",
+      "longitude"
+    )
+  );
+
+  return {
+    data: ((data || []) as FluxaLocationMapIndexRow[]).map(mapFluxaRowToLocationMapIndex),
+    error
+  };
+}
+
 async function listFluxaLocationSearchDirectory(): Promise<SourceResult<LocationSearchRecord[]>> {
   const { data, error } = await fetchAllRows<FluxaLocationSearchRow>(() =>
     supabase.from("fluxa_locations").select(LOCATION_SEARCH_COLUMNS)
@@ -1839,6 +1867,21 @@ async function listPosMachineLocationsInBounds(bounds: LocationBounds): Promise<
 async function listPosMachineLocationMapIndex(): Promise<SourceResult<LocationMapIndexRecord[]>> {
   const { data, error } = await fetchAllRows<PosMachineMapIndexRow>(() =>
     supabase.from("pos_machines").select(POS_MACHINE_MAP_INDEX_COLUMNS)
+  );
+
+  return {
+    data: ((data || []) as PosMachineMapIndexRow[]).map(mapPosMachineToLocationMapIndex),
+    error
+  };
+}
+
+async function listPosMachineLocationMapIndexInBounds(bounds: LocationBounds): Promise<SourceResult<LocationMapIndexRecord[]>> {
+  const normalizedBounds = normalizeBounds(bounds);
+  const { data, error } = await applyBoundsFilters(
+    supabase.from("pos_machines").select(POS_MACHINE_MAP_INDEX_COLUMNS).order("updated_at", { ascending: false }),
+    normalizedBounds,
+    "latitude",
+    "longitude"
   );
 
   return {
@@ -2515,6 +2558,25 @@ export const locationService = {
 
   async listLocationMapIndex(): Promise<LocationMapIndexRecord[]> {
     const [fluxaResult, posResult] = await Promise.all([listFluxaLocationMapIndex(), listPosMachineLocationMapIndex()]);
+    const mergedLocations = mergeLocationMapIndexResults(posResult, fluxaResult);
+
+    if (mergedLocations.length > 0) {
+      return mergedLocations;
+    }
+
+    if (fluxaResult.error && posResult.error) {
+      throw posResult.error;
+    }
+
+    return [];
+  },
+
+  async listLocationMapIndexInBounds(bounds: LocationBounds): Promise<LocationMapIndexRecord[]> {
+    const normalizedBounds = normalizeBounds(bounds);
+    const [fluxaResult, posResult] = await Promise.all([
+      listFluxaLocationMapIndexInBounds(normalizedBounds),
+      listPosMachineLocationMapIndexInBounds(normalizedBounds)
+    ]);
     const mergedLocations = mergeLocationMapIndexResults(posResult, fluxaResult);
 
     if (mergedLocations.length > 0) {
