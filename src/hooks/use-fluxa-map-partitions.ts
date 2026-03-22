@@ -222,6 +222,19 @@ function buildPartitionDescriptors(bounds: LocationBounds, zoom: number, center:
   return descriptors.sort((left, right) => left.distanceKm - right.distanceKm);
 }
 
+function buildOverviewDescriptor(bounds: LocationBounds, zoom: number, center: [number, number]): PartitionDescriptor {
+  const normalizedBounds = normalizeBounds(bounds);
+  const span = getPartitionSpan(zoom);
+  const latCells = Math.max(1, Math.round((normalizedBounds.north - normalizedBounds.south) / span));
+  const lngCells = Math.max(1, Math.round((normalizedBounds.east - normalizedBounds.west) / span));
+
+  return {
+    key: `overview:${String(span).replace(".", "_")}:${Math.round(center[1] / span)}:${Math.round(center[0] / span)}:${latCells}:${lngCells}`,
+    bounds: normalizedBounds,
+    distanceKm: 0
+  };
+}
+
 function isPointInsideBounds(point: Pick<LocationMapIndexRecord, "lat" | "lng">, bounds: LocationBounds): boolean {
   return point.lat >= bounds.south && point.lat <= bounds.north && point.lng >= bounds.west && point.lng <= bounds.east;
 }
@@ -484,10 +497,23 @@ export function useFluxaMapPartitions({
 
     const center = resolveViewportCenter(viewport);
     const indexZoom = Math.min(Math.max(0, Math.floor(viewport.zoom)), DETAIL_LOCATION_ZOOM_THRESHOLD);
-    const activeIndexBounds = buildFetchBounds(viewport, PRELOAD_PADDING_RATIO, indexZoom);
-    const retainIndexBounds = buildFetchBounds(viewport, RETAIN_PADDING_RATIO, indexZoom);
-    const activeIndexDescriptors = activeIndexBounds ? buildPartitionDescriptors(activeIndexBounds, indexZoom, center) : [];
-    const retainIndexDescriptors = retainIndexBounds ? buildPartitionDescriptors(retainIndexBounds, indexZoom, center) : [];
+    const usesOverviewIndexLayer = viewport.zoom < DETAIL_LOCATION_ZOOM_THRESHOLD;
+    const activeIndexBounds = usesOverviewIndexLayer
+      ? normalizeBounds(viewport)
+      : buildFetchBounds(viewport, PRELOAD_PADDING_RATIO, indexZoom);
+    const retainIndexBounds = usesOverviewIndexLayer
+      ? activeIndexBounds
+      : buildFetchBounds(viewport, RETAIN_PADDING_RATIO, indexZoom);
+    const activeIndexDescriptors = activeIndexBounds
+      ? (usesOverviewIndexLayer
+          ? [buildOverviewDescriptor(activeIndexBounds, indexZoom, center)]
+          : buildPartitionDescriptors(activeIndexBounds, indexZoom, center))
+      : [];
+    const retainIndexDescriptors = retainIndexBounds
+      ? (usesOverviewIndexLayer
+          ? [buildOverviewDescriptor(retainIndexBounds, indexZoom, center)]
+          : buildPartitionDescriptors(retainIndexBounds, indexZoom, center))
+      : [];
     const retainIndexKeys = new Set(retainIndexDescriptors.map(({ key }) => key));
 
     activeIndexDescriptorsRef.current = activeIndexDescriptors;
