@@ -513,6 +513,31 @@ async function fetchAllRows<T>(queryFactory: () => any): Promise<SourceResult<T[
   }
 }
 
+async function fetchAllBoundedRows<T>(queryFactory: () => any): Promise<SourceResult<T[]>> {
+  const rows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await queryFactory()
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + FULL_SCAN_BATCH_SIZE - 1);
+
+    if (error) {
+      return { data: [], error };
+    }
+
+    const batch = (data || []) as T[];
+    rows.push(...batch);
+
+    if (batch.length < FULL_SCAN_BATCH_SIZE) {
+      return { data: rows, error: null };
+    }
+
+    offset += FULL_SCAN_BATCH_SIZE;
+  }
+}
+
 function isFluxaLocationStaffColumnError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -548,6 +573,33 @@ async function executeFluxaLocationSelect<T>(queryFactory: (columns: string) => 
 }
 
 async function fetchAllFluxaRows<T>(queryFactory: (columns: string) => any): Promise<SourceResult<T[]>> {
+  const rows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await executeFluxaLocationSelect<T[]>((columns) =>
+      queryFactory(columns)
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + FULL_SCAN_BATCH_SIZE - 1)
+    );
+
+    if (error) {
+      return { data: [], error };
+    }
+
+    const batch = (data || []) as T[];
+    rows.push(...batch);
+
+    if (batch.length < FULL_SCAN_BATCH_SIZE) {
+      return { data: rows, error: null };
+    }
+
+    offset += FULL_SCAN_BATCH_SIZE;
+  }
+}
+
+async function fetchAllFluxaBoundedRows<T>(queryFactory: (columns: string) => any): Promise<SourceResult<T[]>> {
   const rows: T[] = [];
   let offset = 0;
 
@@ -1683,9 +1735,9 @@ async function listFluxaLocationDirectory(): Promise<SourceResult<LocationRecord
 
 async function listFluxaLocationsInBounds(bounds: LocationBounds): Promise<SourceResult<LocationRecord[]>> {
   const normalizedBounds = normalizeBounds(bounds);
-  const { data, error } = await executeFluxaLocationSelect<FluxaLocationRow[]>((columns) =>
+  const { data, error } = await fetchAllFluxaBoundedRows<FluxaLocationRow>((columns) =>
     applyBoundsFilters(
-      supabase.from("fluxa_locations").select(columns).order("updated_at", { ascending: false }),
+      supabase.from("fluxa_locations").select(columns),
       normalizedBounds,
       "latitude",
       "longitude"
@@ -1715,9 +1767,9 @@ async function listFluxaLocationMapIndex(): Promise<SourceResult<LocationMapInde
 
 async function listFluxaLocationMapIndexInBounds(bounds: LocationBounds): Promise<SourceResult<LocationMapIndexRecord[]>> {
   const normalizedBounds = normalizeBounds(bounds);
-  const { data, error } = await executeFluxaLocationSelect<FluxaLocationMapIndexRow[]>((columns) =>
+  const { data, error } = await fetchAllFluxaBoundedRows<FluxaLocationMapIndexRow>((columns) =>
     applyBoundsFilters(
-      supabase.from("fluxa_locations").select(columns).order("updated_at", { ascending: false }),
+      supabase.from("fluxa_locations").select(columns),
       normalizedBounds,
       "latitude",
       "longitude"
@@ -1843,11 +1895,13 @@ async function listPosMachineLocationSearchDirectory(): Promise<SourceResult<Loc
 
 async function listPosMachineLocationsInBounds(bounds: LocationBounds): Promise<SourceResult<LocationRecord[]>> {
   const normalizedBounds = normalizeBounds(bounds);
-  const { data, error } = await applyBoundsFilters(
-    supabase.from("pos_machines").select(POS_MACHINE_COLUMNS).order("updated_at", { ascending: false }),
-    normalizedBounds,
-    "latitude",
-    "longitude"
+  const { data, error } = await fetchAllBoundedRows<PosMachineRow>(() =>
+    applyBoundsFilters(
+      supabase.from("pos_machines").select(POS_MACHINE_COLUMNS),
+      normalizedBounds,
+      "latitude",
+      "longitude"
+    )
   );
 
   if (error) {
@@ -1877,11 +1931,13 @@ async function listPosMachineLocationMapIndex(): Promise<SourceResult<LocationMa
 
 async function listPosMachineLocationMapIndexInBounds(bounds: LocationBounds): Promise<SourceResult<LocationMapIndexRecord[]>> {
   const normalizedBounds = normalizeBounds(bounds);
-  const { data, error } = await applyBoundsFilters(
-    supabase.from("pos_machines").select(POS_MACHINE_MAP_INDEX_COLUMNS).order("updated_at", { ascending: false }),
-    normalizedBounds,
-    "latitude",
-    "longitude"
+  const { data, error } = await fetchAllBoundedRows<PosMachineMapIndexRow>(() =>
+    applyBoundsFilters(
+      supabase.from("pos_machines").select(POS_MACHINE_MAP_INDEX_COLUMNS),
+      normalizedBounds,
+      "latitude",
+      "longitude"
+    )
   );
 
   return {
