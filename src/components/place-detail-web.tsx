@@ -328,7 +328,7 @@ function AttemptDialogChip({
   return (
     <button
       aria-pressed={active}
-      className={`ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill px-4 text-sm font-medium leading-[1.4286] transition-colors duration-200 ${
+      className={`inline-flex h-10 items-center gap-1.5 rounded-pill px-4 text-sm font-medium leading-[1.4286] transition-colors duration-200 ${
         active
           ? "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]"
           : "border border-[var(--input)] bg-white text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
@@ -585,6 +585,7 @@ function formatPaymentMethodLabel(method: string): string {
   if (normalized === "apple pay" || normalized === "apple_pay") return "Apple Pay";
   if (normalized === "google pay" || normalized === "google_pay") return "Google Pay";
   if (normalized === "contactless" || normalized === "tap") return "Contactless";
+  if (normalized === "hce") return "HCE";
   if (normalized === "insert") return "Insert";
   if (normalized === "swipe") return "Swipe";
   if (normalized === "signature") return "Signature";
@@ -718,27 +719,75 @@ function formatSupportStatusLabel(status: SupportEvidenceStatus): string {
   return "Unknown";
 }
 
+const SECTION_ICON_TONES = {
+  green: {
+    wrapper: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[#CFE3CF] bg-[#F3FAF3]",
+    icon: "text-[#008A00]",
+    bare: "text-[#008A00]"
+  },
+  blue: {
+    wrapper: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[#D7E2F4] bg-[#F4F7FD]",
+    icon: "text-[#3C5AA8]",
+    bare: "text-[#3C5AA8]"
+  }
+} as const;
+type SectionIconTone = keyof typeof SECTION_ICON_TONES;
+const FLAT_ACTION_BUTTON_CLASS =
+  "inline-flex h-10 items-center gap-1.5 rounded-pill border border-[#D7E2F4] bg-[#F4F7FD] px-4 text-sm font-medium leading-[1.4286] text-[#3C5AA8] transition-colors duration-200 hover:bg-[#EAF0FB]";
+const FLAT_ICON_BUTTON_CLASS =
+  "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--input)] bg-white text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]";
+
+function SectionIconBadge({
+  icon: Icon,
+  bare = false,
+  bareClassName,
+  tone = "green"
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  bare?: boolean;
+  bareClassName?: string;
+  tone?: SectionIconTone;
+}): React.JSX.Element {
+  const toneClasses = SECTION_ICON_TONES[tone];
+
+  if (bare) {
+    return <Icon className={`h-5 w-5 ${bareClassName ?? toneClasses.bare}`} />;
+  }
+
+  return (
+    <span className={toneClasses.wrapper}>
+      <Icon className={`h-5 w-5 ${toneClasses.icon}`} />
+    </span>
+  );
+}
+
 function StatusPill({
   label,
-  kind = "supported"
+  kind = "supported",
+  appearance = "default"
 }: {
   label: string;
   kind?: "supported" | "unknown" | "limited" | "declined" | "unsupported";
+  appearance?: "default" | "payment-method" | "blue";
 }): React.JSX.Element {
   const { t } = useI18n();
   const cls =
-    kind === "supported"
-      ? "bg-[var(--color-success)] text-[var(--color-success-foreground)]"
-      : kind === "unsupported"
-        ? "bg-[#FFE0DB] text-[#7A1F0E]"
-      : kind === "declined"
-        ? "bg-[var(--color-warning)] text-[var(--color-warning-foreground)]"
-        : kind === "limited"
-          ? "bg-[#FFBFB2] text-[#590F00]"
-          : "bg-[var(--secondary)] text-[var(--secondary-foreground)]";
+    appearance === "blue" && kind === "supported"
+      ? "border border-[#D7E2F4] bg-[#F4F7FD] text-[#3C5AA8]"
+      : appearance === "payment-method" && kind !== "supported"
+      ? "border border-[#C9D6F0] bg-white text-[#3C5AA8]"
+      : kind === "supported"
+        ? "border border-[#BFE0BF] bg-[#F3FAF3] text-[#006600]"
+        : kind === "unsupported"
+          ? "border border-[#F8C4BA] bg-[#FFF3F0] text-[#8A2A16]"
+          : kind === "declined"
+            ? "border border-[#F5D6A4] bg-[#FFF8EC] text-[#9A5A00]"
+            : kind === "limited"
+              ? "border border-[#F4D39A] bg-[#FFF8EC] text-[#8A5B00]"
+              : "border border-[#D9E2D9] bg-[#F7FAF7] text-[#5B6B5B]";
 
   return (
-    <span className={`inline-flex h-8 items-center justify-center rounded-pill px-3 text-sm font-medium leading-[1.142857] ${cls}`}>
+    <span className={`inline-flex h-10 items-center justify-center rounded-pill px-4 text-sm font-medium leading-[1.4286] ${cls}`}>
       {t(label)}
     </span>
   );
@@ -746,37 +795,55 @@ function StatusPill({
 
 function SectionHeader({
   title,
+  icon: Icon,
+  iconBare = false,
+  iconBareClassName,
+  iconTone,
+  meta,
   buttonLabel,
   onAction
 }: {
   title: string;
-  buttonLabel: string;
-  onAction: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  iconBare?: boolean;
+  iconBareClassName?: string;
+  iconTone?: SectionIconTone;
+  meta?: React.ReactNode;
+  buttonLabel?: string;
+  onAction?: () => void;
 }): React.JSX.Element {
   const { t } = useI18n();
   return (
     <div className="flex items-center justify-between gap-3">
       <h3 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t(title)}</h3>
-      <button
-        className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
-        onClick={onAction}
-        type="button"
-      >
-        <Settings2 className="h-4 w-4" />
-        <span>{t(buttonLabel)}</span>
-      </button>
+      <div className="flex items-center gap-3">
+        {meta}
+        {buttonLabel && onAction ? (
+          <button className={FLAT_ACTION_BUTTON_CLASS} onClick={onAction} type="button">
+            <Settings2 className="h-4 w-4" />
+            <span>{t(buttonLabel)}</span>
+          </button>
+        ) : null}
+        <SectionIconBadge bare={iconBare} bareClassName={iconBareClassName} icon={Icon} tone={iconTone} />
+      </div>
     </div>
   );
+}
+
+function getPaymentMethodIcon(name: string): React.ComponentType<{ className?: string }> {
+  const normalized = name.trim().toLowerCase();
+
+  if (normalized === "apple pay" || normalized === "google pay") return Smartphone;
+  if (normalized === "contactless" || normalized === "tap") return Wifi;
+  if (normalized === "hce") return Nfc;
+
+  return CreditCard;
 }
 
 function StaffProficiencyCard({
   currentLevel,
   updatedAt,
-  saving,
-  savingLevel,
-  error,
-  onSelectLevel,
-  onClear
+  error
 }: {
   currentLevel: StaffProficiencyLevel | null;
   updatedAt: string | null;
@@ -791,94 +858,69 @@ function StaffProficiencyCard({
   const lastUpdatedLabel = formatStaffProficiencyUpdatedAt(updatedAt);
 
   return (
-    <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t("Staff Proficiency")}</p>
-          <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
-            {activeOption
-              ? t("Use this to estimate how much POS guidance the store staff will need.")
-              : t("No proficiency level has been recorded for this location yet.")}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {activeOption ? <StatusPill kind={activeOption.pillKind} label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
-          <HelpCircle className="h-5 w-5 text-[var(--primary)]" />
-        </div>
-      </div>
+    <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+      <SectionHeader
+        icon={HelpCircle}
+        iconBare
+        iconBareClassName="text-[#3C5AA8]"
+        meta={activeOption ? <StatusPill appearance="blue" kind="supported" label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
+        title="Staff Proficiency"
+      />
 
-      <div className={`mt-6 rounded-[28px] border px-6 py-5 ${activeOption ? activeOption.cardClassName : "border-dashed border-[var(--input)] bg-[#FAFAFA]"}`}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
+      <p className="mt-5 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+        {activeOption
+          ? t("Use this to estimate how much POS guidance the store staff will need.")
+          : t("No proficiency level has been recorded for this location yet.")}
+      </p>
+
+      <div className={`mt-6 rounded-[28px] border px-6 py-5 ${activeOption ? "border-[#D7E2F4] bg-[#F4F7FD]" : "border-dashed border-[var(--input)] bg-[#FAFAFA]"}`}>
+        <div className="flex items-start gap-4">
+          <span className="inline-flex h-12 min-w-12 items-center justify-center rounded-[16px] border border-[#D7E2F4] bg-white px-3 text-base font-semibold text-[#3C5AA8]">
+            {activeOption ? activeOption.level : "--"}
+          </span>
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
-              {activeOption ? (
-                <>
-                  <span className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm font-semibold ${activeOption.badgeClassName}`}>
-                    {activeOption.level}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-lg font-semibold leading-[1.25] text-[var(--foreground)]">{t(activeOption.label)}</p>
-                    <p className="mt-1 max-w-[52ch] text-sm leading-[1.6] text-[var(--muted-foreground)]">{t(activeOption.description)}</p>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <p className="text-lg font-semibold leading-[1.25] text-[var(--foreground)]">{t("Not set")}</p>
-                  <p className="mt-1 max-w-[52ch] text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                    {t("Pick one of the levels below to save a recommendation baseline for onboarding and support.")}
-                  </p>
-                </div>
-              )}
+              <p className="text-lg font-semibold leading-[1.3] text-[var(--foreground)]">{activeOption ? t(activeOption.label) : t("Not set")}</p>
+              {activeOption ? <StatusPill appearance="blue" kind="supported" label="Current Level" /> : null}
             </div>
+            <p className="mt-2 max-w-[56ch] text-sm leading-[1.6] text-[var(--muted-foreground)]">
+              {activeOption ? t(activeOption.description) : t("Pick one of the levels below to save a recommendation baseline for onboarding and support.")}
+            </p>
             {lastUpdatedLabel ? (
               <p className="mt-4 text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
                 {t("Last updated")} · {lastUpdatedLabel}
               </p>
             ) : null}
           </div>
-
-          <button
-            className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={saving || currentLevel === null}
-            onClick={onClear}
-            type="button"
-          >
-            {saving ? t("Saving...") : t("Clear")}
-          </button>
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-6 flex flex-col gap-3">
         {STAFF_PROFICIENCY_OPTIONS.map((option) => {
           const active = currentLevel === option.level;
-          const saving = savingLevel === option.level;
 
           return (
-            <button
-              className={`group rounded-[24px] border px-5 py-4 text-left transition-colors duration-200 ${
-                active
-                  ? `${option.cardClassName} shadow-[0_18px_40px_-28px_rgba(15,23,42,0.4)]`
-                  : "border-[var(--input)] bg-white hover:border-[var(--border-hover)] hover:bg-[#FAFAFA]"
-              } ${saving ? "cursor-progress opacity-80" : ""}`}
-              disabled={saving}
+            <div
+              className={`rounded-[24px] border px-5 py-4 ${active ? "border-[#D7E2F4] bg-[#F4F7FD]" : "border-[var(--input)] bg-white"}`}
               key={option.level}
-              onClick={() => onSelectLevel(option.level)}
-              type="button"
             >
-              <div className="flex items-start gap-3">
-                <span className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold ${option.badgeClassName}`}>
+              <div className="flex items-start gap-4">
+                <span
+                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-[14px] border px-3 text-sm font-semibold ${
+                    active ? "border-[#D7E2F4] bg-white text-[#3C5AA8]" : "border-[#DCE3F1] bg-[#F7F9FD] text-[#627296]"
+                  }`}
+                >
                   {option.level}
                 </span>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{t(option.label)}</p>
-                    {active ? <StatusPill kind={option.pillKind} label="Selected" /> : null}
-                    {saving ? <StatusPill kind="unknown" label="Saving..." /> : null}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-base font-semibold leading-[1.35] text-[var(--foreground)]">{t(option.label)}</p>
+                    {active ? <StatusPill appearance="blue" kind="supported" label="Current Level" /> : null}
                   </div>
-                  <p className="mt-1 text-sm leading-[1.55] text-[var(--muted-foreground)]">{t(option.description)}</p>
+                  <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t(option.description)}</p>
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -922,20 +964,20 @@ function AuthSuccessRateCard({
 
   return (
     <article className="flex min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t("授权成功率")}</p>
-        <TrendingUp className="h-5 w-5 text-[#008A00]" />
-      </div>
-      <p className="mt-4 text-[48px] font-bold leading-[1.05] tracking-[-1px] text-[#006600]">{summary.rate.toFixed(1)}%</p>
+      <SectionHeader
+        icon={TrendingUp}
+        iconBare
+        iconBareClassName="text-[#008A00]"
+        meta={summary.totalAttempts > 0 ? <StatusPill label={summary.rate >= 90 ? "Healthy" : "Watch"} /> : undefined}
+        title="授权成功率"
+      />
+      <p className="mt-5 text-[60px] font-bold leading-[1] tracking-[-1.5px] text-[#006600]">{summary.rate.toFixed(1)}%</p>
 
-      <div className="mt-4 flex items-end justify-between gap-4">
+      <div className="mt-5 flex items-end justify-between gap-4">
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {summary.totalAttempts > 0 ? <StatusPill label={summary.rate >= 90 ? "Healthy" : "Watch"} /> : null}
-            <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">
-              {summary.totalAttempts > 0 ? `${summary.successCount}/${summary.totalAttempts} ${t("successful attempts")}` : t("当前区间内暂没有支付尝试记录")}
-            </p>
-          </div>
+          <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">
+            {summary.totalAttempts > 0 ? `${summary.successCount}/${summary.totalAttempts} ${t("Successful Attempts")}` : t("当前区间内暂没有支付尝试记录")}
+          </p>
           <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">
             {t("统计范围")}：{t(filterLabel)}
           </p>
@@ -945,7 +987,7 @@ function AuthSuccessRateCard({
           <DialogTrigger asChild>
             <button
               aria-label={t("设置授权成功率统计范围")}
-              className="ui-hover-shadow inline-flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-full border border-[var(--input)] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              className={FLAT_ICON_BUTTON_CLASS}
               type="button"
             >
               <CalendarRange className="h-4 w-4" />
@@ -1015,14 +1057,14 @@ function AuthSuccessRateCard({
 
             <DialogFooter>
               <button
-                className="ui-hover-shadow inline-flex h-10 items-center justify-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                className="inline-flex h-10 items-center justify-center rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[#F7F9F7]"
                 onClick={onReset}
                 type="button"
               >
                 {t("恢复永久")}
               </button>
               <button
-                className="ui-hover-shadow inline-flex h-10 items-center justify-center rounded-pill bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-pill bg-[#008A00] px-4 text-sm font-medium text-white transition-colors duration-200 hover:bg-[#007300] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={Boolean(validationMessage)}
                 onClick={onApply}
                 type="button"
@@ -1097,6 +1139,7 @@ function OverviewContent({
     ? paymentMethodRows.filter((row) => row.status === "limited" || row.status === "unsupported")
     : paymentMethodRows;
   const statusLabel = formatStatusLabel(detail.status);
+  const hasBusinessInfo = Boolean(detail.contactInfo || hasLocationBusinessHours(detail.businessHours));
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1115,14 +1158,85 @@ function OverviewContent({
       />
 
       <article className="flex min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t("Device Status")}</p>
-          <Radio className="h-5 w-5 text-[var(--primary)]" />
+        <SectionHeader
+          icon={Radio}
+          iconBare
+          iconBareClassName="text-[#008A00]"
+          title="Device Status"
+        />
+        <p className={`mt-5 text-[56px] font-bold leading-[1.02] tracking-[-1px] ${detail.status === "inactive" ? "text-[var(--foreground)]" : "text-[#008A00]"}`}>
+          {t(statusLabel)}
+        </p>
+      </article>
+
+      <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+        <SectionHeader
+          buttonLabel={showLimitedPaymentMethodsOnly ? "Show All" : "Limited Only"}
+          icon={Smartphone}
+          iconBare
+          iconBareClassName="text-[#3C5AA8]"
+          onAction={onToggleLimitedPaymentMethods}
+          title="Payment Methods"
+        />
+
+        <div className="mt-6 flex flex-1 flex-col">
+          {visiblePaymentMethodRows.map((row, idx) => (
+            <button
+              className={`flex min-h-[72px] w-full items-center justify-between gap-3 rounded-[20px] px-4 py-4 text-left transition-colors duration-200 hover:bg-[#FAFCFA] ${idx !== visiblePaymentMethodRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
+              key={row.key}
+              onClick={() => onOpenSupportInsight(row.insight)}
+              type="button"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <SectionIconBadge icon={getPaymentMethodIcon(row.name)} tone="blue" />
+                <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusPill
+                  appearance="payment-method"
+                  kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
+                  label={formatSupportStatusLabel(row.status)}
+                />
+                <ChevronRight className="h-4 w-4 text-[#3C5AA8]" />
+              </div>
+            </button>
+          ))}
+          {visiblePaymentMethodRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No payment method matched current filter.")}</p> : null}
         </div>
-        <p className="mt-4 text-[48px] font-bold leading-[1.05] tracking-[-1px] text-[var(--foreground)]">{t(statusLabel)}</p>
-        <div className="mt-4 flex items-center gap-2">
-          <StatusPill label={statusLabel} kind={detail.status === "inactive" ? "limited" : "supported"} />
-          <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">{detail.deviceName}</p>
+      </article>
+
+      <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+        <SectionHeader
+          buttonLabel={showUnknownNetworksOnly ? "Show All" : "Unknown Only"}
+          icon={CreditCard}
+          iconBare
+          iconBareClassName="text-[#3C5AA8]"
+          onAction={onToggleUnknownNetworks}
+          title="Supported Networks"
+        />
+
+        <div className="mt-6 flex flex-1 flex-col">
+          {visibleNetworkRows.map((row, idx) => (
+            <button
+              className={`flex min-h-[72px] w-full items-center justify-between gap-3 rounded-[20px] px-4 py-4 text-left transition-colors duration-200 hover:bg-[#FAFCFA] ${idx !== visibleNetworkRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
+              key={row.name}
+              onClick={() => onOpenSupportInsight(row.insight)}
+              type="button"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <SectionIconBadge icon={CreditCard} tone="blue" />
+                <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusPill
+                  kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
+                  label={formatSupportStatusLabel(row.status)}
+                />
+                <ChevronRight className="h-4 w-4 text-[#3C5AA8]" />
+              </div>
+            </button>
+          ))}
+          {visibleNetworkRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No network matched current filter.")}</p> : null}
         </div>
       </article>
 
@@ -1136,134 +1250,65 @@ function OverviewContent({
         updatedAt={proficiencyUpdatedAt}
       />
 
-      <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+      <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
         <SectionHeader
-          buttonLabel={showUnknownNetworksOnly ? "Show All" : "Unknown Only"}
-          onAction={onToggleUnknownNetworks}
-          title="Supported Networks"
+          icon={Clock3}
+          meta={hasBusinessInfo ? <StatusPill kind="supported" label="Recorded" /> : <StatusPill kind="unknown" label="Not set" />}
+          iconBare
+          iconBareClassName="text-[#008A00]"
+          title="Business Hours & Contact"
         />
 
-        <div className="mt-6 flex flex-col">
-          {visibleNetworkRows.map((row, idx) => (
-            <button
-              className={`flex min-h-[64px] w-full items-center justify-between gap-3 py-4 text-left transition-colors duration-200 hover:bg-[#FAFAFA] ${idx !== visibleNetworkRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
-              key={row.name}
-              onClick={() => onOpenSupportInsight(row.insight)}
-              type="button"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#F5F5F7]">
-                  <CreditCard className="h-4 w-4 text-[var(--foreground)]" />
-                </span>
-                <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <StatusPill
-                  kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
-                  label={formatSupportStatusLabel(row.status)}
-                />
-                <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
-              </div>
-            </button>
-          ))}
-          {visibleNetworkRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No network matched current filter.")}</p> : null}
-        </div>
-      </article>
+        <p className="mt-5 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+          {hasBusinessInfo ? t("Structured business information for this location.") : t("No business hours or contact information yet.")}
+        </p>
 
-      <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
-        <SectionHeader
-          buttonLabel={showLimitedPaymentMethodsOnly ? "Show All" : "Limited Only"}
-          onAction={onToggleLimitedPaymentMethods}
-          title="Payment Methods"
-        />
-
-        <div className="mt-6 flex flex-col">
-          {visiblePaymentMethodRows.map((row, idx) => (
-            <button
-              className={`flex min-h-[64px] w-full items-center justify-between gap-3 py-4 text-left transition-colors duration-200 hover:bg-[#FAFAFA] ${idx !== visiblePaymentMethodRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
-              key={row.key}
-              onClick={() => onOpenSupportInsight(row.insight)}
-              type="button"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#F5F5F7]">
-                  <Smartphone className="h-4 w-4 text-[var(--foreground)]" />
-                </span>
-                <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <StatusPill
-                  kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
-                  label={formatSupportStatusLabel(row.status)}
-                />
-                <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
-              </div>
-            </button>
-          ))}
-          {visiblePaymentMethodRows.length === 0 ? <p className="py-6 text-sm text-[var(--muted-foreground)]">{t("No payment method matched current filter.")}</p> : null}
-        </div>
-      </article>
-
-      <article className="rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-2">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t("Business Hours & Contact")}</p>
-            <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
-              {detail.contactInfo || hasLocationBusinessHours(detail.businessHours)
-                ? t("Structured business information for this location.")
-                : t("No business hours or contact information yet.")}
-            </p>
-          </div>
-          <Clock3 className="h-5 w-5 text-[var(--primary)]" />
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.5fr)_320px]">
-          <div className="rounded-[28px] border border-[var(--input)] bg-[#FAFAFA] px-6 py-5">
-            <div className="flex items-center gap-3">
-              <CalendarRange className="h-4 w-4 text-[var(--primary)]" />
+        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="flex h-full min-w-0 flex-col rounded-[28px] border border-[#DCE6F5] bg-[#F7FAFE] p-6">
+            <div className="flex items-start gap-3">
+              <SectionIconBadge icon={CalendarRange} tone="blue" />
               <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Business Hours")}</p>
-                <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
+                <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Business Hours")}</h4>
+                <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
                   {businessHoursRows.length > 0 ? t("Displayed in the order people usually read them.") : t("No business hours have been added yet.")}
                 </p>
               </div>
             </div>
 
             {businessHoursRows.length > 0 ? (
-              <div className="mt-5 flex flex-col divide-y divide-[var(--input)]">
+              <div className="mt-5 flex flex-1 flex-col gap-3">
                 {businessHoursRows.map((row) => (
-                  <div className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between" key={row.id}>
-                    <div className="flex items-center gap-2">
-                      {row.kind === "special" ? (
-                        <span className="inline-flex h-6 items-center justify-center rounded-pill bg-[rgba(34,197,94,0.12)] px-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#166534]">
-                          {t("Special")}
-                        </span>
-                      ) : null}
+                  <div className="rounded-[20px] border border-[#E1E8F3] bg-white px-4 py-4" key={row.id}>
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{row.label}</p>
+                      {row.kind === "special" ? <StatusPill appearance="blue" kind="supported" label="Special" /> : null}
                     </div>
-                    <p className="break-words text-sm leading-[1.6] text-[var(--muted-foreground)] sm:max-w-[58%] sm:text-right">
-                      {row.value}
-                    </p>
+                    <p className="mt-2 break-words text-sm leading-[1.6] text-[var(--muted-foreground)]">{row.value}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-5 text-sm font-medium leading-[1.5] text-[var(--foreground)]">{t("Not set")}</p>
+              <div className="mt-5 flex flex-1 items-center rounded-[20px] border border-dashed border-[var(--input)] bg-white px-4 py-4">
+                <p className="text-sm font-medium leading-[1.6] text-[var(--foreground)]">{t("Not set")}</p>
+              </div>
             )}
           </div>
 
-          <div className="rounded-[28px] border border-[var(--input)] bg-[#FAFAFA] px-6 py-5">
-            <div className="flex items-center gap-3">
-              <Phone className="h-4 w-4 text-[var(--primary)]" />
+          <div className="flex h-full min-w-0 flex-col rounded-[28px] border border-[#DDE8DD] bg-[#F9FCF9] p-6">
+            <div className="flex items-start gap-3">
+              <SectionIconBadge icon={Phone} />
               <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Contact Information")}</p>
-                <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
+                <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Contact Information")}</h4>
+                <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
               </div>
             </div>
 
-            <div className="mt-5 rounded-[20px] border border-[var(--input)] bg-white px-4 py-4">
-              <p className="break-words text-sm font-medium leading-[1.6] text-[var(--foreground)]">
+            <div className="mt-5 flex flex-1 flex-col rounded-[20px] border border-[#E1EAE1] bg-white p-5">
+              <p className="break-words whitespace-pre-wrap text-base font-semibold leading-[1.7] text-[var(--foreground)]">
                 {detail.contactInfo?.trim() || t("Not set")}
+              </p>
+              <p className="mt-4 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                {detail.contactInfo?.trim() ? t("Use the contact details above when you need to reach this location.") : t("No contact information is available for this location yet.")}
               </p>
             </div>
           </div>
@@ -1276,10 +1321,12 @@ function OverviewContent({
 function SupportSourceDialog({
   insight,
   open,
+  onJumpToAttempt,
   onOpenChange
 }: {
   insight: LocationSupportInsight | null;
   open: boolean;
+  onJumpToAttempt: (attemptId: string) => void;
   onOpenChange: (open: boolean) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
@@ -1288,20 +1335,18 @@ function SupportSourceDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-h-[90vh] max-w-[min(920px,calc(100vw-2rem))] gap-0 overflow-hidden rounded-[32px] p-0">
+      <DialogContent className="max-h-[94vh] max-w-[min(1120px,calc(100vw-1.5rem))] gap-0 overflow-hidden rounded-[32px] p-0">
         <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
           <DialogTitle>{insight ? `${insight.title} · ${t("Source Details")}` : t("Source Details")}</DialogTitle>
-          <DialogDescription>
-            {insight?.rationale || t("Review why this item is currently marked as supported, unsupported, limited, or unknown.")}
-          </DialogDescription>
+          <DialogDescription>{t("Review the current status, official data, and recorded evidence for this item.")}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
           {insight ? (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,160px))]">
-                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Current Status")}</p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_repeat(3,minmax(0,1fr))]">
+                <div className="rounded-[22px] border border-[var(--input)] bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Current Status")}</p>
                   <div className="mt-3 flex items-center gap-3">
                     <StatusPill
                       kind={insight.status === "unsupported" ? "unsupported" : insight.status === "limited" ? "limited" : insight.status === "unknown" ? "unknown" : "supported"}
@@ -1311,80 +1356,120 @@ function SupportSourceDialog({
                 </div>
 
                 <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Positive Attempts")}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Positive Attempts")}</p>
                   <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.supportingAttempts}</p>
                 </div>
 
                 <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Conflicting Attempts")}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Conflicting Attempts")}</p>
                   <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.conflictingAttempts}</p>
                 </div>
 
                 <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Structured Sources")}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Official Data")}</p>
                   <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.officialSources}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <article className="rounded-[28px] border border-[var(--input)] bg-white p-6">
+                <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Attempt Evidence")}</p>
-                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Recent payment attempts that support or challenge this item.")}</p>
+                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Record Sources")}</p>
+                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("System-recorded payment attempts that support or challenge this item.")}</p>
                     </div>
                     <StatusPill label={String(attemptEvidence.length)} />
                   </div>
 
-                  <div className="mt-5 flex flex-col gap-3">
-                    {attemptEvidence.length > 0 ? attemptEvidence.map((item) => (
-                      <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{item.title}</p>
-                          <StatusPill
-                            kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
-                            label={formatSupportStatusLabel(item.status)}
-                          />
-                          {item.invalidated ? <StatusPill kind="limited" label="Challenging" /> : null}
+                  <div className="mt-5 flex-1 overflow-y-auto pr-1">
+                    <div className="flex flex-col gap-3">
+                      {attemptEvidence.length > 0 ? attemptEvidence.map((item) => (
+                        <button
+                          className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4 text-left transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-white"
+                          key={item.id}
+                          onClick={() => item.attemptId && onJumpToAttempt(item.attemptId)}
+                          type="button"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <StatusPill
+                                  kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
+                                  label={formatSupportStatusLabel(item.status)}
+                                />
+                                {item.invalidated ? <StatusPill kind="limited" label="Challenging" /> : null}
+                              </div>
+                              <div className="mt-3 grid grid-cols-1 gap-2 text-sm leading-[1.6] text-[var(--muted-foreground)] sm:grid-cols-2">
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Card Used")}</p>
+                                  <p className="mt-1 text-[var(--foreground)]">{item.cardName || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Payment Method")}</p>
+                                  <p className="mt-1 text-[var(--foreground)]">{item.paymentMethodLabel || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("User")}</p>
+                                  <p className="mt-1 text-[var(--foreground)]">{item.addedBy || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Card Network")}</p>
+                                  <p className="mt-1 text-[var(--foreground)]">{item.networkLabel || "-"}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Transaction Time")}</p>
+                                  <p className="mt-1 text-[var(--foreground)]">{item.dateTimeLabel || "-"}</p>
+                                </div>
+                              </div>
+                            </div>
+                            {item.attemptId ? (
+                              <span className="inline-flex items-center gap-1 text-sm font-medium leading-[1.4] text-[var(--primary)]">
+                                <span>{t("View Attempt")}</span>
+                                <ChevronRight className="h-4 w-4" />
+                              </span>
+                            ) : null}
+                          </div>
+                        </button>
+                      )) : (
+                        <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                          {t("No record source has been added for this item yet.")}
                         </div>
-                        {item.summary ? <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">{item.summary}</p> : null}
-                        {item.notes ? <p className="mt-2 text-sm leading-[1.6] text-[var(--foreground)]">{item.notes}</p> : null}
-                      </div>
-                    )) : (
-                      <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                        {t("No attempt evidence has been recorded for this item yet.")}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </article>
 
-                <article className="rounded-[28px] border border-[var(--input)] bg-white p-6">
+                <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Official / Structured Evidence")}</p>
-                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Structured store or POS information currently available on this location.")}</p>
+                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Official Data Sources")}</p>
+                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Official data currently attached to this location for this item.")}</p>
                     </div>
                     <StatusPill label={String(officialEvidence.length)} />
                   </div>
 
-                  <div className="mt-5 flex flex-col gap-3">
-                    {officialEvidence.length > 0 ? officialEvidence.map((item) => (
-                      <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{item.title}</p>
-                          <StatusPill
-                            kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
-                            label={formatSupportStatusLabel(item.status)}
-                          />
-                          {item.invalidated ? <StatusPill kind="limited" label="Needs Review" /> : null}
+                  <div className="mt-5 flex-1 overflow-y-auto pr-1">
+                    <div className="flex flex-col gap-3">
+                      {officialEvidence.length > 0 ? officialEvidence.map((item) => (
+                        <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{t(item.title)}</p>
+                            <StatusPill
+                              kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
+                              label={formatSupportStatusLabel(item.status)}
+                            />
+                            {item.invalidated ? <StatusPill kind="limited" label="Needs Review" /> : null}
+                          </div>
+                          <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                            {t("This item is currently backed by official data captured for the location.")}
+                          </p>
                         </div>
-                        {item.summary ? <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">{item.summary}</p> : null}
-                      </div>
-                    )) : (
-                      <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                        {t("No official or structured source is attached yet.")}
-                      </div>
-                    )}
+                      )) : (
+                        <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                          {t("No official data has been attached for this item yet.")}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </article>
               </div>
@@ -1394,7 +1479,7 @@ function SupportSourceDialog({
 
         <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
           <button
-            className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+            className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
             onClick={() => onOpenChange(false)}
             type="button"
           >
@@ -1409,6 +1494,8 @@ function SupportSourceDialog({
 function AttemptContent({
   attemptRows,
   attemptPage,
+  focusedAttemptId,
+  onOpenAttemptDetail,
   onPageChange,
   onAddAttempt,
   canAddAttempt = false,
@@ -1417,6 +1504,8 @@ function AttemptContent({
 }: {
   attemptRows: LocationAttemptRecord[];
   attemptPage: number;
+  focusedAttemptId?: string | null;
+  onOpenAttemptDetail: (attempt: LocationAttemptRecord) => void;
   onPageChange: (page: number) => void;
   onAddAttempt?: () => void;
   canAddAttempt?: boolean;
@@ -1444,7 +1533,7 @@ function AttemptContent({
         <div className="flex items-center gap-3">
           <h3 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Payment Attempts")}</h3>
           <button
-            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-6 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-6 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!canAddAttempt || addingAttempt}
             onClick={onAddAttempt}
             type="button"
@@ -1494,7 +1583,14 @@ function AttemptContent({
         ) : null}
 
         {currentRows.map((row, idx) => (
-          <div className={`flex items-center gap-4 px-6 py-4 ${idx !== currentRows.length - 1 ? "border-b border-[#E2E2E8]" : ""}`} key={row.id}>
+          <button
+            className={`flex w-full items-center gap-4 px-6 py-4 text-left transition-colors duration-300 ${
+              row.id === focusedAttemptId ? "bg-[#FFF8E8]" : "bg-white"
+            } ${idx !== currentRows.length - 1 ? "border-b border-[#E2E2E8]" : ""} hover:bg-[#FAFAFA]`}
+            key={row.id}
+            onClick={() => onOpenAttemptDetail(row)}
+            type="button"
+          >
             <p className="w-[140px] text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{row.dateTime}</p>
             <p className="w-[140px] text-[13px] font-medium leading-[1.2] text-[var(--muted-foreground)]">{row.addedBy}</p>
             <p className="w-[180px] truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{row.cardName}</p>
@@ -1506,7 +1602,7 @@ function AttemptContent({
             <div className="flex w-[80px] justify-end">
               <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -1518,7 +1614,7 @@ function AttemptContent({
         </p>
         <div className="flex items-center gap-2">
           <button
-            className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+            className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
             disabled={currentPage === 1}
             onClick={() => onPageChange(Math.max(1, currentPage - 1))}
             type="button"
@@ -1527,7 +1623,7 @@ function AttemptContent({
           </button>
           {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
             <button
-              className={`ui-hover-shadow inline-flex h-10 w-10 items-center justify-center rounded-pill border text-sm font-medium ${
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-pill border text-sm font-medium ${
                 page === currentPage
                   ? "border-[var(--primary)] bg-white text-[var(--primary)]"
                   : "border-[var(--input)] text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
@@ -1540,7 +1636,7 @@ function AttemptContent({
             </button>
           ))}
           <button
-            className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+            className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
             disabled={currentPage === pageCount}
             onClick={() => onPageChange(Math.min(pageCount, currentPage + 1))}
             type="button"
@@ -1550,6 +1646,104 @@ function AttemptContent({
         </div>
       </div>
     </div>
+  );
+}
+
+function AttemptDetailDialog({
+  attempt,
+  open,
+  onOpenChange
+}: {
+  attempt: LocationAttemptRecord | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const statusLabel = attempt
+    ? attempt.status === "success"
+      ? "Success"
+      : attempt.status === "declined"
+        ? "Declined"
+        : "Failed"
+    : "Unknown";
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="max-h-[92vh] max-w-[min(920px,calc(100vw-1.5rem))] gap-0 overflow-hidden rounded-[32px] p-0">
+        <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
+          <DialogTitle>{t("Attempt Details")}</DialogTitle>
+          <DialogDescription>{t("Review the full payment attempt details recorded for this entry.")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+          {attempt ? (
+            <div className="space-y-6">
+              <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Status")}</p>
+                <div className="mt-3">
+                  <StatusPill
+                    kind={attempt.status === "declined" ? "declined" : attempt.status === "failed" ? "limited" : "supported"}
+                    label={statusLabel}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Card Used")}</p>
+                  <p className="mt-3 text-base font-semibold leading-[1.5] text-[var(--foreground)]">{attempt.cardName || "-"}</p>
+                </article>
+
+                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Transaction Time")}</p>
+                  <p className="mt-3 text-base font-semibold leading-[1.5] text-[var(--foreground)]">{attempt.dateTime || "-"}</p>
+                </article>
+
+                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Added By")}</p>
+                  <p className="mt-3 text-base font-semibold leading-[1.5] text-[var(--foreground)]">{attempt.addedBy || "-"}</p>
+                </article>
+
+                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Card Network")}</p>
+                  <p className="mt-3 text-base font-semibold leading-[1.5] text-[var(--foreground)]">{formatSupportedNetworkLabel(attempt.network) || "-"}</p>
+                </article>
+
+                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Payment Method")}</p>
+                  <p className="mt-3 text-base font-semibold leading-[1.5] text-[var(--foreground)]">{formatPaymentMethodLabel(attempt.paymentMethod || attempt.method) || "-"}</p>
+                </article>
+
+                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Status")}</p>
+                  <div className="mt-3">
+                    <StatusPill
+                      kind={attempt.status === "declined" ? "declined" : attempt.status === "failed" ? "limited" : "supported"}
+                      label={statusLabel}
+                    />
+                  </div>
+                </article>
+              </div>
+
+              <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Notes")}</p>
+                <p className="mt-3 text-sm leading-[1.7] text-[var(--foreground)]">{attempt.notes?.trim() || t("No notes recorded for this attempt.")}</p>
+              </article>
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
+          <button
+            className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          >
+            {t("Close")}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1576,7 +1770,7 @@ function ReviewsContent({ reviewItems }: { reviewItems: LocationReviewRecord[] }
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Reviews")}</h3>
         <button
-          className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-6 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-6 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           disabled
           type="button"
         >
@@ -1622,8 +1816,11 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   const [showLimitedPaymentMethodsOnly, setShowLimitedPaymentMethodsOnly] = useState(false);
   const [attemptPage, setAttemptPage] = useState(1);
   const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
+  const [attemptDetailDialogOpen, setAttemptDetailDialogOpen] = useState(false);
   const [attemptSaving, setAttemptSaving] = useState(false);
   const [attemptMutationError, setAttemptMutationError] = useState<string | null>(null);
+  const [highlightedAttemptId, setHighlightedAttemptId] = useState<string | null>(null);
+  const [selectedAttempt, setSelectedAttempt] = useState<LocationAttemptRecord | null>(null);
   const [selectedSupportInsight, setSelectedSupportInsight] = useState<LocationSupportInsight | null>(null);
   const [supportSourceDialogOpen, setSupportSourceDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1678,7 +1875,10 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   useEffect(() => {
     setAttemptDraft(createAttemptDraft(detailRecord));
     setAttemptDialogOpen(false);
+    setAttemptDetailDialogOpen(false);
     setAttemptMutationError(null);
+    setHighlightedAttemptId(null);
+    setSelectedAttempt(null);
   }, [detailRecord?.id]);
 
   useEffect(() => {
@@ -1687,6 +1887,17 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     setShowUnknownNetworksOnly(false);
     setShowLimitedPaymentMethodsOnly(false);
   }, [detailRecord?.id]);
+
+  useEffect(() => {
+    if (!highlightedAttemptId) return;
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedAttemptId(null);
+    }, 3200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [highlightedAttemptId]);
 
   useEffect(() => {
     setDeleteDialogOpen(false);
@@ -1904,7 +2115,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         <div className="flex items-center gap-3">
           {onDeleteLocation && isAdmin && !viewerAccessLoading ? (
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[rgba(220,38,38,0.18)] bg-[rgba(254,242,242,0.88)] px-4 text-sm font-medium leading-[1.4286] text-[#991b1b] transition-colors duration-200 hover:bg-[rgba(254,226,226,0.96)]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[rgba(220,38,38,0.18)] bg-[rgba(254,242,242,0.88)] px-4 text-sm font-medium leading-[1.4286] text-[#991b1b] transition-colors duration-200 hover:bg-[rgba(254,226,226,0.96)]"
               onClick={() => {
                 setDeleteMutationError(null);
                 setDeleteDialogOpen(true);
@@ -1916,7 +2127,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
             </button>
           ) : null}
           <button
-            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
+            className="inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
             onClick={() => setEditable((prev) => !prev)}
             type="button"
           >
@@ -1924,7 +2135,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
             <span>{editable ? t("Save Details") : t("Edit Details")}</span>
           </button>
           <button
-            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
+            className="inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
             onClick={() => onViewMap?.()}
             type="button"
           >
@@ -2001,19 +2212,45 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
           attemptPage={attemptPage}
           attemptRows={detailRecord.attempts}
           canAddAttempt
+          focusedAttemptId={highlightedAttemptId}
           isShellLocation={detailRecord.source === "fluxa_locations"}
           onAddAttempt={() => {
             setAttemptDraft(createAttemptDraft(detailRecord));
             setAttemptMutationError(null);
             setAttemptDialogOpen(true);
           }}
+          onOpenAttemptDetail={(attempt) => {
+            setSelectedAttempt(attempt);
+            setAttemptDetailDialogOpen(true);
+          }}
           onPageChange={setAttemptPage}
         />
       ) : null}
       {activeTab === "reviews" ? <ReviewsContent reviewItems={detailRecord.reviews} /> : null}
 
+      <AttemptDetailDialog
+        attempt={selectedAttempt}
+        onOpenChange={(open) => {
+          setAttemptDetailDialogOpen(open);
+          if (!open) {
+            setSelectedAttempt(null);
+          }
+        }}
+        open={attemptDetailDialogOpen}
+      />
+
       <SupportSourceDialog
         insight={selectedSupportInsight}
+        onJumpToAttempt={(attemptId) => {
+          const targetIndex = detailRecord.attempts.findIndex((attempt) => attempt.id === attemptId);
+          if (targetIndex >= 0) {
+            setAttemptPage(Math.floor(targetIndex / 5) + 1);
+            setHighlightedAttemptId(attemptId);
+          }
+          setActiveTab("attempt");
+          setSupportSourceDialogOpen(false);
+          setSelectedSupportInsight(null);
+        }}
         onOpenChange={(open) => {
           setSupportSourceDialogOpen(open);
           if (!open) {
@@ -2149,7 +2386,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
 
           <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
               disabled={attemptSaving}
               onClick={() => setAttemptDialogOpen(false)}
               type="button"
@@ -2157,7 +2394,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
               {t("Cancel")}
             </button>
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
               disabled={attemptSaving}
               onClick={() => {
                 void handleAddAttempt();
@@ -2199,7 +2436,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
 
           <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
               disabled={deleteSaving}
               onClick={() => setDeleteDialogOpen(false)}
               type="button"
@@ -2207,7 +2444,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
               {t("Cancel")}
             </button>
             <button
-              className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill bg-[#DC2626] px-4 text-sm font-medium leading-[1.4286] text-white transition-colors duration-200 hover:bg-[#B91C1C]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-pill bg-[#DC2626] px-4 text-sm font-medium leading-[1.4286] text-white transition-colors duration-200 hover:bg-[#B91C1C]"
               disabled={deleteSaving}
               onClick={() => {
                 void handleDelete();
