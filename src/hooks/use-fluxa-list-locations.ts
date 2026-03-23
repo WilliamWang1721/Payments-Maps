@@ -98,6 +98,21 @@ function buildPageSlice<T>(items: T[], pageNumber: number, pageSize: number): T[
   return items.slice(startIndex, startIndex + safePageSize);
 }
 
+function buildLightweightListLocation(point: LocationMapIndexRecord): LocationRecord {
+  return {
+    id: point.id,
+    name: point.name,
+    address: point.address,
+    brand: point.brand,
+    city: point.city,
+    status: point.status,
+    lat: point.lat,
+    lng: point.lng,
+    createdAt: point.updatedAt,
+    updatedAt: point.updatedAt
+  };
+}
+
 export function useFluxaListLocations({
   counts = null,
   currentPosition = null,
@@ -173,8 +188,18 @@ export function useFluxaListLocations({
     }
 
     if (usesLightIndexMode) {
+      const pointsById = new Map(orderedIndexPoints.map((point) => [point.id, point]));
+
       return visibleIds
-        .map((id) => cacheRef.current.get(id))
+        .map((id) => {
+          const cachedLocation = cacheRef.current.get(id);
+          if (cachedLocation) {
+            return cachedLocation;
+          }
+
+          const point = pointsById.get(id);
+          return point ? buildLightweightListLocation(point) : null;
+        })
         .filter((location): location is LocationRecord => Boolean(location));
     }
 
@@ -184,7 +209,7 @@ export function useFluxaListLocations({
         : buildPageSlice(orderedDirectoryLocations, page, pageSize);
 
     return baseLocations.map((location) => cacheRef.current.get(location.id) || location);
-  }, [cacheVersion, enabled, listPagingMode, orderedDirectoryLocations, page, pageSize, scrollPageCount, usesLightIndexMode, visibleIds]);
+  }, [cacheVersion, enabled, listPagingMode, orderedDirectoryLocations, orderedIndexPoints, page, pageSize, scrollPageCount, usesLightIndexMode, visibleIds]);
 
   const loadLocationIds = useCallback(async (ids: string[], background = false): Promise<void> => {
     if (!enabled || ids.length === 0) {
