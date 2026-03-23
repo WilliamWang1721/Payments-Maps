@@ -163,7 +163,7 @@ export default function App({
     locations: locationSearchDirectory,
     loading: locationSearchLoading
   } = useFluxaLocationSearchDirectory({
-    enabled: sidebarActiveTab === "map" || sidebarActiveTab === "list"
+    enabled: sidebarActiveTab === "list" || currentSearchQuery.trim().length > 0
   });
   const {
     indexPoints: mapIndexPoints,

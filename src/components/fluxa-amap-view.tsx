@@ -67,7 +67,7 @@ interface RenderedIndexClusterMarker {
 
 interface RenderedIndexPointMarker {
   type: "index-point";
-  locationId: string;
+  point: LocationMapIndexRecord;
   position: [number, number];
 }
 
@@ -287,6 +287,12 @@ function buildRenderedIndexMarkers(
       cluster_id?: number;
       point_count?: number;
       locationId?: string;
+      name?: string;
+      address?: string;
+      brand?: string;
+      city?: string;
+      status?: LocationRecord["status"];
+      updatedAt?: string;
     };
 
     if (properties.cluster && typeof properties.cluster_id === "number") {
@@ -304,7 +310,17 @@ function buildRenderedIndexMarkers(
     return properties.locationId
       ? [{
           type: "index-point",
-          locationId: properties.locationId,
+          point: {
+            id: properties.locationId,
+            name: properties.name || "Untitled Location",
+            address: properties.address || "Unknown address",
+            brand: properties.brand || "Unknown",
+            city: properties.city || "Unknown",
+            status: properties.status === "inactive" ? "inactive" : "active",
+            lat,
+            lng,
+            updatedAt: properties.updatedAt || new Date().toISOString()
+          },
           position: [lng, lat]
         }]
       : [];
@@ -354,22 +370,21 @@ function markerColor(status: LocationRecord["status"]): string {
 }
 
 function buildLightweightLocation(
-  locationId: string,
-  position: [number, number],
+  point: LocationMapIndexRecord,
   searchRecord?: LocationSearchRecord
 ): LocationRecord {
-  const timestamp = searchRecord?.updatedAt || new Date().toISOString();
+  const timestamp = searchRecord?.updatedAt || point.updatedAt || new Date().toISOString();
 
   return {
-    id: locationId,
-    name: searchRecord?.name || "地图地点",
-    address: searchRecord?.address || "Unknown address",
-    brand: searchRecord?.brand || "Unknown",
-    city: searchRecord?.city || "Unknown",
+    id: point.id,
+    name: searchRecord?.name || point.name || "地图地点",
+    address: searchRecord?.address || point.address || "Unknown address",
+    brand: searchRecord?.brand || point.brand || "Unknown",
+    city: searchRecord?.city || point.city || "Unknown",
     addedBy: searchRecord?.addedBy,
-    status: searchRecord?.status || "active",
-    lat: position[1],
-    lng: position[0],
+    status: searchRecord?.status || point.status || "active",
+    lat: point.lat,
+    lng: point.lng,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -755,7 +770,13 @@ export function FluxaAmapView({
         type: "Feature" as const,
         id: point.id,
         properties: {
-          locationId: point.id
+          locationId: point.id,
+          name: point.name,
+          address: point.address,
+          brand: point.brand,
+          city: point.city,
+          status: point.status,
+          updatedAt: point.updatedAt
         },
         geometry: {
           type: "Point" as const,
@@ -858,8 +879,8 @@ export function FluxaAmapView({
         }
 
         const matchedLocation =
-          locationsById.get(item.locationId)
-          || buildLightweightLocation(item.locationId, item.position, locationSearchById.get(item.locationId));
+          locationsById.get(item.point.id)
+          || buildLightweightLocation(item.point, locationSearchById.get(item.point.id));
         const isSelected = selectedLocationIdRef.current === matchedLocation.id;
         const marker = new window.AMap.Marker({
           position: item.position,
