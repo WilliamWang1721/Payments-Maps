@@ -18,7 +18,6 @@ import {
   Phone,
   PlayCircle,
   Plus,
-  Clock3,
   Radio,
   Settings2,
   Smartphone,
@@ -719,44 +718,33 @@ function formatSupportStatusLabel(status: SupportEvidenceStatus): string {
   return "Unknown";
 }
 
-const SECTION_ICON_TONES = {
-  green: {
-    wrapper: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[#CFE3CF] bg-[#F3FAF3]",
-    icon: "text-[#008A00]",
-    bare: "text-[#008A00]"
-  },
-  blue: {
-    wrapper: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[#D7E2F4] bg-[#F4F7FD]",
-    icon: "text-[#3C5AA8]",
-    bare: "text-[#3C5AA8]"
-  }
+const HEADER_ICON_TONES = {
+  neutral: "text-[var(--muted-foreground)]",
+  success: "text-[#008A00]",
+  primary: "text-[var(--primary)]"
 } as const;
-type SectionIconTone = keyof typeof SECTION_ICON_TONES;
+const ROW_ICON_TONES = {
+  neutral: "text-[var(--muted-foreground)]",
+  success: "text-[#008A00]",
+  primary: "text-[var(--primary)]"
+} as const;
+type SectionIconTone = keyof typeof HEADER_ICON_TONES;
 const FLAT_ACTION_BUTTON_CLASS =
-  "inline-flex h-10 items-center gap-1.5 rounded-pill border border-[#D7E2F4] bg-[#F4F7FD] px-4 text-sm font-medium leading-[1.4286] text-[#3C5AA8] transition-colors duration-200 hover:bg-[#EAF0FB]";
+  "inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--accent)]";
 const FLAT_ICON_BUTTON_CLASS =
   "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--input)] bg-white text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]";
+const DETAIL_CARD_CLASS = "flex min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8";
 
 function SectionIconBadge({
   icon: Icon,
-  bare = false,
-  bareClassName,
-  tone = "green"
+  tone = "neutral"
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  bare?: boolean;
-  bareClassName?: string;
   tone?: SectionIconTone;
 }): React.JSX.Element {
-  const toneClasses = SECTION_ICON_TONES[tone];
-
-  if (bare) {
-    return <Icon className={`h-5 w-5 ${bareClassName ?? toneClasses.bare}`} />;
-  }
-
   return (
-    <span className={toneClasses.wrapper}>
-      <Icon className={`h-5 w-5 ${toneClasses.icon}`} />
+    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--tile)]">
+      <Icon className={`h-4 w-4 ${ROW_ICON_TONES[tone]}`} />
     </span>
   );
 }
@@ -768,26 +756,24 @@ function StatusPill({
 }: {
   label: string;
   kind?: "supported" | "unknown" | "limited" | "declined" | "unsupported";
-  appearance?: "default" | "payment-method" | "blue";
+  appearance?: "default" | "info";
 }): React.JSX.Element {
   const { t } = useI18n();
   const cls =
-    appearance === "blue" && kind === "supported"
-      ? "border border-[#D7E2F4] bg-[#F4F7FD] text-[#3C5AA8]"
-      : appearance === "payment-method" && kind !== "supported"
-      ? "border border-[#C9D6F0] bg-white text-[#3C5AA8]"
+    appearance === "info"
+      ? "bg-[var(--color-info)] text-[var(--color-info-foreground)]"
       : kind === "supported"
-        ? "border border-[#BFE0BF] bg-[#F3FAF3] text-[#006600]"
+        ? "bg-[var(--color-success)] text-[var(--color-success-foreground)]"
         : kind === "unsupported"
-          ? "border border-[#F8C4BA] bg-[#FFF3F0] text-[#8A2A16]"
+          ? "bg-[var(--color-error)] text-[var(--color-error-foreground)]"
           : kind === "declined"
-            ? "border border-[#F5D6A4] bg-[#FFF8EC] text-[#9A5A00]"
+            ? "bg-[var(--color-warning)] text-[var(--color-warning-foreground)]"
             : kind === "limited"
-              ? "border border-[#F4D39A] bg-[#FFF8EC] text-[#8A5B00]"
-              : "border border-[#D9E2D9] bg-[#F7FAF7] text-[#5B6B5B]";
+              ? "bg-[var(--color-error)] text-[var(--color-error-foreground)]"
+              : "bg-[var(--secondary)] text-[var(--secondary-foreground)]";
 
   return (
-    <span className={`inline-flex h-10 items-center justify-center rounded-pill px-4 text-sm font-medium leading-[1.4286] ${cls}`}>
+    <span className={`inline-flex h-8 items-center justify-center rounded-pill px-3 text-[13px] font-medium leading-[1] ${cls}`}>
       {t(label)}
     </span>
   );
@@ -796,17 +782,13 @@ function StatusPill({
 function SectionHeader({
   title,
   icon: Icon,
-  iconBare = false,
-  iconBareClassName,
-  iconTone,
+  iconTone = "neutral",
   meta,
   buttonLabel,
   onAction
 }: {
   title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  iconBare?: boolean;
-  iconBareClassName?: string;
+  icon?: React.ComponentType<{ className?: string }>;
   iconTone?: SectionIconTone;
   meta?: React.ReactNode;
   buttonLabel?: string;
@@ -824,8 +806,27 @@ function SectionHeader({
             <span>{t(buttonLabel)}</span>
           </button>
         ) : null}
-        <SectionIconBadge bare={iconBare} bareClassName={iconBareClassName} icon={Icon} tone={iconTone} />
+        {Icon ? <Icon className={`h-5 w-5 ${HEADER_ICON_TONES[iconTone]}`} /> : null}
       </div>
+    </div>
+  );
+}
+
+function MetricCardHeader({
+  title,
+  icon: Icon,
+  iconTone = "neutral"
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconTone?: SectionIconTone;
+}): React.JSX.Element {
+  const { t } = useI18n();
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-base font-medium leading-[1.4] text-[var(--muted-foreground)]">{t(title)}</p>
+      <Icon className={`h-5 w-5 ${HEADER_ICON_TONES[iconTone]}`} />
     </div>
   );
 }
@@ -858,12 +859,9 @@ function StaffProficiencyCard({
   const lastUpdatedLabel = formatStaffProficiencyUpdatedAt(updatedAt);
 
   return (
-    <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+    <article className={`${DETAIL_CARD_CLASS} h-full xl:col-span-1`}>
       <SectionHeader
-        icon={HelpCircle}
-        iconBare
-        iconBareClassName="text-[#3C5AA8]"
-        meta={activeOption ? <StatusPill appearance="blue" kind="supported" label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
+        meta={activeOption ? <StatusPill appearance="info" kind="supported" label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
         title="Staff Proficiency"
       />
 
@@ -873,15 +871,15 @@ function StaffProficiencyCard({
           : t("No proficiency level has been recorded for this location yet.")}
       </p>
 
-      <div className={`mt-6 rounded-[28px] border px-6 py-5 ${activeOption ? "border-[#D7E2F4] bg-[#F4F7FD]" : "border-dashed border-[var(--input)] bg-[#FAFAFA]"}`}>
+      <div className={`mt-6 rounded-[24px] border px-5 py-5 ${activeOption ? "border-[var(--input)] bg-[#FAFAFA]" : "border-dashed border-[var(--input)] bg-[#FAFAFA]"}`}>
         <div className="flex items-start gap-4">
-          <span className="inline-flex h-12 min-w-12 items-center justify-center rounded-[16px] border border-[#D7E2F4] bg-white px-3 text-base font-semibold text-[#3C5AA8]">
+          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-[8px] bg-[var(--tile)] px-2 text-sm font-semibold text-[var(--primary)]">
             {activeOption ? activeOption.level : "--"}
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-lg font-semibold leading-[1.3] text-[var(--foreground)]">{activeOption ? t(activeOption.label) : t("Not set")}</p>
-              {activeOption ? <StatusPill appearance="blue" kind="supported" label="Current Level" /> : null}
+              {activeOption ? <StatusPill appearance="info" kind="supported" label="Current Level" /> : null}
             </div>
             <p className="mt-2 max-w-[56ch] text-sm leading-[1.6] text-[var(--muted-foreground)]">
               {activeOption ? t(activeOption.description) : t("Pick one of the levels below to save a recommendation baseline for onboarding and support.")}
@@ -895,31 +893,25 @@ function StaffProficiencyCard({
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col gap-3">
+      <div className="mt-6 flex flex-col">
         {STAFF_PROFICIENCY_OPTIONS.map((option) => {
           const active = currentLevel === option.level;
 
           return (
             <div
-              className={`rounded-[24px] border px-5 py-4 ${active ? "border-[#D7E2F4] bg-[#F4F7FD]" : "border-[var(--input)] bg-white"}`}
+              className={`flex items-start justify-between gap-3 px-0 py-4 ${option.level !== STAFF_PROFICIENCY_OPTIONS.length ? "border-b border-[var(--input)]" : ""}`}
               key={option.level}
             >
-              <div className="flex items-start gap-4">
-                <span
-                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-[14px] border px-3 text-sm font-semibold ${
-                    active ? "border-[#D7E2F4] bg-white text-[#3C5AA8]" : "border-[#DCE3F1] bg-[#F7F9FD] text-[#627296]"
-                  }`}
-                >
+              <div className="flex min-w-0 items-start gap-3">
+                <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-[8px] px-2 text-sm font-semibold ${active ? "bg-[var(--color-info)] text-[var(--color-info-foreground)]" : "bg-[var(--tile)] text-[var(--muted-foreground)]"}`}>
                   {option.level}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-base font-semibold leading-[1.35] text-[var(--foreground)]">{t(option.label)}</p>
-                    {active ? <StatusPill appearance="blue" kind="supported" label="Current Level" /> : null}
-                  </div>
+                  <p className="text-base font-semibold leading-[1.35] text-[var(--foreground)]">{t(option.label)}</p>
                   <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t(option.description)}</p>
                 </div>
               </div>
+              {active ? <StatusPill appearance="info" kind="supported" label="Current Level" /> : null}
             </div>
           );
         })}
@@ -961,23 +953,21 @@ function AuthSuccessRateCard({
 }): React.JSX.Element {
   const { t } = useI18n();
   const filterLabel = getSuccessRateDateFilterLabel(filter);
+  const healthKind = summary.rate >= 90 ? "supported" : "unknown";
 
   return (
-    <article className="flex min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8">
-      <SectionHeader
-        icon={TrendingUp}
-        iconBare
-        iconBareClassName="text-[#008A00]"
-        meta={summary.totalAttempts > 0 ? <StatusPill label={summary.rate >= 90 ? "Healthy" : "Watch"} /> : undefined}
-        title="授权成功率"
-      />
-      <p className="mt-5 text-[60px] font-bold leading-[1] tracking-[-1.5px] text-[#006600]">{summary.rate.toFixed(1)}%</p>
+    <article className={DETAIL_CARD_CLASS}>
+      <MetricCardHeader icon={TrendingUp} iconTone="success" title="授权成功率" />
+      <p className="mt-4 text-[48px] font-bold leading-[1] tracking-[-1px] text-[#006600]">{summary.rate.toFixed(1)}%</p>
 
-      <div className="mt-5 flex items-end justify-between gap-4">
-        <div className="space-y-2">
-          <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">
-            {summary.totalAttempts > 0 ? `${summary.successCount}/${summary.totalAttempts} ${t("Successful Attempts")}` : t("当前区间内暂没有支付尝试记录")}
-          </p>
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {summary.totalAttempts > 0 ? <StatusPill kind={healthKind} label={summary.rate >= 90 ? "Healthy" : "Watch"} /> : null}
+            <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">
+              {summary.totalAttempts > 0 ? `${summary.successCount}/${summary.totalAttempts} ${t("Successful Attempts")}` : t("当前区间内暂没有支付尝试记录")}
+            </p>
+          </div>
           <p className="text-[13px] leading-[1.3] text-[var(--muted-foreground)]">
             {t("统计范围")}：{t(filterLabel)}
           </p>
@@ -1157,24 +1147,19 @@ function OverviewContent({
         validationMessage={successRateFilterError}
       />
 
-      <article className="flex min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8">
-        <SectionHeader
-          icon={Radio}
-          iconBare
-          iconBareClassName="text-[#008A00]"
-          title="Device Status"
-        />
-        <p className={`mt-5 text-[56px] font-bold leading-[1.02] tracking-[-1px] ${detail.status === "inactive" ? "text-[var(--foreground)]" : "text-[#008A00]"}`}>
+      <article className={DETAIL_CARD_CLASS}>
+        <MetricCardHeader icon={Radio} iconTone="primary" title="Device Status" />
+        <p className={`mt-4 text-[48px] font-bold leading-[1] tracking-[-1px] ${detail.status === "inactive" ? "text-[var(--foreground)]" : "text-[var(--foreground)]"}`}>
           {t(statusLabel)}
         </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <StatusPill kind={detail.status === "inactive" ? "unknown" : "supported"} label={detail.status === "inactive" ? "Unknown" : "Verified"} />
+        </div>
       </article>
 
-      <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+      <article className={`${DETAIL_CARD_CLASS} h-full xl:col-span-1`}>
         <SectionHeader
           buttonLabel={showLimitedPaymentMethodsOnly ? "Show All" : "Limited Only"}
-          icon={Smartphone}
-          iconBare
-          iconBareClassName="text-[#3C5AA8]"
           onAction={onToggleLimitedPaymentMethods}
           title="Payment Methods"
         />
@@ -1182,22 +1167,21 @@ function OverviewContent({
         <div className="mt-6 flex flex-1 flex-col">
           {visiblePaymentMethodRows.map((row, idx) => (
             <button
-              className={`flex min-h-[72px] w-full items-center justify-between gap-3 rounded-[20px] px-4 py-4 text-left transition-colors duration-200 hover:bg-[#FAFCFA] ${idx !== visiblePaymentMethodRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
+              className={`flex min-h-[64px] w-full items-center justify-between gap-3 px-0 py-4 text-left transition-colors duration-200 hover:bg-transparent ${idx !== visiblePaymentMethodRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
               key={row.key}
               onClick={() => onOpenSupportInsight(row.insight)}
               type="button"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <SectionIconBadge icon={getPaymentMethodIcon(row.name)} tone="blue" />
+                <SectionIconBadge icon={getPaymentMethodIcon(row.name)} tone="neutral" />
                 <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <StatusPill
-                  appearance="payment-method"
                   kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
                   label={formatSupportStatusLabel(row.status)}
                 />
-                <ChevronRight className="h-4 w-4 text-[#3C5AA8]" />
+                <ChevronRight className="h-4 w-4 text-[var(--muted-foreground)]" />
               </div>
             </button>
           ))}
@@ -1205,12 +1189,9 @@ function OverviewContent({
         </div>
       </article>
 
-      <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+      <article className={`${DETAIL_CARD_CLASS} h-full xl:col-span-1`}>
         <SectionHeader
           buttonLabel={showUnknownNetworksOnly ? "Show All" : "Unknown Only"}
-          icon={CreditCard}
-          iconBare
-          iconBareClassName="text-[#3C5AA8]"
           onAction={onToggleUnknownNetworks}
           title="Supported Networks"
         />
@@ -1218,13 +1199,13 @@ function OverviewContent({
         <div className="mt-6 flex flex-1 flex-col">
           {visibleNetworkRows.map((row, idx) => (
             <button
-              className={`flex min-h-[72px] w-full items-center justify-between gap-3 rounded-[20px] px-4 py-4 text-left transition-colors duration-200 hover:bg-[#FAFCFA] ${idx !== visibleNetworkRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
+              className={`flex min-h-[64px] w-full items-center justify-between gap-3 px-0 py-4 text-left transition-colors duration-200 hover:bg-transparent ${idx !== visibleNetworkRows.length - 1 ? "border-b border-[var(--input)]" : ""}`}
               key={row.name}
               onClick={() => onOpenSupportInsight(row.insight)}
               type="button"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <SectionIconBadge icon={CreditCard} tone="blue" />
+                <SectionIconBadge icon={CreditCard} tone="neutral" />
                 <span className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{row.name}</span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -1232,7 +1213,7 @@ function OverviewContent({
                   kind={row.status === "unsupported" ? "unsupported" : row.status === "limited" ? "limited" : row.status === "unknown" ? "unknown" : "supported"}
                   label={formatSupportStatusLabel(row.status)}
                 />
-                <ChevronRight className="h-4 w-4 text-[#3C5AA8]" />
+                <ChevronRight className="h-4 w-4 text-[var(--muted-foreground)]" />
               </div>
             </button>
           ))}
@@ -1250,12 +1231,9 @@ function OverviewContent({
         updatedAt={proficiencyUpdatedAt}
       />
 
-      <article className="flex h-full min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8 xl:col-span-1">
+      <article className={`${DETAIL_CARD_CLASS} h-full xl:col-span-1`}>
         <SectionHeader
-          icon={Clock3}
           meta={hasBusinessInfo ? <StatusPill kind="supported" label="Recorded" /> : <StatusPill kind="unknown" label="Not set" />}
-          iconBare
-          iconBareClassName="text-[#008A00]"
           title="Business Hours & Contact"
         />
 
@@ -1264,9 +1242,9 @@ function OverviewContent({
         </p>
 
         <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div className="flex h-full min-w-0 flex-col rounded-[28px] border border-[#DCE6F5] bg-[#F7FAFE] p-6">
+          <div className="flex h-full min-w-0 flex-col rounded-[24px] border border-[var(--input)] bg-[#FAFAFA] p-6">
             <div className="flex items-start gap-3">
-              <SectionIconBadge icon={CalendarRange} tone="blue" />
+              <SectionIconBadge icon={CalendarRange} tone="primary" />
               <div className="min-w-0">
                 <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Business Hours")}</h4>
                 <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
@@ -1278,10 +1256,10 @@ function OverviewContent({
             {businessHoursRows.length > 0 ? (
               <div className="mt-5 flex flex-1 flex-col gap-3">
                 {businessHoursRows.map((row) => (
-                  <div className="rounded-[20px] border border-[#E1E8F3] bg-white px-4 py-4" key={row.id}>
+                  <div className="rounded-[20px] border border-[var(--input)] bg-white px-4 py-4" key={row.id}>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{row.label}</p>
-                      {row.kind === "special" ? <StatusPill appearance="blue" kind="supported" label="Special" /> : null}
+                      {row.kind === "special" ? <StatusPill appearance="info" kind="supported" label="Special" /> : null}
                     </div>
                     <p className="mt-2 break-words text-sm leading-[1.6] text-[var(--muted-foreground)]">{row.value}</p>
                   </div>
@@ -1294,16 +1272,16 @@ function OverviewContent({
             )}
           </div>
 
-          <div className="flex h-full min-w-0 flex-col rounded-[28px] border border-[#DDE8DD] bg-[#F9FCF9] p-6">
+          <div className="flex h-full min-w-0 flex-col rounded-[24px] border border-[var(--input)] bg-[#FAFAFA] p-6">
             <div className="flex items-start gap-3">
-              <SectionIconBadge icon={Phone} />
+              <SectionIconBadge icon={Phone} tone="success" />
               <div className="min-w-0">
                 <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Contact Information")}</h4>
                 <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
               </div>
             </div>
 
-            <div className="mt-5 flex flex-1 flex-col rounded-[20px] border border-[#E1EAE1] bg-white p-5">
+            <div className="mt-5 flex flex-1 flex-col rounded-[20px] border border-[var(--input)] bg-white p-5">
               <p className="break-words whitespace-pre-wrap text-base font-semibold leading-[1.7] text-[var(--foreground)]">
                 {detail.contactInfo?.trim() || t("Not set")}
               </p>
