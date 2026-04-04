@@ -27,6 +27,7 @@ interface FluxaAmapViewProps {
   locations: LocationRecord[];
   loading?: boolean;
   locateRequestKey?: number;
+  suppressInitialMapViewportSync?: boolean;
   mapFocusLocation?: LocationRecord | null;
   mapFocusRequestKey?: number;
   onLocationResolved?: (position: { lng: number; lat: number }) => void;
@@ -719,6 +720,7 @@ export function FluxaAmapView({
   locations,
   loading = false,
   locateRequestKey = 0,
+  suppressInitialMapViewportSync = false,
   mapFocusLocation = null,
   mapFocusRequestKey = 0,
   onLocationResolved,
@@ -744,6 +746,7 @@ export function FluxaAmapView({
   const focusTimerRefs = useRef<number[]>([]);
   const openDetailRef = useRef(onOpenDetail);
   const viewportChangeRef = useRef(onViewportChange);
+  const suppressViewportSyncRef = useRef(suppressInitialMapViewportSync);
   const locationsRef = useRef(locations);
   const selectedLocationIdRef = useRef<string | null>(null);
   const renderVisibleMarkersRef = useRef<(() => void) | null>(null);
@@ -812,6 +815,15 @@ export function FluxaAmapView({
   }, [onViewportChange]);
 
   useEffect(() => {
+    suppressViewportSyncRef.current = suppressInitialMapViewportSync;
+
+    if (!suppressInitialMapViewportSync && active) {
+      renderVisibleMarkersRef.current?.();
+      emitViewportSnapshotRef.current?.();
+    }
+  }, [active, suppressInitialMapViewportSync]);
+
+  useEffect(() => {
     locationsRef.current = locations;
     if (active) {
       renderVisibleMarkersRef.current?.();
@@ -841,7 +853,7 @@ export function FluxaAmapView({
     const map = mapRef.current;
     if (!map || !window.AMap) return;
 
-    if (!active) {
+    if (!active || suppressViewportSyncRef.current) {
       return;
     }
 
@@ -949,7 +961,7 @@ export function FluxaAmapView({
   };
 
   emitViewportSnapshotRef.current = () => {
-    if (!active) {
+    if (!active || suppressViewportSyncRef.current) {
       return;
     }
 
@@ -1063,6 +1075,9 @@ export function FluxaAmapView({
 
         const handleZoomEnd = () => {
           persistViewport();
+          if (suppressViewportSyncRef.current) {
+            return;
+          }
           renderVisibleMarkersRef.current?.();
           emitViewportSnapshotRef.current?.();
         };
@@ -1107,16 +1122,16 @@ export function FluxaAmapView({
     const map = mapRef.current;
     if (!map) return;
     map.setMapStyle(themePreset.mapStyle);
-    if (active) {
+    if (active && !suppressInitialMapViewportSync) {
       renderVisibleMarkersRef.current?.();
     }
-  }, [active, themePreset.mapStyle]);
+  }, [active, suppressInitialMapViewportSync, themePreset.mapStyle]);
 
   useEffect(() => {
-    if (active) {
+    if (active && !suppressInitialMapViewportSync) {
       renderVisibleMarkersRef.current?.();
     }
-  }, [active, locations, themePreset.markerVariant]);
+  }, [active, locations, suppressInitialMapViewportSync, themePreset.markerVariant]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1146,11 +1161,11 @@ export function FluxaAmapView({
       return;
     }
 
-    if (active) {
+    if (active && !suppressInitialMapViewportSync) {
       renderVisibleMarkersRef.current?.();
       emitViewportSnapshotRef.current?.();
     }
-  }, [active, mapReady]);
+  }, [active, mapReady, suppressInitialMapViewportSync]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current || !window.AMap) return;
@@ -1231,7 +1246,12 @@ export function FluxaAmapView({
 
   const config = getAMapConfig();
   const missingKey = !config.key;
-  const showBlockingOverlay = missingKey || Boolean(mapError) || !mapReady;
+  const hasWarmCache = Boolean(cachedMapViewport || locations.length > 0 || mapIndexPoints.length > 0 || mapSummary.totalLocationCount > 0);
+  const showBlockingOverlay =
+    missingKey
+    || Boolean(mapError)
+    || suppressInitialMapViewportSync
+    || ((!mapReady || loading) && !hasWarmCache);
   const totalCountLoading = mapSummary.totalCountLoading ?? (loading && mapSummary.totalLocationCount === 0 && mapIndexPoints.length === 0);
   const summaryVisibleCount = mapSummary.totalLocationCount > 0 || totalCountLoading ? mapSummary.visibleLocationCount : visibleLocationCount;
   const summaryTotalCount = mapSummary.totalLocationCount;
