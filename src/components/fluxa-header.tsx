@@ -5,15 +5,22 @@ import { ArrowUpDown, LayoutGrid, Navigation, Search, SlidersHorizontal, X } fro
 import type { SidebarTab } from "@/components/fluxa-sidebar";
 import { useI18n } from "@/i18n";
 import type { LocationSearchMatchField, LocationSearchResult } from "@/lib/location-search";
+import type { BrandSegment } from "@/types/brand";
 
 interface FluxaHeaderProps {
   activeTab: SidebarTab;
+  brandCategory?: BrandSegment;
+  brandPagingMode?: "paged" | "scroll";
+  brandSort?: "updated" | "name";
   listPagingMode?: "paged" | "scroll";
   listSort?: "distance" | "updated";
   locating?: boolean;
   searchLoading?: boolean;
   searchQuery?: string;
   searchSuggestions?: LocationSearchResult[];
+  onBrandCategoryChange?: (category: BrandSegment) => void;
+  onBrandPagingModeToggle?: () => void;
+  onBrandSortChange?: (sort: "updated" | "name") => void;
   onListPagingModeToggle?: () => void;
   onListSortChange?: (sort: "distance" | "updated") => void;
   onLocate?: () => void;
@@ -42,12 +49,18 @@ const SEARCH_MATCH_LABELS: Record<LocationSearchMatchField, string> = {
 
 export function FluxaHeader({
   activeTab,
+  brandCategory = "Coffee",
+  brandPagingMode = "scroll",
+  brandSort = "updated",
   listPagingMode = "paged",
   listSort = "distance",
   locating = false,
   searchLoading = false,
   searchQuery = "",
   searchSuggestions = [],
+  onBrandCategoryChange,
+  onBrandPagingModeToggle,
+  onBrandSortChange,
   onListPagingModeToggle,
   onListSortChange,
   onLocate,
@@ -55,6 +68,7 @@ export function FluxaHeader({
   onSearchSuggestionSelect
 }: FluxaHeaderProps): React.JSX.Element {
   const { t } = useI18n();
+  const brandCategories: BrandSegment[] = ["Coffee", "Fast Food", "Retail", "Convenience"];
   const isMap = activeTab === "map";
   const isBrands = activeTab === "brands";
   const searchEnabled = typeof onSearchQueryChange === "function";
@@ -266,9 +280,40 @@ export function FluxaHeader({
 
       {isBrands ? (
         <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">
-          <div className="inline-flex h-10 items-center rounded-pill bg-[var(--muted)] px-4 text-sm font-medium text-[var(--foreground)]">
-            {t("Brand controls moved into the page content.")}
-          </div>
+          <button
+            className="ui-hover-shadow flex h-10 w-full items-center justify-center gap-1.5 rounded-pill bg-[var(--secondary)] px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)] sm:w-auto"
+            onClick={() => {
+              if (!onBrandCategoryChange) {
+                return;
+              }
+
+              const currentIndex = brandCategories.indexOf(brandCategory);
+              const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % brandCategories.length : 0;
+              onBrandCategoryChange(brandCategories[nextIndex]);
+            }}
+            type="button"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            <span>{`${t("Filters")}: ${t(brandCategory)}`}</span>
+          </button>
+
+          <button
+            className="ui-hover-shadow flex h-10 w-full items-center justify-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] sm:w-auto"
+            onClick={() => onBrandSortChange?.(brandSort === "updated" ? "name" : "updated")}
+            type="button"
+          >
+            <ArrowUpDown className="h-4 w-4" />
+            <span>{brandSort === "updated" ? t("Sort: Updated") : t("Sort: Name")}</span>
+          </button>
+
+          <button
+            className="ui-hover-shadow flex h-10 w-full items-center justify-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] sm:w-auto"
+            onClick={onBrandPagingModeToggle}
+            type="button"
+          >
+            <LayoutGrid className="h-4 w-4" />
+            <span>{brandPagingMode === "scroll" ? t("Scroll Mode") : t("Paged Mode")}</span>
+          </button>
         </div>
       ) : (
         <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">

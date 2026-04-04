@@ -324,7 +324,10 @@ function EmptyState({ message }: { message: string }): React.JSX.Element {
 
 interface FluxaMapCanvasProps {
   activeTab: SidebarTab;
+  brandCategory?: BrandSegment;
   brandDraftCount?: number;
+  brandPagingMode?: "paged" | "scroll";
+  brandSort?: "updated" | "name";
   listCounts?: LocationCounts | null;
   listDirectoryLocations?: LocationRecord[];
   locations: LocationRecord[];
@@ -355,7 +358,10 @@ interface FluxaMapCanvasProps {
 
 export function FluxaMapCanvas({
   activeTab,
+  brandCategory = "Coffee",
   brandDraftCount = 0,
+  brandPagingMode = "scroll",
+  brandSort = "updated",
   listCounts = null,
   listDirectoryLocations = [],
   locations,
@@ -393,10 +399,7 @@ export function FluxaMapCanvas({
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState(EMPTY_PROFILE_FORM);
   const [quickAccessTarget, setQuickAccessTarget] = useState<string | null>(null);
-  const [brandCategory, setBrandCategory] = useState<BrandCategoryLabel>("Coffee");
   const [brandPage, setBrandPage] = useState(1);
-  const [brandPagingMode, setBrandPagingMode] = useState<"paged" | "scroll">("scroll");
-  const [brandSort, setBrandSort] = useState<"updated" | "name">("updated");
   const [brandItemsPerViewport, setBrandItemsPerViewport] = useState(6);
   const [listPage, setListPage] = useState(1);
   const [listColumnCount, setListColumnCount] = useState(1);
@@ -474,8 +477,6 @@ export function FluxaMapCanvas({
     loading: brandCatalogLoading,
     error: brandCatalogError,
     totalCount: brandTotalCount,
-    summaryTotalCount: brandSummaryTotalCount,
-    summaryCountLoading: brandSummaryCountLoading,
     pageCount: brandPageCount,
     hasMore: brandHasMore,
     loadMore: loadMoreBrands
@@ -1271,59 +1272,18 @@ export function FluxaMapCanvas({
   }
 
   if (activeTab === "brands") {
-    const categoryTabs: BrandCategoryLabel[] = ["Coffee", "Fast Food", "Retail", "Convenience"];
-
     return (
       <div className="relative flex h-full w-full min-w-0 flex-1">
         {mapPanel}
         <section className="flex h-full w-full min-w-0 flex-col gap-[7px]">
         {dataBanner}
-        <div className="flex w-full flex-wrap items-center gap-2">
-          {categoryTabs.map((item) => {
-            const isActive = brandCategory === item;
-            return (
-              <button
-                className={`ui-hover-shadow relative z-[1] inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-pill px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] select-none ${
-                  isActive
-                    ? "bg-[var(--secondary)] transition-colors duration-200 hover:bg-[var(--secondary-hover)]"
-                    : "bg-[var(--muted)] transition-colors duration-200 hover:bg-[var(--muted-hover)]"
-                }`}
-                key={item}
-                onClick={() => setBrandCategory(item)}
-                type="button"
-              >
-                <span>{t(item)}</span>
-              </button>
-            );
-          })}
-          {brandDraftCount > 0 ? (
+        {brandDraftCount > 0 ? (
+          <div className="flex w-full">
             <div className="inline-flex h-8 items-center justify-center rounded-pill bg-[var(--color-info)] px-3 py-2 text-xs font-medium text-[var(--color-info-foreground)]">
               {brandDraftCount} {brandDraftCount > 1 ? t("Draft Brands") : t("Draft Brand")}
             </div>
-          ) : null}
-        </div>
-
-        <div className="flex w-full flex-wrap items-center gap-2">
-          <div className="inline-flex h-8 items-center justify-center rounded-pill bg-[var(--color-info)] px-3 py-2 text-sm font-medium leading-[1.142857] text-[var(--color-info-foreground)]">
-            {brandSummaryCountLoading ? t("Loading...") : `${brandSummaryTotalCount} ${t("brands")}`}
           </div>
-          <button
-            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
-            onClick={() => setBrandSort((prev) => (prev === "updated" ? "name" : "updated"))}
-            type="button"
-          >
-            <ListFilter className="h-4 w-4" />
-            <span>{brandSort === "updated" ? t("Sort: Updated") : t("Sort: Name")}</span>
-          </button>
-          <button
-            className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
-            onClick={() => setBrandPagingMode((prev) => (prev === "scroll" ? "paged" : "scroll"))}
-            type="button"
-          >
-            <ListFilter className="h-4 w-4" />
-            <span>{brandPagingMode === "scroll" ? t("Scroll Mode") : t("Paged Mode")}</span>
-          </button>
-        </div>
+        ) : null}
 
         <div
           className={`min-h-0 flex-1 ${brandPagingMode === "scroll" ? "overflow-auto pr-1" : "overflow-hidden"}`}
@@ -1342,13 +1302,13 @@ export function FluxaMapCanvas({
           {visibleBrandCards.length === 0 ? (
             <EmptyState message={brandCatalogLoading ? "Loading brands..." : searchQuery.trim() ? "No matching brands found." : "No brand coverage yet for this category."} />
           ) : (
-            <div className="flex flex-col gap-2.5">
+            <div className="grid grid-cols-1 content-start gap-2.5 lg:grid-cols-2">
               {visibleBrandCards.map((item) => {
                 const targetBrand = visibleBrandRecords.find((brand) => brand.id === item.id);
 
                 return (
                   <article
-                    className="flex min-h-[184px] min-w-0 flex-col rounded-m border border-[var(--border)] bg-[var(--card)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--card-hover)]"
+                    className="flex min-h-[184px] min-w-0 flex-col overflow-hidden rounded-m border border-[var(--border)] bg-[var(--card)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--card-hover)]"
                     key={item.id}
                   >
                     <div className="flex min-h-0 flex-1 flex-col">
@@ -1388,7 +1348,7 @@ export function FluxaMapCanvas({
                         </div>
                       </div>
 
-                      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-4 text-xs leading-[1.2] text-[var(--muted-foreground)]">
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--accent)] px-5 py-4 text-xs leading-[1.2] text-[var(--muted-foreground)]">
                         <span className="truncate">{t(item.coverage)}</span>
                         <span className="truncate">{t(item.issues)}</span>
                       </div>

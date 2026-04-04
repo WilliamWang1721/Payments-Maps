@@ -27,7 +27,7 @@ import { buildLocationSearchIndex, searchLocationSearchIndex } from "@/lib/locat
 import { buildFluxaPagePath, isSidebarTab, parseFluxaPageRoute, type FluxaPageRoute, type FluxaPageView } from "@/lib/fluxa-routes";
 import { DEFAULT_MAP_THEME, isMapThemeKey, MAP_THEME_STORAGE_KEY, type MapThemeKey } from "@/lib/map-theme";
 import { locationService } from "@/services/location-service";
-import type { BrandRecord, CreateBrandInput } from "@/types/brand";
+import type { BrandRecord, BrandSegment, CreateBrandInput } from "@/types/brand";
 import type { CreateLocationInput, LocationRecord } from "@/types/location";
 
 const ADD_LOCATION_AUTO_READ_MERCHANT_NAME_STORAGE_KEY = "fluxa_add_location_auto_read_merchant_name_beta";
@@ -37,6 +37,8 @@ const MCP_BETA_STORAGE_KEY = "fluxa_mcp_beta_enabled";
 type OverlayView = "cards" | "addLocation" | "addLocationSuccess" | "addBrand" | "addBrandSuccess" | "webSettings" | "mcpSettings";
 type AppView = FluxaPageView | OverlayView;
 type ListPagingMode = "paged" | "scroll";
+type BrandPagingMode = "paged" | "scroll";
+type BrandSort = "updated" | "name";
 type SearchableSidebarTab = Extract<SidebarTab, "map" | "list" | "brands">;
 
 let hasAutoLocatedMapInPageSession = false;
@@ -67,6 +69,9 @@ export default function App({
   const [cardAlbumCreateMode, setCardAlbumCreateMode] = useState(false);
   const [listSort, setListSort] = useState<"distance" | "updated">("distance");
   const [listPagingMode, setListPagingMode] = useState<ListPagingMode>("paged");
+  const [brandCategory, setBrandCategory] = useState<BrandSegment>("Coffee");
+  const [brandSort, setBrandSort] = useState<BrandSort>("updated");
+  const [brandPagingMode, setBrandPagingMode] = useState<BrandPagingMode>("scroll");
   const [searchQueries, setSearchQueries] = useState<Record<SearchableSidebarTab, string>>({
     map: "",
     list: "",
@@ -437,6 +442,10 @@ export default function App({
     setListPagingMode((prev) => (prev === "paged" ? "scroll" : "paged"));
   };
 
+  const handleBrandPagingModeToggle = (): void => {
+    setBrandPagingMode((prev) => (prev === "paged" ? "scroll" : "paged"));
+  };
+
   const handleSearchSuggestionSelect = (locationId: string): void => {
     void (async () => {
       let matchedLocation =
@@ -610,9 +619,15 @@ export default function App({
             {!isFullCanvasPage ? (
               <FluxaHeader
                 activeTab={sidebarActiveTab}
+                brandCategory={brandCategory}
+                brandPagingMode={brandPagingMode}
+                brandSort={brandSort}
                 listPagingMode={listPagingMode}
                 listSort={listSort}
                 locating={locating}
+                onBrandCategoryChange={setBrandCategory}
+                onBrandPagingModeToggle={handleBrandPagingModeToggle}
+                onBrandSortChange={setBrandSort}
                 searchQuery={currentSearchQuery}
                 searchLoading={searchSuggestionsLoading}
                 searchSuggestions={displayedSearchSuggestions}
@@ -636,7 +651,10 @@ export default function App({
               <div className="flex min-h-0 w-full flex-1">
                 <FluxaMapCanvas
                   activeTab={sidebarActiveTab}
+                  brandCategory={brandCategory}
                   brandDraftCount={brandDraftCount}
+                  brandPagingMode={brandPagingMode}
+                  brandSort={brandSort}
                   error={
                     activeView === "map"
                       ? mapError
