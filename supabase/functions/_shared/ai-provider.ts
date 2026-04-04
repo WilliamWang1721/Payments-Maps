@@ -1,10 +1,18 @@
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_PRIMARY_MODEL = "openrouter/healer-alpha";
+const OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models";
+const DEFAULT_PRIMARY_MODEL = "xiaomi/mimo-v2-omni";
+const DEFAULT_DISCOVERED_FREE_MODEL_LIMIT = 12;
+const DEFAULT_DISCOVERED_FREE_MODEL_CACHE_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_MODEL_UNAVAILABLE_TTL_MS = 30 * 60 * 1000;
 
 type RuntimeEnvironment = "development" | "preview" | "production";
 type ModelFamily = "gai" | "openai" | "meta" | "google" | "other";
 
 const FAMILY_PRIORITY: ModelFamily[] = ["gai", "openai", "meta", "google", "other"];
+
+const MODEL_ALIASES: Record<string, string> = {
+  "openrouter/healer-alpha": "xiaomi/mimo-v2-omni"
+};
 
 export interface OpenRouterMessage {
   role: "assistant" | "system" | "user";
@@ -35,10 +43,27 @@ interface ModelDescriptor {
   id: string;
 }
 
+interface DiscoveredModelDescriptor {
+  contextLength: number;
+  id: string;
+  inputModalities: string[];
+  isModerated: boolean;
+  maxCompletionTokens: number;
+  outputModalities: string[];
+  promptPrice: number | null;
+  completionPrice: number | null;
+  supportedParameters: string[];
+}
+
+interface DiscoveredFreeModelCacheEntry {
+  expiresAt: number;
+  models: string[];
+}
+
 class NonRetryableAiError extends Error {}
 
 const MODEL_CATALOG: ModelDescriptor[] = [
-  { id: "openrouter/healer-alpha", family: "gai" },
+  { id: "xiaomi/mimo-v2-omni", family: "gai" },
   { id: "openai/gpt-oss-120b:free", family: "openai" },
   { id: "meta-llama/llama-3.3-70b-instruct:free", family: "meta" },
   { id: "google/gemma-3-27b-it:free", family: "google" },
@@ -90,15 +115,43 @@ const DEFAULT_OTHER_MODELS_BY_ENV: Record<RuntimeEnvironment, string[]> = {
 };
 
 let fallbackRotationCursor = 0;
+let discoveredFreeModelCache: DiscoveredFreeModelCacheEntry | null = null;
+const unavailableModels = new Map<string, number>();
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => normalizeString(entry))
+        .filter(Boolean)
+    : [];
+}
+
+function normalizeNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function canonicalizeModelId(value: string): string {
+  const normalized = normalizeString(value);
+  return MODEL_ALIASES[normalized] || normalized;
+}
+
 function parseModelList(value: string | undefined): string[] {
   return normalizeString(value)
     .split(",")
-    .map((entry) => entry.trim())
+    .map((entry) => canonicalizeModelId(entry))
     .filter(Boolean);
 }
 
@@ -143,19 +196,51 @@ function detectEnvironment(): RuntimeEnvironment {
   return Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development";
 }
 
+function getBooleanEnv(name: string, fallback: boolean): boolean {
+  const normalized = normalizeString(Deno.env.get(name)).toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+
+  return !["0", "false", "off", "no"].includes(normalized);
+}
+
+function getPositiveIntegerEnv(name: string, fallback: number): number {
+  const parsed = Number(normalizeString(Deno.env.get(name)));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function shouldDiscoverFreeModels(): boolean {
+  return getBooleanEnv("OPENROUTER_DISCOVER_FREE_MODELS", true);
+}
+
+function getDiscoveredFreeModelLimit(): number {
+  return getPositiveIntegerEnv("OPENROUTER_DISCOVER_FREE_MODEL_LIMIT", DEFAULT_DISCOVERED_FREE_MODEL_LIMIT);
+}
+
+function getDiscoveredFreeModelCacheTtlMs(): number {
+  return getPositiveIntegerEnv("OPENROUTER_DISCOVER_FREE_MODEL_CACHE_MS", DEFAULT_DISCOVERED_FREE_MODEL_CACHE_TTL_MS);
+}
+
+function getModelUnavailableTtlMs(): number {
+  return getPositiveIntegerEnv("OPENROUTER_MODEL_UNAVAILABLE_TTL_MS", DEFAULT_MODEL_UNAVAILABLE_TTL_MS);
+}
+
 function dedupeModels(models: string[]): string[] {
   const seen = new Set<string>();
-  const catalogIds = new Set(MODEL_CATALOG.map((entry) => entry.id));
+  const deduped: string[] = [];
 
-  return models.filter((model) => {
-    const normalized = normalizeString(model);
-    if (!normalized || seen.has(normalized) || !catalogIds.has(normalized)) {
-      return false;
+  for (const model of models) {
+    const normalized = canonicalizeModelId(model);
+    if (!normalized || seen.has(normalized)) {
+      continue;
     }
 
     seen.add(normalized);
-    return true;
-  });
+    deduped.push(normalized);
+  }
+
+  return deduped;
 }
 
 function shouldRotateFallbacks(): boolean {
@@ -202,14 +287,14 @@ function getConfiguredBasePool(environment: RuntimeEnvironment): string[] {
   return getDefaultModelPool(environment);
 }
 
-function resolveModelOrder(): {
+function resolveConfiguredModelOrder(): {
   environment: RuntimeEnvironment;
   models: string[];
 } {
   const environment = detectEnvironment();
   const legacyPrimary = normalizeString(Deno.env.get("OPENROUTER_MODEL"));
   const configuredPrimary = normalizeString(Deno.env.get("OPENROUTER_MODEL_PRIMARY"));
-  const primaryModel = configuredPrimary || legacyPrimary || DEFAULT_PRIMARY_MODEL;
+  const primaryModel = canonicalizeModelId(configuredPrimary || legacyPrimary || DEFAULT_PRIMARY_MODEL);
   const disabledModels = new Set(parseModelList(Deno.env.get("OPENROUTER_DISABLED_MODELS")));
   const basePool = getConfiguredBasePool(environment);
   const dedupedModels = dedupeModels([primaryModel, ...basePool]).filter((model) => !disabledModels.has(model));
@@ -229,7 +314,219 @@ function resolveModelOrder(): {
 }
 
 function isRetryableStatus(status: number): boolean {
-  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+  return status === 404 || status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function isRetryableOpenRouterFailure(status: number, errorText: string): boolean {
+  if (isRetryableStatus(status)) {
+    return true;
+  }
+
+  if (status !== 400) {
+    return false;
+  }
+
+  const normalized = errorText.toLowerCase();
+  return (
+    normalized.includes("provider returned error") ||
+    normalized.includes("developer instruction") ||
+    normalized.includes("invalid_argument") ||
+    normalized.includes("not enabled for") ||
+    normalized.includes("unsupported") ||
+    normalized.includes("does not support") ||
+    normalized.includes("response_format") ||
+    normalized.includes("structured_outputs")
+  );
+}
+
+function markModelUnavailable(model: string): void {
+  unavailableModels.set(canonicalizeModelId(model), Date.now() + getModelUnavailableTtlMs());
+}
+
+function clearModelUnavailable(model: string): void {
+  unavailableModels.delete(canonicalizeModelId(model));
+}
+
+function isModelUnavailable(model: string): boolean {
+  const normalized = canonicalizeModelId(model);
+  const expiresAt = unavailableModels.get(normalized);
+  if (!expiresAt) {
+    return false;
+  }
+
+  if (expiresAt <= Date.now()) {
+    unavailableModels.delete(normalized);
+    return false;
+  }
+
+  return true;
+}
+
+function filterUnavailableModels(models: string[]): string[] {
+  const availableModels = models.filter((model) => !isModelUnavailable(model));
+  return availableModels.length > 0 ? availableModels : models;
+}
+
+function normalizeDiscoveredModel(record: unknown): DiscoveredModelDescriptor | null {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+
+  const payload = record as Record<string, unknown>;
+  const id = canonicalizeModelId(normalizeString(payload.id));
+  if (!id || id.startsWith("openrouter/")) {
+    return null;
+  }
+
+  const architecture =
+    payload.architecture && typeof payload.architecture === "object"
+      ? (payload.architecture as Record<string, unknown>)
+      : null;
+  const topProvider =
+    payload.top_provider && typeof payload.top_provider === "object"
+      ? (payload.top_provider as Record<string, unknown>)
+      : null;
+  const pricing =
+    payload.pricing && typeof payload.pricing === "object"
+      ? (payload.pricing as Record<string, unknown>)
+      : null;
+
+  return {
+    contextLength: normalizeNumber(payload.context_length) || normalizeNumber(topProvider?.context_length) || 0,
+    id,
+    inputModalities: normalizeStringList(architecture?.input_modalities),
+    isModerated: Boolean(topProvider?.is_moderated),
+    maxCompletionTokens: normalizeNumber(topProvider?.max_completion_tokens) || 0,
+    outputModalities: normalizeStringList(architecture?.output_modalities),
+    promptPrice: normalizeNumber(pricing?.prompt),
+    completionPrice: normalizeNumber(pricing?.completion),
+    supportedParameters: normalizeStringList(payload.supported_parameters)
+  };
+}
+
+function supportsStructuredResponses(model: DiscoveredModelDescriptor): boolean {
+  return (
+    model.supportedParameters.includes("response_format") ||
+    model.supportedParameters.includes("structured_outputs")
+  );
+}
+
+function isEligibleDiscoveredModel(model: DiscoveredModelDescriptor): boolean {
+  return (
+    model.promptPrice === 0 &&
+    model.completionPrice === 0 &&
+    model.inputModalities.includes("text") &&
+    model.outputModalities.includes("text") &&
+    supportsStructuredResponses(model)
+  );
+}
+
+function isTextOnlyModel(model: DiscoveredModelDescriptor): boolean {
+  return model.inputModalities.length === 1 && model.inputModalities[0] === "text";
+}
+
+function getStaticPoolPriority(environment: RuntimeEnvironment, modelId: string): number {
+  const index = getDefaultModelPool(environment).indexOf(modelId);
+  return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+}
+
+function compareDiscoveredModels(
+  environment: RuntimeEnvironment,
+  left: DiscoveredModelDescriptor,
+  right: DiscoveredModelDescriptor
+): number {
+  const leftStaticPriority = getStaticPoolPriority(environment, left.id);
+  const rightStaticPriority = getStaticPoolPriority(environment, right.id);
+  if (leftStaticPriority !== rightStaticPriority) {
+    return leftStaticPriority - rightStaticPriority;
+  }
+
+  const textOnlyDelta = Number(isTextOnlyModel(right)) - Number(isTextOnlyModel(left));
+  if (textOnlyDelta !== 0) {
+    return textOnlyDelta;
+  }
+
+  const moderationDelta = Number(left.isModerated) - Number(right.isModerated);
+  if (moderationDelta !== 0) {
+    return moderationDelta;
+  }
+
+  if (left.maxCompletionTokens !== right.maxCompletionTokens) {
+    return right.maxCompletionTokens - left.maxCompletionTokens;
+  }
+
+  if (left.contextLength !== right.contextLength) {
+    return right.contextLength - left.contextLength;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+async function discoverFreeModels(
+  request: Request,
+  openRouterApiKey: string,
+  environment: RuntimeEnvironment
+): Promise<string[]> {
+  if (!shouldDiscoverFreeModels()) {
+    return [];
+  }
+
+  const now = Date.now();
+  if (discoveredFreeModelCache && discoveredFreeModelCache.expiresAt > now) {
+    return discoveredFreeModelCache.models;
+  }
+
+  try {
+    const response = await fetch(OPENROUTER_MODELS_ENDPOINT, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${openRouterApiKey}`,
+        "HTTP-Referer": getOrigin(request),
+        "X-Title": "Fluxa Map Model Discovery"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const safePayload = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const records = Array.isArray(safePayload.data) ? safePayload.data : [];
+    const models = records
+      .map((entry) => normalizeDiscoveredModel(entry))
+      .filter((entry): entry is DiscoveredModelDescriptor => Boolean(entry))
+      .filter((entry) => isEligibleDiscoveredModel(entry))
+      .sort((left, right) => compareDiscoveredModels(environment, left, right))
+      .slice(0, getDiscoveredFreeModelLimit())
+      .map((entry) => entry.id);
+
+    discoveredFreeModelCache = {
+      expiresAt: now + getDiscoveredFreeModelCacheTtlMs(),
+      models
+    };
+    return models;
+  } catch {
+    return discoveredFreeModelCache?.models || [];
+  }
+}
+
+async function resolveModelOrder(
+  request: Request,
+  openRouterApiKey: string
+): Promise<{
+  environment: RuntimeEnvironment;
+  models: string[];
+}> {
+  const configured = resolveConfiguredModelOrder();
+  const discoveredModels = await discoverFreeModels(request, openRouterApiKey, configured.environment);
+  const mergedModels = dedupeModels([...configured.models, ...discoveredModels]);
+  const models = filterUnavailableModels(mergedModels);
+
+  return {
+    environment: configured.environment,
+    models: models.length > 0 ? models : [DEFAULT_PRIMARY_MODEL]
+  };
 }
 
 function extractMessageContent(payload: Record<string, unknown>): string {
@@ -271,7 +568,7 @@ function getOrigin(request: Request): string {
 }
 
 export function getPrimaryOpenRouterModel(): string {
-  return resolveModelOrder().models[0] || DEFAULT_PRIMARY_MODEL;
+  return resolveConfiguredModelOrder().models[0] || DEFAULT_PRIMARY_MODEL;
 }
 
 export function parseJsonCompletion<T>(content: unknown): T | null {
@@ -303,7 +600,7 @@ export async function requestStructuredCompletion<T>(
     throw new NonRetryableAiError("Missing OPENROUTER_API_KEY secret.");
   }
 
-  const { environment, models } = resolveModelOrder();
+  const { environment, models } = await resolveModelOrder(options.request, openRouterApiKey);
   const attemptedModels: string[] = [];
   const failures: string[] = [];
   const origin = getOrigin(options.request);
@@ -333,7 +630,8 @@ export async function requestStructuredCompletion<T>(
       if (!response.ok) {
         const errorText = (await response.text()).slice(0, 600);
         const failureMessage = `${model}: OpenRouter returned ${response.status}${errorText ? ` - ${errorText}` : ""}`;
-        if (isRetryableStatus(response.status)) {
+        if (isRetryableOpenRouterFailure(response.status, errorText)) {
+          markModelUnavailable(model);
           failures.push(failureMessage);
           continue;
         }
@@ -347,9 +645,12 @@ export async function requestStructuredCompletion<T>(
       const parsed = options.parse(content);
 
       if (!parsed) {
+        markModelUnavailable(model);
         failures.push(`${model}: invalid structured response`);
         continue;
       }
+
+      clearModelUnavailable(model);
 
       return {
         attemptedModels,
@@ -364,6 +665,7 @@ export async function requestStructuredCompletion<T>(
         throw error;
       }
 
+      markModelUnavailable(model);
       failures.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

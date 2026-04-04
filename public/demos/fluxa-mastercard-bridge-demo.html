@@ -1,0 +1,1700 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fluxa Map x 万事网联 Demo</title>
+    <link rel="icon" href="/fluxa-favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --bg-strong: #efe2cf;
+        --paper: rgba(255, 252, 246, 0.84);
+        --paper-strong: rgba(255, 250, 242, 0.94);
+        --ink: #151515;
+        --muted: #665f55;
+        --line: rgba(21, 21, 21, 0.12);
+        --line-strong: rgba(21, 21, 21, 0.2);
+        --gold: #d19a29;
+        --gold-deep: #a56f0d;
+        --green: #16624f;
+        --red: #a83c28;
+        --shadow: 0 30px 80px rgba(58, 39, 11, 0.12);
+        --radius-xl: 30px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: "IBM Plex Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 18%, rgba(209, 154, 41, 0.18), transparent 24%),
+          radial-gradient(circle at 84% 10%, rgba(224, 93, 66, 0.18), transparent 20%),
+          linear-gradient(180deg, #faf5ee 0%, #f6f1e8 45%, #f1e7d7 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(21, 21, 21, 0.028) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(21, 21, 21, 0.028) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 88%);
+      }
+
+      .shell {
+        width: min(1440px, calc(100vw - 32px));
+        margin: 24px auto 48px;
+      }
+
+      .hero,
+      .panel,
+      .status-bar,
+      .footer-note {
+        backdrop-filter: blur(16px);
+        background: var(--paper);
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        border-radius: 34px;
+        padding: 28px 28px 26px;
+      }
+
+      .hero::before,
+      .hero::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(2px);
+      }
+
+      .hero::before {
+        width: 180px;
+        height: 180px;
+        right: -36px;
+        top: -56px;
+        background: rgba(209, 154, 41, 0.2);
+      }
+
+      .hero::after {
+        width: 140px;
+        height: 140px;
+        right: 54px;
+        top: 18px;
+        background: rgba(226, 88, 66, 0.14);
+      }
+
+      .hero-grid {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr);
+        gap: 20px;
+        align-items: end;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(21, 21, 21, 0.06);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--gold), #f3bf50);
+        box-shadow: 0 0 0 6px rgba(209, 154, 41, 0.14);
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        letter-spacing: -0.03em;
+      }
+
+      h1 {
+        margin-top: 18px;
+        font-size: clamp(32px, 5vw, 62px);
+        line-height: 0.95;
+      }
+
+      .hero p {
+        max-width: 760px;
+        margin: 18px 0 0;
+        font-size: 16px;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .hero-metric-wrap {
+        display: grid;
+        gap: 12px;
+      }
+
+      .hero-metric {
+        padding: 18px 18px 16px;
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(255, 249, 240, 0.84), rgba(246, 235, 217, 0.7));
+        border: 1px solid rgba(21, 21, 21, 0.08);
+      }
+
+      .hero-metric span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .hero-metric strong {
+        display: block;
+        margin-top: 12px;
+        font-size: 28px;
+        font-family: "Space Grotesk", sans-serif;
+      }
+
+      .hero-metric small {
+        display: block;
+        margin-top: 8px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .status-bar {
+        margin-top: 18px;
+        border-radius: 22px;
+        padding: 16px 18px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .status-chip {
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(21, 21, 21, 0.08);
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      .status-chip strong,
+      .mini-stat strong {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .status-chip span,
+      .mini-stat span {
+        display: block;
+        margin-top: 8px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 20px;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.8fr) minmax(0, 1.08fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .panel {
+        border-radius: var(--radius-xl);
+        padding: 22px;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .panel-header p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .panel-badge {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 999px;
+        background: rgba(209, 154, 41, 0.12);
+        color: var(--gold-deep);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .form-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field.row-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      label,
+      .field-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #2d2a25;
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px 15px;
+        background: rgba(255, 255, 255, 0.76);
+        font: inherit;
+        color: var(--ink);
+        outline: none;
+        transition:
+          border-color 0.2s ease,
+          box-shadow 0.2s ease,
+          transform 0.2s ease;
+      }
+
+      input:focus,
+      textarea:focus,
+      select:focus {
+        border-color: rgba(209, 154, 41, 0.7);
+        box-shadow: 0 0 0 4px rgba(209, 154, 41, 0.14);
+      }
+
+      textarea {
+        min-height: 128px;
+        resize: vertical;
+      }
+
+      .segment {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 8px;
+      }
+
+      .segment button,
+      .attachment-list button,
+      .button,
+      .ghost-button {
+        border: 0;
+        font: inherit;
+        cursor: pointer;
+        transition:
+          transform 0.18s ease,
+          background 0.2s ease,
+          border-color 0.2s ease,
+          opacity 0.2s ease;
+      }
+
+      .segment button {
+        padding: 12px 10px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.76);
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .segment button:hover,
+      .attachment-list button:hover,
+      .button:hover,
+      .ghost-button:hover {
+        transform: translateY(-1px);
+      }
+
+      .segment button.active,
+      .attachment-list button.active {
+        border-color: rgba(209, 154, 41, 0.55);
+        background: rgba(209, 154, 41, 0.16);
+        color: var(--gold-deep);
+      }
+
+      .attachment-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .attachment-list button {
+        padding: 10px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--muted);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .feedback-optin {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 20px;
+        border: 1px solid rgba(209, 154, 41, 0.2);
+        background: linear-gradient(180deg, rgba(255, 249, 240, 0.92), rgba(246, 235, 217, 0.78));
+      }
+
+      .feedback-optin p {
+        margin: 6px 0 0;
+      }
+
+      .consent-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(21, 21, 21, 0.08);
+        background: rgba(255, 255, 255, 0.72);
+        font-weight: 600;
+        line-height: 1.6;
+      }
+
+      .consent-row input {
+        width: 18px;
+        min-width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        padding: 0;
+        border-radius: 5px;
+      }
+
+      .button,
+      .ghost-button {
+        min-height: 48px;
+        padding: 0 18px;
+        border-radius: 999px;
+        font-weight: 700;
+      }
+
+      .button {
+        color: #fff9ef;
+        background: linear-gradient(135deg, #1c1a18, #53422e);
+      }
+
+      .button.highlight {
+        color: #271700;
+        background: linear-gradient(135deg, #f0c86d, #d79a24);
+      }
+
+      .ghost-button {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--ink);
+      }
+
+      .microcopy {
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .flow-steps,
+      .mapping-list,
+      .log-list,
+      .mirror-list,
+      .session-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .step-card,
+      .mapping-card,
+      .log-card,
+      .mirror-card,
+      .session-card,
+      .mini-stat {
+        border-radius: 18px;
+        border: 1px solid rgba(21, 21, 21, 0.09);
+        background: rgba(255, 255, 255, 0.64);
+        padding: 16px;
+      }
+
+      .step-card {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .step-card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: linear-gradient(180deg, rgba(209, 154, 41, 0.2), rgba(209, 154, 41, 0.7));
+      }
+
+      .step-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: rgba(209, 154, 41, 0.14);
+        color: var(--gold-deep);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .step-card h3,
+      .mapping-card h3,
+      .mirror-card h3,
+      .session-card h3,
+      .log-card h3 {
+        margin-top: 12px;
+        font-size: 18px;
+      }
+
+      .step-card p,
+      .mapping-card p,
+      .mirror-card p,
+      .session-card p,
+      .log-card p {
+        margin: 8px 0 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .mapping-meta,
+      .mirror-meta,
+      .session-meta,
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(21, 21, 21, 0.055);
+        font-size: 12px;
+        font-weight: 700;
+        color: #3e3932;
+      }
+
+      .pill.direct {
+        background: rgba(22, 98, 79, 0.1);
+        color: var(--green);
+      }
+
+      .pill.derived {
+        background: rgba(209, 154, 41, 0.14);
+        color: var(--gold-deep);
+      }
+
+      .pill.manual {
+        background: rgba(168, 60, 40, 0.12);
+        color: var(--red);
+      }
+
+      .two-column {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .mirror-row,
+      .session-row {
+        display: grid;
+        gap: 6px;
+      }
+
+      .mirror-row strong,
+      .session-row strong {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--muted);
+      }
+
+      .mirror-row span,
+      .session-row span {
+        min-height: 46px;
+        padding: 13px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(21, 21, 21, 0.08);
+        line-height: 1.5;
+      }
+
+      .mirror-row textarea {
+        min-height: 180px;
+      }
+
+      .captcha-box {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: center;
+        margin-top: 12px;
+      }
+
+      .captcha-frame {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 72px;
+        border-radius: 18px;
+        border: 1px dashed rgba(21, 21, 21, 0.18);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(245, 235, 221, 0.84)),
+          repeating-linear-gradient(
+            135deg,
+            rgba(209, 154, 41, 0.06),
+            rgba(209, 154, 41, 0.06) 8px,
+            rgba(255, 255, 255, 0.06) 8px,
+            rgba(255, 255, 255, 0.06) 16px
+          );
+        overflow: hidden;
+      }
+
+      #captchaCanvas {
+        width: 100%;
+        max-width: 230px;
+        height: 66px;
+      }
+
+      .timeline {
+        position: relative;
+      }
+
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 10px;
+        top: 8px;
+        bottom: 8px;
+        width: 1px;
+        background: rgba(21, 21, 21, 0.12);
+      }
+
+      .log-card {
+        position: relative;
+        padding-left: 34px;
+      }
+
+      .log-card::before {
+        content: "";
+        position: absolute;
+        left: 4px;
+        top: 18px;
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #f1c96f, #b37a17);
+        box-shadow: 0 0 0 6px rgba(209, 154, 41, 0.14);
+      }
+
+      .log-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .result-banner {
+        display: none;
+        margin-top: 14px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid transparent;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .result-banner.show {
+        display: block;
+        animation: fade-up 0.35s ease;
+      }
+
+      .notice-card {
+        margin-top: 14px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px dashed rgba(21, 21, 21, 0.16);
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .button:disabled,
+      .ghost-button:disabled {
+        opacity: 0.46;
+        cursor: not-allowed;
+      }
+
+      .button:disabled:hover,
+      .ghost-button:disabled:hover {
+        transform: none;
+      }
+
+      .result-banner.success {
+        border-color: rgba(22, 98, 79, 0.2);
+        background: rgba(22, 98, 79, 0.11);
+        color: #0e5644;
+      }
+
+      .result-banner.error {
+        border-color: rgba(168, 60, 40, 0.2);
+        background: rgba(168, 60, 40, 0.09);
+        color: #8b311f;
+      }
+
+      .footer-note {
+        margin-top: 18px;
+        border-radius: 24px;
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .footer-note p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .tiny {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      @keyframes fade-up {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 1180px) {
+        .hero-grid,
+        .board {
+          grid-template-columns: 1fr;
+        }
+
+        .status-bar,
+        .mini-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          width: min(100vw - 16px, 100%);
+          margin: 8px auto 28px;
+        }
+
+        .hero,
+        .panel {
+          padding: 18px;
+          border-radius: 24px;
+        }
+
+        .status-bar,
+        .two-column,
+        .field.row-2,
+        .mini-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .footer-note {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .captcha-box {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="hero">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">
+              <span class="eyebrow-dot"></span>
+              Demo only · no real request
+            </div>
+            <h1>Fluxa Map 到万事网联表单的半自动代提 Demo</h1>
+            <p>
+              这个页面只演示交互路径，不会触发任何真实提交。你可以从左侧模拟在 Fluxa Map
+              填写信息，中间查看字段转换和代理会话，右侧看到万事网联表单的镜像预填，以及最后一跳验证码确认。
+            </p>
+            <div class="hero-actions">
+              <button class="button highlight" id="loadSampleButton">载入示例数据</button>
+              <button class="ghost-button" id="transformButton">执行字段转换</button>
+              <button class="ghost-button" id="captchaButton">请求模拟验证码</button>
+            </div>
+          </div>
+          <div class="hero-metric-wrap">
+            <div class="hero-metric">
+              <span>Recommended UX</span>
+              <strong>用户只补验证码</strong>
+              <small>Fluxa 负责预填字段、描述拼装、代理会话和最终提交动作。</small>
+            </div>
+            <div class="hero-metric">
+              <span>Primary Risk</span>
+              <strong>验证码 + 动态 token</strong>
+              <small>Demo 会把这一步显性展示出来，说明为什么不能走纯前端直连。</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="status-bar">
+        <div class="status-chip">
+          <strong>当前模式</strong>
+          <span id="modeValue">独立静态演示</span>
+        </div>
+        <div class="status-chip">
+          <strong>字段转换</strong>
+          <span id="mappingValue">未执行</span>
+        </div>
+        <div class="status-chip">
+          <strong>代理会话</strong>
+          <span id="sessionValue">未建立</span>
+        </div>
+        <div class="status-chip">
+          <strong>Demo 提交</strong>
+          <span id="submitValue">待命</span>
+        </div>
+      </section>
+
+      <main class="board">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>1. Fluxa Map 输入侧</h2>
+              <p>模拟用户在 Fluxa Map 里先把大部分信息录完。右侧的镜像表单不会直接同步，必须经过中间的转换动作。</p>
+            </div>
+            <div class="panel-badge">Fluxa source</div>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="merchantName">商户名称</label>
+              <input id="merchantName" value="Shake Shack IFC Mall" />
+            </div>
+
+            <div class="field row-2">
+              <div class="field">
+                <label for="merchantCity">商户所在城市</label>
+                <input id="merchantCity" value="上海" />
+              </div>
+              <div class="field">
+                <label for="contactInfo">电话 / 邮箱</label>
+                <input id="contactInfo" value="demo.user@fluxamap.com" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="merchantAddress">商户地址</label>
+              <input id="merchantAddress" value="上海市浦东新区陆家嘴环路8号 IF C Mall LG2-15" />
+            </div>
+
+            <div class="field row-2">
+              <div class="field">
+                <label for="attemptDate">用卡日期</label>
+                <input id="attemptDate" type="date" value="2026-04-03" />
+              </div>
+              <div class="field">
+                <label for="timeSlot">时间段</label>
+                <select id="timeSlot">
+                  <option value="12:00-13:00">12:00-13:00</option>
+                  <option value="13:00-14:00">13:00-14:00</option>
+                  <option value="18:00-19:00">18:00-19:00</option>
+                  <option value="20:00-21:00">20:00-21:00</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field row-2">
+              <div class="field">
+                <label for="cardBin">卡 BIN / 前六位</label>
+                <input id="cardBin" maxlength="6" value="540988" />
+              </div>
+              <div class="field">
+                <label for="acquirerName">收单机构</label>
+                <input id="acquirerName" value="Adyen" />
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-title">交易网络</div>
+              <div class="segment" id="networkSegment">
+                <button type="button" data-value="MasterCard">MasterCard</button>
+                <button class="active" type="button" data-value="MasterCard CN">MasterCard CN</button>
+                <button type="button" data-value="Visa">Visa</button>
+                <button type="button" data-value="UnionPay">UnionPay</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-title">支付结果</div>
+              <div class="segment" id="statusSegment">
+                <button type="button" data-value="Success">Success</button>
+                <button class="active" type="button" data-value="Fault">Fault</button>
+                <button type="button" data-value="Unknown">Unknown</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-title">附件模拟</div>
+              <div class="attachment-list" id="attachmentSegment">
+                <button class="active" type="button" data-value="receipt.jpg">receipt.jpg</button>
+                <button class="active" type="button" data-value="terminal-screen.png">terminal-screen.png</button>
+                <button type="button" data-value="counter-photo.png">counter-photo.png</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="issueNotes">问题描述原始输入</label>
+              <textarea id="issueNotes">刷 MasterCard CN（万事网联）信用卡失败，终端提示“Do not honor”。同一张卡在旁边另一家商户可正常交易。门店员工表示可能是终端路由或收单配置问题。</textarea>
+            </div>
+
+            <div class="field" id="nuccFeedbackPanel" hidden>
+              <div class="feedback-optin">
+                <div>
+                  <div class="field-title">万事网联反馈</div>
+                  <p class="microcopy">
+                    当前记录已经满足 “MasterCard CN + 失败信息” 条件。勾选后，Fluxa Map 会自动登记当前失败用卡信息、拉起图形验证码，并在用户完成隐私确认后由代理模拟直送万事网联。
+                  </p>
+                </div>
+                <label class="consent-row" for="nuccFeedbackCheckbox">
+                  <input id="nuccFeedbackCheckbox" type="checkbox" />
+                  <span>将失败用卡信息反馈到万事网联</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button class="button highlight" id="resetButton" type="button">恢复默认样例</button>
+              <button class="ghost-button" id="clearButton" type="button">清空输入</button>
+            </div>
+
+            <div class="microcopy">
+              这里故意把 “问题描述原始输入” 和 “卡 BIN / 前六位” 单独暴露出来，方便你看出哪些字段是直接映射，哪些需要拼装。
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>2. 转换与代理层</h2>
+              <p>模拟 Fluxa 后端做三件事：字段映射、代理会话建立、验证码拉取。这里不会发真实网络请求，只做本地演示。</p>
+            </div>
+            <div class="panel-badge">Bridge logic</div>
+          </div>
+
+          <div class="flow-steps">
+            <article class="step-card">
+              <span class="step-index">01</span>
+              <h3>字段整理</h3>
+              <p>将 Fluxa 的地点、交易、卡 BIN、联系信息整理成万事网联表单所需字段。</p>
+              <div class="pill-row">
+                <span class="pill direct">商户名称</span>
+                <span class="pill direct">城市</span>
+                <span class="pill direct">地址</span>
+                <span class="pill direct">电话/邮箱</span>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <span class="step-index">02</span>
+              <h3>衍生描述</h3>
+              <p>把网络、结果、收单机构、时间和用户备注拼成可提交的问题描述。</p>
+              <div class="pill-row">
+                <span class="pill derived">problem_description</span>
+                <span class="pill derived">date + time</span>
+                <span class="pill derived">card_number</span>
+              </div>
+            </article>
+
+            <article class="step-card">
+              <span class="step-index">03</span>
+              <h3>最后一跳人工确认</h3>
+              <p>验证码和隐私政策勾选仍要在 Fluxa 页面里由用户确认，然后才由代理去做真正提交。</p>
+              <div class="pill-row">
+                <span class="pill manual">captcha_response</span>
+                <span class="pill manual">privacy_policy</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="mapping-list" style="margin-top: 16px">
+            <article class="mapping-card">
+              <h3>字段映射摘要</h3>
+              <p id="mappingSummary">还没有执行转换。点击“执行字段转换”后，这里会展示当前样例的映射结果。</p>
+              <div class="mapping-meta">
+                <span class="pill direct" id="mappedDirect">Direct 0</span>
+                <span class="pill derived" id="mappedDerived">Derived 0</span>
+                <span class="pill manual" id="mappedManual">Manual 0</span>
+              </div>
+            </article>
+
+            <article class="session-card">
+              <h3>代理会话状态</h3>
+              <p>真实实现里，这里会保存 Drupal 会话 cookie、form_build_id、captcha token 和上传附件的状态。</p>
+              <div class="session-list">
+                <div class="session-row">
+                  <strong>会话 ID</strong>
+                  <span id="sessionIdView">未建立</span>
+                </div>
+                <div class="session-row">
+                  <strong>form_build_id</strong>
+                  <span id="formBuildView">等待生成</span>
+                </div>
+                <div class="session-row">
+                  <strong>captcha_token</strong>
+                  <span id="captchaTokenView">等待生成</span>
+                </div>
+                <div class="session-row">
+                  <strong>附件状态</strong>
+                  <span id="attachmentView">尚未模拟</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="session-card">
+              <h3>动作按钮</h3>
+              <p>按钮顺序故意接近真实交互：先转换，再拉验证码，最后用户输入验证码并点击提交。</p>
+              <div class="button-row">
+                <button class="button" type="button" id="transformButtonSecondary">执行字段转换</button>
+                <button class="ghost-button" type="button" id="captchaButtonSecondary">请求模拟验证码</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="timeline" style="margin-top: 16px">
+            <div class="log-list" id="logList"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>3. 万事网联表单镜像</h2>
+              <p>右侧不是原站 iframe，而是按目标字段结构复刻的一层镜像，用来说明预填效果和最后一步确认逻辑。</p>
+            </div>
+            <div class="panel-badge">Mirror form</div>
+          </div>
+
+          <div class="mirror-list">
+            <article class="mirror-card">
+              <h3>目标表单字段</h3>
+              <div class="two-column" style="margin-top: 14px">
+                <div class="mirror-row">
+                  <strong>问题类型</strong>
+                  <span>用卡问题</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>电话 / 邮箱</strong>
+                  <span id="mirrorContact">等待转换</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>商户名称</strong>
+                  <span id="mirrorName">等待转换</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>商户所在城市</strong>
+                  <span id="mirrorCity">等待转换</span>
+                </div>
+                <div class="mirror-row" style="grid-column: 1 / -1">
+                  <strong>商户地址</strong>
+                  <span id="mirrorAddress">等待转换</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>日期</strong>
+                  <span id="mirrorDate">等待转换</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>时间</strong>
+                  <span id="mirrorTime">等待转换</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>卡号前六位</strong>
+                  <span id="mirrorCardBin">等待转换</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>反馈到万事网联</strong>
+                  <span id="mirrorFeedbackStatus">等待判断</span>
+                </div>
+                <div class="mirror-row">
+                  <strong>上传图片</strong>
+                  <span id="mirrorAttachment">等待转换</span>
+                </div>
+              </div>
+
+              <div class="mirror-row" style="margin-top: 12px">
+                <strong>问题描述</strong>
+                <textarea id="mirrorDescription" readonly>等待转换</textarea>
+              </div>
+            </article>
+
+            <article class="mirror-card">
+              <h3>验证码与用户确认</h3>
+              <p>真实流程里，验证码必须结合实时 token 和 cookie。这里用本地生成的图像来演示最后一步人工参与。</p>
+              <div class="notice-card" id="nuccFeedbackNotice">
+                只有在卡组织为 MasterCard CN 且当前记录已出现失败信息时，才会显示反馈入口。勾选左侧的“将失败用卡信息反馈到万事网联”后，这里才会开放图形验证码和最终提交。
+              </div>
+
+              <div id="nuccFeedbackFlow" hidden>
+                <div class="captcha-box">
+                  <div class="captcha-frame">
+                    <canvas id="captchaCanvas" width="230" height="66" aria-label="captcha"></canvas>
+                  </div>
+                  <button class="ghost-button" type="button" id="refreshCaptchaButton" disabled>刷新验证码</button>
+                </div>
+
+                <div class="field" style="margin-top: 14px">
+                  <label for="captchaInput">输入验证码</label>
+                  <input id="captchaInput" placeholder="先勾选左侧反馈选项" disabled />
+                </div>
+
+                <div class="field" style="margin-top: 10px">
+                  <label class="consent-row" for="privacyCheckbox">
+                    <input id="privacyCheckbox" type="checkbox" disabled />
+                    <span>我已阅读并接受隐私政策</span>
+                  </label>
+                </div>
+
+                <div class="button-row" style="margin-top: 14px">
+                  <button class="button highlight" type="button" id="submitDemoButton" disabled>提交 Demo</button>
+                </div>
+              </div>
+
+              <div class="result-banner" id="resultBanner"></div>
+            </article>
+
+            <article class="mirror-card">
+              <h3>为什么这是“半自动”</h3>
+              <div class="mini-grid" style="margin-top: 14px">
+                <div class="mini-stat">
+                  <strong>前端直连</strong>
+                  <span>不可行</span>
+                </div>
+                <div class="mini-stat">
+                  <strong>后端代理</strong>
+                  <span>可行</span>
+                </div>
+                <div class="mini-stat">
+                  <strong>用户参与</strong>
+                  <span>验证码</span>
+                </div>
+              </div>
+              <div class="mirror-meta">
+                <span class="pill direct">可预填字段</span>
+                <span class="pill derived">可拼装字段</span>
+                <span class="pill manual">必须人工确认</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <section class="footer-note">
+        <div>
+          <div class="tiny">Standalone demo file</div>
+          <p>页面路径设计成独立静态文件，你可以单独预览，不依赖当前 Fluxa React 业务流程。</p>
+        </div>
+        <div>
+          <div class="tiny">No real integration</div>
+          <p>所有 token、captcha、request id 都是本地生成的假值，作用只是演示交互形态和字段转换思路。</p>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const defaultState = {
+        merchantName: "Shake Shack IFC Mall",
+        merchantCity: "上海",
+        merchantAddress: "上海市浦东新区陆家嘴环路8号 IF C Mall LG2-15",
+        contactInfo: "demo.user@fluxamap.com",
+        attemptDate: "2026-04-03",
+        timeSlot: "12:00-13:00",
+        cardBin: "540988",
+        acquirerName: "Adyen",
+        network: "MasterCard CN",
+        transactionStatus: "Fault",
+        attachments: ["receipt.jpg", "terminal-screen.png"],
+        issueNotes:
+          "刷 MasterCard CN（万事网联）信用卡失败，终端提示“Do not honor”。同一张卡在旁边另一家商户可正常交易。门店员工表示可能是终端路由或收单配置问题。"
+      };
+
+      const formIds = {
+        merchantName: document.getElementById("merchantName"),
+        merchantCity: document.getElementById("merchantCity"),
+        merchantAddress: document.getElementById("merchantAddress"),
+        contactInfo: document.getElementById("contactInfo"),
+        attemptDate: document.getElementById("attemptDate"),
+        timeSlot: document.getElementById("timeSlot"),
+        cardBin: document.getElementById("cardBin"),
+        acquirerName: document.getElementById("acquirerName"),
+        issueNotes: document.getElementById("issueNotes")
+      };
+
+      const mirror = {
+        contact: document.getElementById("mirrorContact"),
+        name: document.getElementById("mirrorName"),
+        city: document.getElementById("mirrorCity"),
+        address: document.getElementById("mirrorAddress"),
+        date: document.getElementById("mirrorDate"),
+        time: document.getElementById("mirrorTime"),
+        cardBin: document.getElementById("mirrorCardBin"),
+        feedbackStatus: document.getElementById("mirrorFeedbackStatus"),
+        attachment: document.getElementById("mirrorAttachment"),
+        description: document.getElementById("mirrorDescription")
+      };
+
+      const statusViews = {
+        modeValue: document.getElementById("modeValue"),
+        mappingValue: document.getElementById("mappingValue"),
+        sessionValue: document.getElementById("sessionValue"),
+        submitValue: document.getElementById("submitValue")
+      };
+
+      const summaryViews = {
+        summary: document.getElementById("mappingSummary"),
+        direct: document.getElementById("mappedDirect"),
+        derived: document.getElementById("mappedDerived"),
+        manual: document.getElementById("mappedManual"),
+        sessionId: document.getElementById("sessionIdView"),
+        formBuild: document.getElementById("formBuildView"),
+        captchaToken: document.getElementById("captchaTokenView"),
+        attachment: document.getElementById("attachmentView")
+      };
+
+      const runtime = {
+        mapped: null,
+        session: null,
+        expectedCaptcha: "",
+        logs: [],
+        feedbackEligible: false,
+        feedbackSelected: false
+      };
+
+      const logList = document.getElementById("logList");
+      const networkButtons = Array.from(document.querySelectorAll("#networkSegment button"));
+      const statusButtons = Array.from(document.querySelectorAll("#statusSegment button"));
+      const attachmentButtons = Array.from(document.querySelectorAll("#attachmentSegment button"));
+      const feedbackViews = {
+        panel: document.getElementById("nuccFeedbackPanel"),
+        checkbox: document.getElementById("nuccFeedbackCheckbox"),
+        notice: document.getElementById("nuccFeedbackNotice"),
+        flow: document.getElementById("nuccFeedbackFlow"),
+        captchaInput: document.getElementById("captchaInput"),
+        privacyCheckbox: document.getElementById("privacyCheckbox"),
+        refreshButton: document.getElementById("refreshCaptchaButton"),
+        submitButton: document.getElementById("submitDemoButton"),
+        captchaButtonHero: document.getElementById("captchaButton"),
+        captchaButtonPanel: document.getElementById("captchaButtonSecondary")
+      };
+
+      function randomToken(prefix, size) {
+        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        let result = prefix;
+        for (let index = 0; index < size; index += 1) {
+          result += alphabet[Math.floor(Math.random() * alphabet.length)];
+        }
+        return result;
+      }
+
+      function getSelectedValue(buttons) {
+        return buttons.find((button) => button.classList.contains("active"))?.dataset.value || "";
+      }
+
+      function getAttachmentValues() {
+        return attachmentButtons
+          .filter((button) => button.classList.contains("active"))
+          .map((button) => button.dataset.value);
+      }
+
+      function getFormState() {
+        return {
+          merchantName: formIds.merchantName.value.trim(),
+          merchantCity: formIds.merchantCity.value.trim(),
+          merchantAddress: formIds.merchantAddress.value.trim(),
+          contactInfo: formIds.contactInfo.value.trim(),
+          attemptDate: formIds.attemptDate.value,
+          timeSlot: formIds.timeSlot.value,
+          cardBin: formIds.cardBin.value.trim(),
+          acquirerName: formIds.acquirerName.value.trim(),
+          network: getSelectedValue(networkButtons),
+          transactionStatus: getSelectedValue(statusButtons),
+          attachments: getAttachmentValues(),
+          issueNotes: formIds.issueNotes.value.trim()
+        };
+      }
+
+      function buildProblemDescription(state) {
+        const lines = [
+          `交易网络：${state.network || "未知"}`,
+          `支付结果：${state.transactionStatus || "未知"}`,
+          `收单机构：${state.acquirerName || "未知"}`,
+          `用卡时间：${state.attemptDate || "未填写"} ${state.timeSlot || ""}`.trim(),
+          "",
+          "用户原始描述：",
+          state.issueNotes || "未填写"
+        ];
+        return lines.join("\n");
+      }
+
+      function hasFailureSignal(state) {
+        if (state.transactionStatus === "Fault") return true;
+        return /(失败|报错|拒绝|无法|不通过|刷不过|declin|declined|fail|fault|error|do not honor)/i.test(
+          state.issueNotes || ""
+        );
+      }
+
+      function isNuccFeedbackEligible(state = getFormState()) {
+        return state.network === "MasterCard CN" && hasFailureSignal(state);
+      }
+
+      function clearResult() {
+        const banner = document.getElementById("resultBanner");
+        banner.className = "result-banner";
+        banner.textContent = "";
+      }
+
+      function resetBridgeSession() {
+        runtime.session = null;
+        runtime.expectedCaptcha = "";
+        summaryViews.sessionId.textContent = "未建立";
+        summaryViews.formBuild.textContent = "等待生成";
+        summaryViews.captchaToken.textContent = "等待生成";
+        statusViews.sessionValue.textContent = "未建立";
+        statusViews.submitValue.textContent = "待命";
+        feedbackViews.captchaInput.value = "";
+        feedbackViews.privacyCheckbox.checked = false;
+        drawCaptcha("----");
+        clearResult();
+      }
+
+      function updateNuccFeedbackUI() {
+        const state = getFormState();
+        const eligible = isNuccFeedbackEligible(state);
+        const wasSelected = runtime.feedbackSelected;
+
+        if (!eligible) {
+          feedbackViews.checkbox.checked = false;
+        }
+
+        const selected = eligible && feedbackViews.checkbox.checked;
+
+        feedbackViews.panel.hidden = !eligible;
+        feedbackViews.notice.hidden = selected;
+        feedbackViews.flow.hidden = !selected;
+        feedbackViews.notice.textContent = eligible
+          ? "当前已经命中 MasterCard CN 失败场景。勾选左侧反馈选项后，这里会自动拉起图形验证码并开放最终提交。"
+          : "只有在卡组织为 MasterCard CN 且当前记录已出现失败信息时，才会显示反馈入口。勾选左侧的“将失败用卡信息反馈到万事网联”后，这里才会开放图形验证码和最终提交。";
+
+        feedbackViews.captchaInput.disabled = !selected;
+        feedbackViews.privacyCheckbox.disabled = !selected;
+        feedbackViews.refreshButton.disabled = !selected;
+        feedbackViews.submitButton.disabled = !selected;
+        feedbackViews.captchaButtonHero.disabled = !selected;
+        feedbackViews.captchaButtonPanel.disabled = !selected;
+        feedbackViews.captchaInput.placeholder = selected
+          ? "先点击请求模拟验证码，再输入图形验证码"
+          : eligible
+            ? "先勾选左侧反馈选项"
+            : "仅 MasterCard CN 失败场景会启用";
+
+        statusViews.modeValue.textContent = selected
+          ? "万事网联直送已开启"
+          : eligible
+            ? "可选择直送万事网联"
+            : "独立静态演示";
+
+        if (!selected && (wasSelected || runtime.session || runtime.expectedCaptcha)) {
+          resetBridgeSession();
+        }
+
+        runtime.feedbackEligible = eligible;
+        runtime.feedbackSelected = selected;
+      }
+
+      function transformFields() {
+        const state = getFormState();
+        const nuccEligible = isNuccFeedbackEligible(state);
+        const nuccSelected = nuccEligible && feedbackViews.checkbox.checked;
+
+        runtime.mapped = {
+          type: "card",
+          phone: state.contactInfo || "未填写",
+          business_name: state.merchantName || "未填写",
+          merchant_city: state.merchantCity || "未填写",
+          business_address: state.merchantAddress || "未填写",
+          date: state.attemptDate || "未填写",
+          time: state.timeSlot || "未填写",
+          card_number: state.cardBin || "未填写",
+          nucc_feedback_status: nuccSelected ? "已勾选，等待验证码确认" : nuccEligible ? "可选，尚未勾选" : "不适用",
+          attachment_count: state.attachments.length,
+          problem_description: buildProblemDescription(state)
+        };
+
+        mirror.contact.textContent = runtime.mapped.phone;
+        mirror.name.textContent = runtime.mapped.business_name;
+        mirror.city.textContent = runtime.mapped.merchant_city;
+        mirror.address.textContent = runtime.mapped.business_address;
+        mirror.date.textContent = runtime.mapped.date;
+        mirror.time.textContent = runtime.mapped.time;
+        mirror.cardBin.textContent = runtime.mapped.card_number;
+        mirror.feedbackStatus.textContent = runtime.mapped.nucc_feedback_status;
+        mirror.attachment.textContent = runtime.mapped.attachment_count
+          ? `${runtime.mapped.attachment_count} 个模拟附件`
+          : "无";
+        mirror.description.value = runtime.mapped.problem_description;
+
+        statusViews.mappingValue.textContent = "已执行";
+        summaryViews.summary.textContent =
+          "已把 Fluxa 输入映射到万事网联字段，其中商户信息和联系方式是直接映射，问题描述由网络、支付结果、收单机构和原始备注拼装得到。"
+          + (nuccSelected
+            ? " 当前已勾选反馈到万事网联，下一步需要验证码和隐私确认。"
+            : nuccEligible
+              ? " 当前命中 MasterCard CN 失败场景，可由用户决定是否直送万事网联。"
+              : "");
+        summaryViews.direct.textContent = "Direct 5";
+        summaryViews.derived.textContent = "Derived 4";
+        summaryViews.manual.textContent = `Manual ${nuccEligible ? 3 : 2}`;
+        summaryViews.attachment.textContent = runtime.mapped.attachment_count
+          ? `${runtime.mapped.attachment_count} 个文件待上传（Demo 假状态）`
+          : "没有附件";
+
+        pushLog("字段转换完成", "已生成目标表单镜像值，并同步到右侧预填区域。");
+      }
+
+      function maskToken(token) {
+        if (!token) return "等待生成";
+        if (token.length < 14) return token;
+        return `${token.slice(0, 8)}...${token.slice(-6)}`;
+      }
+
+      function requestCaptcha(source) {
+        if (!runtime.feedbackSelected) {
+          setResult(
+            "error",
+            runtime.feedbackEligible
+              ? "请先勾选“将失败用卡信息反馈到万事网联”，再请求图形验证码。"
+              : "只有 MasterCard CN 且当前记录已出现失败信息时，才会触发万事网联反馈流程。"
+          );
+          return;
+        }
+
+        if (!runtime.mapped) {
+          transformFields();
+        }
+
+        runtime.expectedCaptcha = randomToken("", 4).toUpperCase();
+        runtime.session = {
+          id: `fluxa-demo-${Math.floor(Date.now() / 1000)}`,
+          formBuildId: `form-${randomToken("", 28)}`,
+          captchaToken: randomToken("", 36),
+          captchaSid: String(Math.floor(Math.random() * 9000) + 1000),
+          source
+        };
+
+        summaryViews.sessionId.textContent = runtime.session.id;
+        summaryViews.formBuild.textContent = runtime.session.formBuildId;
+        summaryViews.captchaToken.textContent = maskToken(runtime.session.captchaToken);
+        statusViews.sessionValue.textContent = "已建立";
+        drawCaptcha(runtime.expectedCaptcha);
+        pushLog("代理会话已建立", "已模拟生成 form_build_id、captcha_token 和验证码图像。");
+      }
+
+      function drawCaptcha(text) {
+        const canvas = document.getElementById("captchaCanvas");
+        const context = canvas.getContext("2d");
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = "#f7f0e3";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let index = 0; index < 12; index += 1) {
+          context.strokeStyle = `rgba(209, 154, 41, ${0.16 + Math.random() * 0.18})`;
+          context.beginPath();
+          context.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+          context.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+          context.stroke();
+        }
+
+        context.font = '700 34px "Space Grotesk", sans-serif';
+        context.textBaseline = "middle";
+        context.textAlign = "center";
+
+        const letters = text.split("");
+        letters.forEach((letter, index) => {
+          const x = 42 + index * 46;
+          const y = canvas.height / 2 + (Math.random() * 10 - 5);
+          const angle = (Math.random() * 0.42) - 0.21;
+          context.save();
+          context.translate(x, y);
+          context.rotate(angle);
+          context.fillStyle = index % 2 === 0 ? "#6f4700" : "#943923";
+          context.fillText(letter, 0, 0);
+          context.restore();
+        });
+      }
+
+      function setButtonGroup(buttons, value) {
+        buttons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.value === value);
+        });
+      }
+
+      function hydrateForm(state) {
+        formIds.merchantName.value = state.merchantName;
+        formIds.merchantCity.value = state.merchantCity;
+        formIds.merchantAddress.value = state.merchantAddress;
+        formIds.contactInfo.value = state.contactInfo;
+        formIds.attemptDate.value = state.attemptDate;
+        formIds.timeSlot.value = state.timeSlot;
+        formIds.cardBin.value = state.cardBin;
+        formIds.acquirerName.value = state.acquirerName;
+        formIds.issueNotes.value = state.issueNotes;
+        setButtonGroup(networkButtons, state.network);
+        setButtonGroup(statusButtons, state.transactionStatus);
+        attachmentButtons.forEach((button) => {
+          button.classList.toggle("active", state.attachments.includes(button.dataset.value));
+        });
+        feedbackViews.checkbox.checked = false;
+        updateNuccFeedbackUI();
+      }
+
+      function clearForm() {
+        hydrateForm({
+          merchantName: "",
+          merchantCity: "",
+          merchantAddress: "",
+          contactInfo: "",
+          attemptDate: "",
+          timeSlot: "",
+          cardBin: "",
+          acquirerName: "",
+          network: "MasterCard CN",
+          transactionStatus: "Unknown",
+          attachments: [],
+          issueNotes: ""
+        });
+        pushLog("输入已清空", "左侧 Fluxa 输入区已经重置为空白状态。");
+      }
+
+      function pushLog(title, detail) {
+        runtime.logs.unshift({
+          title,
+          detail,
+          time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        });
+
+        logList.innerHTML = runtime.logs
+          .slice(0, 5)
+          .map(
+            (entry) => `
+              <article class="log-card">
+                <div class="log-meta">
+                  <strong>${entry.title}</strong>
+                  <span>${entry.time}</span>
+                </div>
+                <p>${entry.detail}</p>
+              </article>
+            `
+          )
+          .join("");
+      }
+
+      function setResult(type, message) {
+        const banner = document.getElementById("resultBanner");
+        banner.className = `result-banner show ${type}`;
+        banner.textContent = message;
+      }
+
+      function submitDemo() {
+        if (!runtime.feedbackSelected) {
+          setResult(
+            "error",
+            runtime.feedbackEligible
+              ? "请先勾选“将失败用卡信息反馈到万事网联”，再进行验证码确认和提交。"
+              : "当前记录不满足 MasterCard CN 失败反馈条件，无法直送万事网联。"
+          );
+          statusViews.submitValue.textContent = "失败";
+          return;
+        }
+
+        if (!runtime.mapped) {
+          setResult("error", "请先执行字段转换。");
+          statusViews.submitValue.textContent = "失败";
+          return;
+        }
+
+        if (!runtime.session) {
+          setResult("error", "请先请求模拟验证码。");
+          statusViews.submitValue.textContent = "失败";
+          return;
+        }
+
+        const privacyAccepted = document.getElementById("privacyCheckbox").checked;
+        const captchaInput = document.getElementById("captchaInput").value.trim().toUpperCase();
+
+        if (!privacyAccepted) {
+          setResult("error", "隐私政策尚未勾选。这个动作必须保留给用户最后确认。");
+          statusViews.submitValue.textContent = "失败";
+          return;
+        }
+
+        if (!captchaInput || captchaInput !== runtime.expectedCaptcha) {
+          setResult("error", "验证码不匹配。Demo 里也保留了这一步，说明真实场景不能纯前端无感提交。");
+          statusViews.submitValue.textContent = "失败";
+          return;
+        }
+
+        const requestId = `demo-submit-${randomToken("", 10)}`;
+        statusViews.submitValue.textContent = "成功";
+        setResult(
+          "success",
+          `Demo 提交成功。已登记本次失败用卡信息，并模拟通过代理直送万事网联，请求号 ${requestId}。注意：这不是实际网络请求。`
+        );
+        pushLog("Demo 提交成功", `已生成模拟请求号 ${requestId}，展示最终提交体验。`);
+      }
+
+      networkButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          setButtonGroup(networkButtons, button.dataset.value);
+          updateNuccFeedbackUI();
+        });
+      });
+
+      statusButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          setButtonGroup(statusButtons, button.dataset.value);
+          updateNuccFeedbackUI();
+        });
+      });
+
+      attachmentButtons.forEach((button) => {
+        button.addEventListener("click", () => button.classList.toggle("active"));
+      });
+
+      formIds.issueNotes.addEventListener("input", updateNuccFeedbackUI);
+      feedbackViews.checkbox.addEventListener("change", () => {
+        updateNuccFeedbackUI();
+        if (feedbackViews.checkbox.checked) {
+          transformFields();
+          requestCaptcha("opt-in");
+          return;
+        }
+
+        pushLog("已取消万事网联反馈", "本次失败用卡信息仍保留在 Fluxa Map 中，但不会提交到万事网联。");
+      });
+
+      document.getElementById("loadSampleButton").addEventListener("click", () => {
+        hydrateForm(defaultState);
+        pushLog("示例数据已加载", "已恢复到演示用的商户、BIN 和问题描述样例。");
+      });
+
+      document.getElementById("resetButton").addEventListener("click", () => {
+        hydrateForm(defaultState);
+        pushLog("样例已恢复", "左侧输入区已回到默认演示状态。");
+      });
+
+      document.getElementById("clearButton").addEventListener("click", clearForm);
+      document.getElementById("transformButton").addEventListener("click", transformFields);
+      document.getElementById("transformButtonSecondary").addEventListener("click", transformFields);
+      document.getElementById("captchaButton").addEventListener("click", () => requestCaptcha("hero"));
+      document.getElementById("captchaButtonSecondary").addEventListener("click", () => requestCaptcha("panel"));
+      document.getElementById("refreshCaptchaButton").addEventListener("click", () => requestCaptcha("refresh"));
+      document.getElementById("submitDemoButton").addEventListener("click", submitDemo);
+
+      hydrateForm(defaultState);
+      pushLog("页面已就绪", "当前是独立静态 Demo，所有结果都只在本地浏览器内模拟。");
+    </script>
+  </body>
+</html>

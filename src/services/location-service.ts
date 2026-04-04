@@ -1,7 +1,19 @@
 import { supabase } from "@/lib/supabase";
+import {
+  TRIAL_USER_ID,
+  TRIAL_VIEWER_NAME,
+  type TrialLocationReviewEntry,
+  deleteTrialLocationReview,
+  getViewerSessionUser,
+  isTrialViewerUser,
+  readTrialLocationReviews,
+  recordTrialContribution,
+  recordTrialLocationReview
+} from "@/lib/trial-session";
 import type {
   CreateLocationAttemptInput,
   CreateLocationInput,
+  CreateLocationReviewInput,
   LocationBusinessHours,
   LocationAttemptRecord,
   LocationDetailRecord,
@@ -35,6 +47,11 @@ interface FluxaLocationRow {
 
 interface FluxaLocationMapIndexRow {
   id: string;
+  merchant_name: string;
+  address: string;
+  brand: string | null;
+  city: string | null;
+  status: LocationStatus;
   latitude: number | string;
   longitude: number | string;
   updated_at: string;
@@ -69,6 +86,10 @@ interface PosMachineRow {
 
 interface PosMachineMapIndexRow {
   id: string;
+  name: string;
+  merchant_name: string;
+  address: string;
+  status: string | null;
   latitude: number | string;
   longitude: number | string;
   created_at: string | null;
@@ -164,6 +185,11 @@ export interface LocationBounds {
 
 export interface LocationMapIndexRecord {
   id: string;
+  name: string;
+  address: string;
+  brand: string;
+  city: string;
+  status: LocationStatus;
   lat: number;
   lng: number;
   updatedAt: string;
@@ -246,6 +272,11 @@ const POS_MACHINE_COLUMNS = `
 
 const LOCATION_MAP_INDEX_COLUMNS = `
   id,
+  merchant_name,
+  address,
+  brand,
+  city,
+  status,
   latitude,
   longitude,
   updated_at
@@ -263,6 +294,10 @@ const LOCATION_SEARCH_COLUMNS = `
 
 const POS_MACHINE_MAP_INDEX_COLUMNS = `
   id,
+  name,
+  merchant_name,
+  address,
+  status,
   latitude,
   longitude,
   created_at,
@@ -342,6 +377,15 @@ function normalizeString(value: string | null | undefined, fallback = ""): strin
 
 function normalizeOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeReviewRating(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const rounded = Math.round(value);
+  return Math.max(1, Math.min(5, rounded));
 }
 
 function normalizeSpecialDateHours(value: unknown): LocationSpecialDateHours[] {
@@ -768,6 +812,7 @@ function formatSupportNetworkLabel(network: string | null | undefined): string {
   if (normalized === "jcb") return "JCB";
   if (normalized === "discover") return "Discover（发现）";
   if (normalized === "diners" || normalized === "diners club") return "Diners Club";
+  if (normalized === "mastercard cn" || normalized === "mastercard nucc") return "MasterCard CN";
   if (normalized === "mastercard" || normalized === "master card") return "MasterCard";
   if (normalized === "visa") return "Visa";
   if (normalized === "unionpay" || normalized === "union pay" || normalized === "银联") return "银联 UnionPay";
@@ -1149,6 +1194,11 @@ function mapFluxaRowToLocation(row: FluxaLocationRow): LocationRecord {
 function mapFluxaRowToLocationMapIndex(row: FluxaLocationMapIndexRow): LocationMapIndexRecord {
   return {
     id: row.id,
+    name: normalizeString(row.merchant_name, "Untitled Location"),
+    address: normalizeString(row.address, "Unknown address"),
+    brand: normalizeString(row.brand, "Unknown"),
+    city: inferCity(normalizeString(row.address), normalizeString(row.city)),
+    status: row.status === "inactive" ? "inactive" : "active",
     lat: Number(row.latitude),
     lng: Number(row.longitude),
     updatedAt: row.updated_at
@@ -1272,6 +1322,11 @@ function mapPosMachineDirectoryRowToLocation(
 function mapPosMachineToLocationMapIndex(row: PosMachineMapIndexRow): LocationMapIndexRecord {
   return {
     id: row.id,
+    name: normalizeString(row.merchant_name, normalizeString(row.name, "Untitled Location")),
+    address: normalizeString(row.address, "Unknown address"),
+    brand: "Unknown",
+    city: inferCity(normalizeString(row.address), ""),
+    status: row.status === "inactive" ? "inactive" : "active",
     lat: Number(row.latitude),
     lng: Number(row.longitude),
     updatedAt: row.updated_at || row.created_at || new Date().toISOString()
@@ -1414,15 +1469,8 @@ async function resolveBrandId(brandName: string): Promise<string | null> {
   return data?.id || null;
 }
 
-async function getCurrentUserIdentity(): Promise<{ id: string; label: string }> {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-
-  if (error) {
-    throw error;
-  }
+async function getCurrentUserIdentity(): Promise<{ id: string; label: string; isTrial: boolean }> {
+  const user = await getViewerSessionUser();
 
   if (!user?.id) {
     throw new Error("当前登录状态已失效，请重新登录后再保存地点。");
@@ -1436,19 +1484,13 @@ async function getCurrentUserIdentity(): Promise<{ id: string; label: string }> 
 
   return {
     id: user.id,
-    label
+    label,
+    isTrial: isTrialViewerUser(user)
   };
 }
 
 async function requireAdminUser(): Promise<void> {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-
-  if (error) {
-    throw error;
-  }
+  const user = await getViewerSessionUser();
 
   if (!user?.id) {
     throw new Error("当前登录状态已失效，请重新登录后再操作地点。");
@@ -1457,6 +1499,47 @@ async function requireAdminUser(): Promise<void> {
   if (!isAdminMetadataRecord(user.user_metadata) && !isAdminMetadataRecord(user.app_metadata)) {
     throw new Error("只有管理员可以删除地点。");
   }
+}
+
+function buildLocationReviewRecord(
+  id: string,
+  name: string,
+  userId: string | null | undefined,
+  content: string,
+  rating: number | null,
+  createdAt: string | null | undefined,
+  sourceKind: LocationReviewRecord["sourceKind"]
+): LocationReviewRecord {
+  return {
+    id,
+    initials: buildInitials(name),
+    name,
+    userId,
+    time: formatDateTime(createdAt),
+    content,
+    rating,
+    sourceKind
+  };
+}
+
+function mapTrialLocationReviewEntry(entry: TrialLocationReviewEntry): { sortKey: number; item: LocationReviewRecord } {
+  return {
+    sortKey: new Date(entry.createdAt).getTime() || 0,
+    item: buildLocationReviewRecord(
+      entry.id,
+      TRIAL_VIEWER_NAME,
+      TRIAL_USER_ID,
+      normalizeString(entry.content, entry.kind === "review" ? "No review content." : "No comment content."),
+      normalizeReviewRating(entry.rating),
+      entry.createdAt,
+      "trial"
+    )
+  };
+}
+
+async function loadTrialLocationReviewEntries(locationId: string): Promise<TrialLocationReviewEntry[]> {
+  const user = await getViewerSessionUser();
+  return isTrialViewerUser(user) ? readTrialLocationReviews(locationId) : [];
 }
 
 async function deleteRowsByLocationId(table: string, column: string, locationId: string): Promise<void> {
@@ -1641,6 +1724,114 @@ async function createPosMachineAttempt(location: LocationRecord, input: CreateLo
     notes: normalizeString(attempt.notes),
     isConclusiveFailure: Boolean(attempt.is_conclusive_failure)
   };
+}
+
+async function createLocationReviewEntry(location: LocationRecord, input: CreateLocationReviewInput): Promise<LocationReviewRecord> {
+  const user = await getCurrentUserIdentity();
+  const content = normalizeString(input.content);
+
+  if (!content) {
+    throw new Error("请先填写评价或评论内容。");
+  }
+
+  const rating = normalizeReviewRating(input.rating);
+
+  if (user.isTrial) {
+    const entry = recordTrialLocationReview({
+      locationId: location.id,
+      kind: rating === null ? "comment" : "review",
+      content,
+      rating
+    });
+    recordTrialContribution(`${rating === null ? "Commented on" : "Reviewed"} ${location.name}`, content.slice(0, 96));
+
+    return buildLocationReviewRecord(entry.id, TRIAL_VIEWER_NAME, TRIAL_USER_ID, entry.content, entry.rating, entry.createdAt, "trial");
+  }
+
+  if (rating === null) {
+    const { data, error } = await supabase
+      .from("comments")
+      .insert({
+        pos_id: location.id,
+        user_id: user.id,
+        content
+      })
+      .select(COMMENT_COLUMNS)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    const comment = data as CommentRow;
+    return buildLocationReviewRecord(
+      comment.id,
+      user.label,
+      comment.user_id,
+      normalizeString(comment.content, "No comment content."),
+      normalizeReviewRating(comment.rating),
+      comment.created_at || comment.updated_at,
+      "comment"
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .insert({
+      pos_machine_id: location.id,
+      user_id: user.id,
+      comment: content,
+      rating
+    })
+    .select(REVIEW_COLUMNS)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const review = data as ReviewRow;
+  return buildLocationReviewRecord(
+    review.id,
+    user.label,
+    review.user_id,
+    normalizeString(review.comment, "No review content."),
+    normalizeReviewRating(review.rating),
+    review.created_at || review.updated_at,
+    "review"
+  );
+}
+
+async function deleteLocationReviewEntry(review: LocationReviewRecord): Promise<void> {
+  const user = await getViewerSessionUser();
+
+  if (!user?.id) {
+    throw new Error("当前登录状态已失效，请重新登录后再删除评论。");
+  }
+
+  if (review.sourceKind === "trial") {
+    if (!isTrialViewerUser(user) || review.userId !== user.id) {
+      throw new Error("只有当前评论的添加者可以删除这条评论。");
+    }
+
+    deleteTrialLocationReview(review.id);
+    return;
+  }
+
+  const isAdminUser =
+    !isTrialViewerUser(user) && (isAdminMetadataRecord(user.user_metadata) || isAdminMetadataRecord(user.app_metadata));
+  const canDeleteOwnReview = Boolean(review.userId && review.userId === user.id);
+
+  if (!isAdminUser && !canDeleteOwnReview) {
+    throw new Error("只有管理员或该评论的添加者可以删除这条评论。");
+  }
+
+  const table = review.sourceKind === "comment" ? "comments" : "reviews";
+  const { error } = await supabase.from(table).delete().eq("id", review.id);
+
+  if (error) {
+    throw error;
+  }
 }
 
 async function fetchBrandMap(brandIds: string[]): Promise<Map<string, string>> {
@@ -2094,7 +2285,13 @@ async function getFluxaLocationDetail(id: string): Promise<LocationDetailRecord 
   }
 
   const base = mapFluxaRowToLocation(data as FluxaLocationRow);
-  return buildDetailRecord(base, "Fluxa Location", [], [], buildLocationMetaLine(base.brand, base.city), {
+  const trialReviewEntries = await loadTrialLocationReviewEntries(id);
+  const reviews = trialReviewEntries
+    .map(mapTrialLocationReviewEntry)
+    .sort((left, right) => right.sortKey - left.sortKey)
+    .map((entry) => entry.item);
+
+  return buildDetailRecord(base, "Fluxa Location", [], reviews, buildLocationMetaLine(base.brand, base.city), {
     networks: [],
     paymentMethods: []
   });
@@ -2142,6 +2339,7 @@ async function getPosMachineDetail(id: string): Promise<LocationDetailRecord | n
     )
   );
   const usersById = await fetchUserMap(relatedUserIds);
+  const trialReviewEntries = await loadTrialLocationReviewEntries(id);
 
   const attempts = attemptRows.map((attempt): LocationAttemptRecord => {
     const status = mapAttemptStatus(attempt.result || attempt.attempt_result);
@@ -2168,6 +2366,7 @@ async function getPosMachineDetail(id: string): Promise<LocationDetailRecord | n
   const supportInsights = buildSupportInsights(base, attempts, basicInfo, merchantInfo);
 
   const reviews = [
+    ...trialReviewEntries.map(mapTrialLocationReviewEntry),
     ...reviewRows.map((review) => {
       const name = resolveUserName(review.user_id, usersById);
       const timestamp = review.created_at || review.updated_at;
@@ -2177,9 +2376,11 @@ async function getPosMachineDetail(id: string): Promise<LocationDetailRecord | n
           id: review.id,
           initials: buildInitials(name),
           name,
+          userId: review.user_id,
           time: formatDateTime(timestamp),
           content: normalizeString(review.comment, "No review content."),
-          rating: review.rating
+          rating: review.rating,
+          sourceKind: "review"
         } satisfies LocationReviewRecord
       };
     }),
@@ -2192,9 +2393,11 @@ async function getPosMachineDetail(id: string): Promise<LocationDetailRecord | n
           id: comment.id,
           initials: buildInitials(name),
           name,
+          userId: comment.user_id,
           time: formatDateTime(timestamp),
           content: normalizeString(comment.content, "No comment content."),
-          rating: comment.rating
+          rating: comment.rating,
+          sourceKind: "comment"
         } satisfies LocationReviewRecord
       };
     })
@@ -2212,32 +2415,47 @@ async function createPosMachineLocation(input: CreateLocationInput): Promise<Loc
   const brandId = await resolveBrandId(input.brand);
   const insertPayload = buildPosMachineInsertPayload(input, userId, brandId);
 
-  const { data, error } = await supabase
-    .from("pos_machines")
-    .insert(insertPayload)
-    .select(POS_MACHINE_COLUMNS)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  const createdRow = data as PosMachineRow;
-
   try {
-    const { error: attemptError } = await supabase.from("pos_attempts").insert(buildPosAttemptInsertPayload(input, createdRow.id, userId));
-    if (attemptError) {
+    const { data, error } = await supabase
+      .from("pos_machines")
+      .insert(insertPayload)
+      .select(POS_MACHINE_COLUMNS)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    const createdRow = data as PosMachineRow;
+
+    try {
+      const { error: attemptError } = await supabase.from("pos_attempts").insert(buildPosAttemptInsertPayload(input, createdRow.id, userId));
+      if (attemptError) {
+        throw attemptError;
+      }
+    } catch (attemptError) {
+      await supabase.from("pos_machines").delete().eq("id", createdRow.id);
       throw attemptError;
     }
-  } catch (attemptError) {
-    await supabase.from("pos_machines").delete().eq("id", createdRow.id);
-    throw attemptError;
+
+    const brandMap = brandId && input.brand.trim() ? new Map([[brandId, input.brand.trim()]]) : new Map<string, string>();
+    const userMap = new Map([[userId, user.label]]);
+    const createdLocation = mapPosMachineToLocation(createdRow, brandMap, userMap);
+
+    if (user.isTrial) {
+      recordTrialContribution(`Added ${createdLocation.name}`, createdLocation.address || "No address recorded.");
+    }
+
+    return createdLocation;
+  } catch (error) {
+    if (!user.isTrial) {
+      throw error;
+    }
+
+    const shellLocation = await createShellLocation(input);
+    recordTrialContribution(`Added ${shellLocation.name}`, shellLocation.address || "No address recorded.");
+    return shellLocation;
   }
-
-  const brandMap = brandId && input.brand.trim() ? new Map([[brandId, input.brand.trim()]]) : new Map<string, string>();
-  const userMap = new Map([[userId, user.label]]);
-
-  return mapPosMachineToLocation(createdRow, brandMap, userMap);
 }
 
 async function createShellLocation(input: CreateLocationInput): Promise<LocationRecord> {
@@ -2717,6 +2935,18 @@ export const locationService = {
       (location.source || "fluxa_locations") === "pos_machines" ? location : await materializeFluxaLocation(location);
 
     return createPosMachineAttempt(targetLocation, input);
+  },
+
+  async createLocationReview(location: LocationRecord, input: CreateLocationReviewInput): Promise<LocationReviewRecord> {
+    const user = await getViewerSessionUser();
+    const targetLocation =
+      (location.source || "fluxa_locations") === "pos_machines" || isTrialViewerUser(user) ? location : await materializeFluxaLocation(location);
+
+    return createLocationReviewEntry(targetLocation, input);
+  },
+
+  async deleteLocationReview(review: LocationReviewRecord): Promise<void> {
+    return deleteLocationReviewEntry(review);
   },
 
   async deleteLocation(locationId: string): Promise<void> {

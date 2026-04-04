@@ -8,6 +8,8 @@ interface UseViewerAccessOptions {
 
 interface UseViewerAccessResult {
   isAdmin: boolean;
+  viewerId: string | null;
+  isTrial: boolean;
   loading: boolean;
 }
 
@@ -15,6 +17,8 @@ export function useViewerAccess({
   enabled = true
 }: UseViewerAccessOptions = {}): UseViewerAccessResult {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [isTrial, setIsTrial] = useState(false);
   const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
@@ -22,6 +26,8 @@ export function useViewerAccess({
 
     if (!enabled) {
       setIsAdmin(false);
+      setViewerId(null);
+      setIsTrial(false);
       setLoading(false);
       return;
     }
@@ -32,11 +38,15 @@ export function useViewerAccess({
       .then((access) => {
         if (!cancelled) {
           setIsAdmin(access.isAdmin);
+          setViewerId(access.viewerId);
+          setIsTrial(access.isTrial);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setIsAdmin(false);
+          setViewerId(null);
+          setIsTrial(false);
         }
       })
       .finally(() => {
@@ -52,6 +62,8 @@ export function useViewerAccess({
 
   return {
     isAdmin,
+    viewerId,
+    isTrial,
     loading
   };
 }

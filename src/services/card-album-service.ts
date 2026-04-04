@@ -1,4 +1,11 @@
 import { supabase } from "@/lib/supabase";
+import {
+  createTrialPersonalCardRecord,
+  getViewerSessionUser,
+  isTrialViewerUser,
+  readTrialPersonalCards,
+  writeTrialPersonalCards
+} from "@/lib/trial-session";
 import type { CardAlbumCard, CreateCardAlbumCardInput } from "@/types/card-album";
 
 interface CardAlbumRow {
@@ -45,17 +52,13 @@ function mapRowToCard(row: CardAlbumRow): CardAlbumCard {
   };
 }
 
-async function getCurrentUserId(): Promise<string | null> {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
+async function getCurrentViewer(): Promise<{ id: string | null; isTrial: boolean }> {
+  const user = await getViewerSessionUser();
 
-  if (error) {
-    throw error;
-  }
-
-  return user?.id || null;
+  return {
+    id: user?.id || null,
+    isTrial: isTrialViewerUser(user)
+  };
 }
 
 function getCardIdentityKey(card: Pick<CardAlbumCard, "issuer" | "title" | "bin" | "organization">): string {
@@ -64,10 +67,10 @@ function getCardIdentityKey(card: Pick<CardAlbumCard, "issuer" | "title" | "bin"
 
 export const cardAlbumService = {
   async listCards(): Promise<CardAlbumCard[]> {
-    const userId = await getCurrentUserId();
+    const viewer = await getCurrentViewer();
     const publicQuery = supabase.from("card_album_cards").select(CARD_ALBUM_COLUMNS).eq("scope", "public").order("updated_at", { ascending: false });
-    const personalQuery = userId
-      ? supabase.from("card_album_cards").select(CARD_ALBUM_COLUMNS).eq("scope", "personal").eq("user_id", userId).order("updated_at", { ascending: false })
+    const personalQuery = viewer.id && !viewer.isTrial
+      ? supabase.from("card_album_cards").select(CARD_ALBUM_COLUMNS).eq("scope", "personal").eq("user_id", viewer.id).order("updated_at", { ascending: false })
       : Promise.resolve({ data: [], error: null });
 
     const [publicResult, personalResult] = await Promise.all([publicQuery, personalQuery]);
@@ -79,21 +82,46 @@ export const cardAlbumService = {
       throw personalResult.error;
     }
 
+    const trialPersonalCards = viewer.isTrial ? readTrialPersonalCards() : [];
     const rows = [...((publicResult.data || []) as CardAlbumRow[]), ...((personalResult.data || []) as CardAlbumRow[])];
-    return rows.map(mapRowToCard);
+    return [...rows.map(mapRowToCard), ...trialPersonalCards].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
   },
 
   async addToPersonal(card: CardAlbumCard): Promise<{ added: boolean; card?: CardAlbumCard }> {
-    const userId = await getCurrentUserId();
-    if (!userId) {
+    const viewer = await getCurrentViewer();
+    if (!viewer.id) {
       throw new Error("请先登录后再添加卡片。");
+    }
+
+    if (viewer.isTrial) {
+      const personalCards = readTrialPersonalCards();
+      const exists = personalCards.some((item) => getCardIdentityKey(item) === getCardIdentityKey(card));
+
+      if (exists) {
+        return { added: false };
+      }
+
+      const createdCard = createTrialPersonalCardRecord({
+        issuer: card.issuer,
+        title: card.title,
+        bin: card.bin,
+        organization: card.organization,
+        groupName: card.groupName,
+        description: card.description || ""
+      });
+      writeTrialPersonalCards([createdCard, ...personalCards]);
+
+      return {
+        added: true,
+        card: createdCard
+      };
     }
 
     const { data: personalRows, error: personalError } = await supabase
       .from("card_album_cards")
       .select(CARD_ALBUM_COLUMNS)
       .eq("scope", "personal")
-      .eq("user_id", userId);
+      .eq("user_id", viewer.id);
 
     if (personalError) {
       throw personalError;
@@ -110,7 +138,7 @@ export const cardAlbumService = {
     const { data, error } = await supabase
       .from("card_album_cards")
       .insert({
-        user_id: userId,
+        user_id: viewer.id,
         issuer: card.issuer,
         title: card.title,
         bin: card.bin,
@@ -133,8 +161,8 @@ export const cardAlbumService = {
   },
 
   async createPersonalCard(input: CreateCardAlbumCardInput): Promise<CardAlbumCard> {
-    const userId = await getCurrentUserId();
-    if (!userId) {
+    const viewer = await getCurrentViewer();
+    if (!viewer.id) {
       throw new Error("请先登录后再添加卡片。");
     }
 
@@ -151,11 +179,32 @@ export const cardAlbumService = {
       throw new Error("请完整填写发卡行、卡片名称、BIN、卡组织和卡片等级。");
     }
 
+    if (viewer.isTrial) {
+      const personalCards = readTrialPersonalCards();
+      const exists = personalCards.some((item) => getCardIdentityKey(item) === getCardIdentityKey(normalizedInput));
+
+      if (exists) {
+        throw new Error("这张卡已经在我的卡册里。");
+      }
+
+      const createdCard = createTrialPersonalCardRecord({
+        issuer: normalizedInput.issuer,
+        title: normalizedInput.title,
+        bin: normalizedInput.bin,
+        organization: normalizedInput.organization,
+        groupName: normalizedInput.groupName,
+        description: normalizedInput.description
+      });
+
+      writeTrialPersonalCards([createdCard, ...personalCards]);
+      return createdCard;
+    }
+
     const { data: personalRows, error: personalError } = await supabase
       .from("card_album_cards")
       .select(CARD_ALBUM_COLUMNS)
       .eq("scope", "personal")
-      .eq("user_id", userId);
+      .eq("user_id", viewer.id);
 
     if (personalError) {
       throw personalError;
@@ -172,7 +221,7 @@ export const cardAlbumService = {
     const { data, error } = await supabase
       .from("card_album_cards")
       .insert({
-        user_id: userId,
+        user_id: viewer.id,
         issuer: normalizedInput.issuer,
         title: normalizedInput.title,
         bin: normalizedInput.bin,

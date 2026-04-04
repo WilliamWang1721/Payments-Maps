@@ -1,6 +1,15 @@
-import type { User } from "@supabase/supabase-js";
-
 import { supabase } from "@/lib/supabase";
+import {
+  TRIAL_USER_ID,
+  TRIAL_VIEWER_NAME,
+  type ViewerSessionUser,
+  getViewerSessionUser,
+  isTrialViewerUser,
+  readTrialBrowsingHistory,
+  readTrialContributions,
+  readTrialProfileDraft,
+  writeTrialProfileDraft
+} from "@/lib/trial-session";
 
 export interface ViewerProfileStat {
   label: string;
@@ -70,7 +79,7 @@ function isIgnorableError(error: unknown): boolean {
   return IGNORABLE_ERROR_CODES.has(code);
 }
 
-function normalizeMetadata(user: User): Record<string, unknown> {
+function normalizeMetadata(user: ViewerSessionUser): Record<string, unknown> {
   if (user.user_metadata && typeof user.user_metadata === "object" && !Array.isArray(user.user_metadata)) {
     return user.user_metadata as Record<string, unknown>;
   }
@@ -86,7 +95,7 @@ function readUserRecordValue(record: Record<string, unknown> | null, key: string
   return record ? readString(record[key]) : "";
 }
 
-function deriveProfileName(user: User, userRecord: Record<string, unknown> | null, fallbackName: string): string {
+function deriveProfileName(user: ViewerSessionUser, userRecord: Record<string, unknown> | null, fallbackName: string): string {
   const metadata = normalizeMetadata(user);
   const metadataName =
     readString(metadata.display_name) ||
@@ -98,12 +107,12 @@ function deriveProfileName(user: User, userRecord: Record<string, unknown> | nul
   return metadataName || readUserRecordValue(userRecord, "username") || fallbackName || user.email?.split("@")[0] || "Unknown User";
 }
 
-function deriveProfileLocation(user: User): string {
+function deriveProfileLocation(user: ViewerSessionUser): string {
   const metadata = normalizeMetadata(user);
   return readString(metadata.location) || readString(metadata.locale) || "Not set";
 }
 
-function deriveProfileBio(user: User): string {
+function deriveProfileBio(user: ViewerSessionUser): string {
   const metadata = normalizeMetadata(user);
   return readString(metadata.bio) || "No bio yet.";
 }
@@ -152,15 +161,8 @@ function normalizeRelatedRow<T>(value: T | T[] | null): T | null {
   return value ?? null;
 }
 
-async function requireCurrentUser(): Promise<User> {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-
-  if (error) {
-    throw error;
-  }
+async function requireCurrentUser(): Promise<ViewerSessionUser> {
+  const user = await getViewerSessionUser();
 
   if (!user) {
     throw new Error("You need to sign in before viewing your profile.");
@@ -170,6 +172,10 @@ async function requireCurrentUser(): Promise<User> {
 }
 
 async function fetchCurrentUserRecord(userId: string): Promise<Record<string, unknown> | null> {
+  if (userId === TRIAL_USER_ID) {
+    return null;
+  }
+
   const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
 
   if (error) {
@@ -259,7 +265,58 @@ async function fetchContributionPreview(userId: string): Promise<ProfileActivity
   }));
 }
 
-async function buildViewerProfileRecord(user: User, fallbackName: string, fallbackEmail: string): Promise<ViewerProfileRecord> {
+function buildTrialViewerProfileRecord(fallbackEmail: string): ViewerProfileRecord {
+  const profile = readTrialProfileDraft();
+  const historyEntries = readTrialBrowsingHistory();
+  const contributions = readTrialContributions();
+  const recentActivity = [
+    ...historyEntries.map((item) => ({
+      id: item.id,
+      title: `Visited ${item.title}`,
+      meta: item.address || "No address recorded.",
+      time: formatActivityTime(item.visitedAt),
+      sortValue: new Date(item.visitedAt).getTime()
+    })),
+    ...contributions.map((item) => ({
+      id: item.id,
+      title: item.title,
+      meta: item.meta,
+      time: formatActivityTime(item.createdAt),
+      sortValue: new Date(item.createdAt).getTime()
+    }))
+  ]
+    .sort((left, right) => right.sortValue - left.sortValue)
+    .map(({ sortValue: _sortValue, ...item }) => item)
+    .slice(0, 4);
+
+  return {
+    name: TRIAL_VIEWER_NAME,
+    email: profile.email || fallbackEmail || "Unknown",
+    location: profile.location,
+    joined: formatJoinedDate(profile.joined),
+    bio: profile.bio,
+    stats: [
+      { label: "Added Locations", value: String(contributions.length) },
+      { label: "Reviews", value: "0" },
+      { label: "Favorites", value: "0" }
+    ],
+    quickAccessItems: [
+      { id: "favorites", label: "Favorites", count: 0 },
+      { id: "history", label: "History", count: historyEntries.length },
+      { id: "contributions", label: "Contributions", count: contributions.length }
+    ],
+    recentActivity:
+      recentActivity.length > 0
+        ? recentActivity
+        : [{ id: "empty-activity", title: "No recent profile activity yet.", meta: "Your trial activity will appear here once data is available.", time: "Just now" }]
+  };
+}
+
+async function buildViewerProfileRecord(user: ViewerSessionUser, fallbackName: string, fallbackEmail: string): Promise<ViewerProfileRecord> {
+  if (isTrialViewerUser(user)) {
+    return buildTrialViewerProfileRecord(fallbackEmail);
+  }
+
   const userRecord = await fetchCurrentUserRecord(user.id);
 
   const [contributionCount, reviewCount, favoriteCount, historyCount, historyPreview, contributionPreview] = await Promise.all([
@@ -304,6 +361,17 @@ export const viewerProfileService = {
 
   async updateProfile(input: UpdateViewerProfileInput, fallbackName = "", fallbackEmail = ""): Promise<ViewerProfileRecord> {
     const user = await requireCurrentUser();
+
+    if (isTrialViewerUser(user)) {
+      writeTrialProfileDraft({
+        email: fallbackEmail,
+        location: input.location,
+        bio: input.bio
+      });
+
+      return buildTrialViewerProfileRecord(fallbackEmail);
+    }
+
     const metadata = normalizeMetadata(user);
     const trimmedName = input.name.trim() || deriveProfileName(user, null, fallbackName);
     const trimmedLocation = input.location.trim();

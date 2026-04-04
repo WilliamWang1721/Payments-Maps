@@ -1,9 +1,9 @@
-import type { User } from "@supabase/supabase-js";
-
-import { supabase } from "@/lib/supabase";
+import { getViewerSessionUser, isTrialViewerUser, type ViewerSessionUser } from "@/lib/trial-session";
 
 export interface ViewerAccessRecord {
   isAdmin: boolean;
+  viewerId: string | null;
+  isTrial: boolean;
 }
 
 const ADMIN_ROLE_NAMES = new Set(["admin", "super_admin", "superadmin"]);
@@ -66,23 +66,19 @@ function isAdminMetadataRecord(value: unknown): boolean {
   ].some((role) => ADMIN_ROLE_NAMES.has(role));
 }
 
-function isAdminUser(user: User): boolean {
+function isAdminUser(user: ViewerSessionUser): boolean {
   return isAdminMetadataRecord(user.user_metadata) || isAdminMetadataRecord(user.app_metadata);
 }
 
 export const viewerAccessService = {
   async getViewerAccess(): Promise<ViewerAccessRecord> {
-    const {
-      data: { user },
-      error
-    } = await supabase.auth.getUser();
-
-    if (error) {
-      throw error;
-    }
+    const user = await getViewerSessionUser();
+    const isTrial = Boolean(user && isTrialViewerUser(user));
 
     return {
-      isAdmin: Boolean(user && isAdminUser(user))
+      isAdmin: Boolean(user && !isTrial && isAdminUser(user)),
+      viewerId: user?.id || null,
+      isTrial
     };
   }
 };

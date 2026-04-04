@@ -39,9 +39,11 @@ export interface LocationReviewRecord {
   id: string;
   initials: string;
   name: string;
+  userId?: string | null;
   time: string;
   content: string;
   rating?: number | null;
+  sourceKind?: "review" | "comment" | "trial";
 }
 
 export interface LocationRecord {
@@ -72,8 +74,14 @@ export interface LocationSupportEvidenceItem {
   title: string;
   summary?: string;
   status: SupportEvidenceStatus;
+  attemptId?: string;
+  cardName?: string;
   createdAt?: string;
+  dateTimeLabel?: string;
   addedBy?: string;
+  networkLabel?: string;
+  paymentMethodLabel?: string;
+  checkoutLocation?: string;
   notes?: string;
   disputed?: boolean;
   invalidated?: boolean;
@@ -125,6 +133,11 @@ export interface CreateLocationAttemptInput {
   notes?: string;
   attemptedAt?: string;
   isConclusiveFailure?: boolean;
+}
+
+export interface CreateLocationReviewInput {
+  content: string;
+  rating?: number | null;
 }
 
 export interface CreateLocationInput {

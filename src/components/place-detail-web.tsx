@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarRange,
   ChevronRight,
+  CheckCircle2,
   CircleCheck,
   CircleX,
   CreditCard,
@@ -12,6 +13,7 @@ import {
   Hash,
   HelpCircle,
   MapPin,
+  MessageSquare,
   MinusCircle,
   Nfc,
   PenTool,
@@ -19,6 +21,7 @@ import {
   PlayCircle,
   Plus,
   Radio,
+  RotateCcw,
   Settings2,
   Smartphone,
   StopCircle,
@@ -40,10 +43,18 @@ import { TabsWarp } from "@/components/ui/tabs-warp";
 import { useLocationDetail } from "@/hooks/use-location-detail";
 import { useViewerAccess } from "@/hooks/use-viewer-access";
 import { useI18n } from "@/i18n";
+import {
+  MastercardNuccBridgeError,
+  createMastercardNuccBridgeSession,
+  refreshMastercardNuccBridgeSession,
+  submitMastercardNuccFeedback,
+  type MastercardNuccBridgeSession
+} from "@/lib/mastercard-nucc-bridge";
 import { browsingHistoryService } from "@/services/browsing-history-service";
 import { locationService } from "@/services/location-service";
 import type {
   CreateLocationAttemptInput,
+  CreateLocationReviewInput,
   LocationAttemptRecord,
   LocationBusinessHours,
   LocationDetailRecord,
@@ -101,6 +112,10 @@ interface DetailStaffProficiencyShape {
 interface StaffProficiencyMutationLocationService {
   updateLocationStaffProficiency?: (location: LocationRecord, level: StaffProficiencyLevel | null) => Promise<unknown>;
   updateStaffProficiency?: (location: LocationRecord, level: StaffProficiencyLevel | null) => Promise<unknown>;
+}
+
+interface ReviewMutationLocationService {
+  deleteLocationReview?: (review: LocationReviewRecord) => Promise<void>;
 }
 
 const DEFAULT_SUCCESS_RATE_FILTER: SuccessRateDateFilter = {
@@ -174,10 +189,29 @@ interface AttemptDraft {
   notes: string;
 }
 
-const ATTEMPT_NETWORK_OPTIONS = ["Visa", "MasterCard", "UnionPay", "American Express", "Discover", "JCB"];
+interface ReviewDraft {
+  mode: "review" | "comment";
+  rating: number | null;
+  content: string;
+}
+
+interface ReviewSuccessState {
+  mode: ReviewDraft["mode"];
+  rating: number | null;
+  content: string;
+}
+
+interface AttemptNotice {
+  kind: "success" | "error";
+  message: string;
+}
+
+const ATTEMPT_NETWORK_OPTIONS = ["Visa", "MasterCard", "MasterCard CN", "UnionPay", "American Express", "Discover", "JCB"];
 const ATTEMPT_YEAR_OPTIONS = Array.from({ length: 5 }, (_, index) => String(new Date().getFullYear() - 2 + index));
 const ATTEMPT_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
 const ATTEMPT_DAY_OPTIONS = Array.from({ length: 31 }, (_, index) => String(index + 1).padStart(2, "0"));
+const MASTERCARD_NUCC_TIME_OPTIONS = Array.from({ length: 24 }, (_, hour) => `${hour}:00-${hour + 1}:00`)
+  .filter((slot) => slot !== "5:00-6:00");
 const ATTEMPT_ACQUIRER_OPTIONS = ["Lakala", "Global Payments", "Fiserv", "Adyen", "Stripe"];
 
 function createAttemptDraft(detail?: LocationDetailRecord | null): AttemptDraft {
@@ -200,6 +234,22 @@ function createAttemptDraft(detail?: LocationDetailRecord | null): AttemptDraft 
   };
 }
 
+function createReviewDraft(): ReviewDraft {
+  return {
+    mode: "review",
+    rating: 5,
+    content: ""
+  };
+}
+
+function createReviewSuccessState(draft: ReviewDraft): ReviewSuccessState {
+  return {
+    mode: draft.mode,
+    rating: draft.mode === "review" ? draft.rating : null,
+    content: draft.content.trim()
+  };
+}
+
 function buildAttemptedAtFromDraft(draft: AttemptDraft): string {
   const year = Number(draft.attemptYear);
   const month = Number(draft.attemptMonth);
@@ -212,6 +262,55 @@ function buildAttemptedAtFromDraft(draft: AttemptDraft): string {
   const now = new Date();
   const timestamp = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), 0);
   return Number.isNaN(timestamp.getTime()) ? now.toISOString() : timestamp.toISOString();
+}
+
+function buildAttemptDateValue(draft: AttemptDraft): string {
+  const year = draft.attemptYear.trim();
+  const month = draft.attemptMonth.trim();
+  const day = draft.attemptDay.trim();
+
+  if (!year || !month || !day) {
+    return "";
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+function hasMastercardNuccFailureSignal(draft: AttemptDraft): boolean {
+  if (draft.transactionStatus === "Fault") {
+    return true;
+  }
+
+  return /(失败|报错|拒绝|无法|不通过|刷不过|declin|declined|fail|fault|error|do not honor)/i.test(draft.notes);
+}
+
+function isMastercardNuccEligible(draft: AttemptDraft): boolean {
+  return draft.network.trim().toLowerCase() === "mastercard cn" && hasMastercardNuccFailureSignal(draft);
+}
+
+function buildMastercardNuccProblemDescription(location: LocationDetailRecord, draft: AttemptDraft): string {
+  const lines = [
+    `交易网络：${draft.network || "Unknown"}`,
+    `支付结果：${draft.transactionStatus || "Unknown"}`,
+    `卡片信息：${draft.cardName.trim() || location.brand || location.name}`,
+    `支付方式：${draft.paymentMethod || "Unknown"}`,
+    `CVM：${draft.cvm || "Unknown"}`,
+    `受理模式：${draft.acquiringMode || "Unknown"}`,
+    `终端状态：${draft.deviceStatus === "inactive" ? "Inactive" : "Active"}`,
+    `收单机构：${draft.acquirer.trim() || "Unknown"}`,
+    `结账位置：${draft.checkoutLocation || "Unknown"}`,
+    "",
+    "Fluxa Map 备注：",
+    draft.notes.trim() || "未填写"
+  ];
+
+  return lines.join("\n");
+}
+
+function getMastercardNuccPrivacyPolicyUrl(language: string): string {
+  return language === "zh"
+    ? "https://mastercardnucc.com/privacy"
+    : "https://mastercardnucc.com/en/privacy";
 }
 
 function formatAttemptMutationError(error: unknown): string {
@@ -228,6 +327,22 @@ function formatDeleteMutationError(error: unknown): string {
   }
 
   return "Unable to delete the location right now.";
+}
+
+function formatReviewMutationError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unable to save the review right now.";
+}
+
+function formatReviewDeleteMutationError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unable to delete the review right now.";
 }
 
 function AttemptDialogCard({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
@@ -571,6 +686,7 @@ function formatSupportedNetworkLabel(network: string): string {
   if (normalized === "jcb") return "JCB";
   if (normalized === "discover") return "Discover（发现）";
   if (normalized === "diners" || normalized === "diners club") return "Diners Club";
+  if (normalized === "mastercard cn" || normalized === "mastercard nucc") return "MasterCard CN";
   if (normalized === "mastercard" || normalized === "master card") return "MasterCard";
   if (normalized === "visa") return "Visa";
   if (normalized === "unionpay" || normalized === "union pay" || normalized === "银联") return "银联 UnionPay";
@@ -1472,6 +1588,7 @@ function SupportSourceDialog({
 function AttemptContent({
   attemptRows,
   attemptPage,
+  attemptNotice,
   focusedAttemptId,
   onOpenAttemptDetail,
   onPageChange,
@@ -1482,6 +1599,7 @@ function AttemptContent({
 }: {
   attemptRows: LocationAttemptRecord[];
   attemptPage: number;
+  attemptNotice?: AttemptNotice | null;
   focusedAttemptId?: string | null;
   onOpenAttemptDetail: (attempt: LocationAttemptRecord) => void;
   onPageChange: (page: number) => void;
@@ -1501,6 +1619,18 @@ function AttemptContent({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-8 pt-4">
+      {attemptNotice ? (
+        <div
+          className={`rounded-[18px] px-4 py-3 text-sm leading-[1.6] ${
+            attemptNotice.kind === "success"
+              ? "border border-[#CFE7D6] bg-[#F3FFF7] text-[#166534]"
+              : "border border-[#FFD9D0] bg-[#FFF4F1] text-[#7A1F0E]"
+          }`}
+        >
+          {attemptNotice.message}
+        </div>
+      ) : null}
+
       {isShellLocation ? (
         <div className="rounded-[18px] border border-[rgba(59,130,246,0.16)] bg-[rgba(239,246,255,0.9)] px-4 py-3 text-sm leading-[1.6] text-[#1d4ed8]">
           {t("This location is currently a shell entry. Your first real attempt will activate it and start the real success-rate history.")}
@@ -1692,15 +1822,6 @@ function AttemptDetailDialog({
                   <p className="mt-3 text-base font-semibold leading-[1.5] text-[var(--foreground)]">{formatPaymentMethodLabel(attempt.paymentMethod || attempt.method) || "-"}</p>
                 </article>
 
-                <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Status")}</p>
-                  <div className="mt-3">
-                    <StatusPill
-                      kind={attempt.status === "declined" ? "declined" : attempt.status === "failed" ? "limited" : "supported"}
-                      label={statusLabel}
-                    />
-                  </div>
-                </article>
               </div>
 
               <article className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
@@ -1725,23 +1846,68 @@ function AttemptDetailDialog({
   );
 }
 
-function ReviewsContent({ reviewItems }: { reviewItems: LocationReviewRecord[] }): React.JSX.Element {
+function ReviewsContent({
+  reviewItems,
+  addingReview,
+  canDeleteReview,
+  deletingReviewId,
+  onAddReview,
+  onDeleteReview
+}: {
+  reviewItems: LocationReviewRecord[];
+  addingReview: boolean;
+  canDeleteReview: (review: LocationReviewRecord) => boolean;
+  deletingReviewId: string | null;
+  onAddReview: () => void;
+  onDeleteReview: (review: LocationReviewRecord) => void;
+}): React.JSX.Element {
   const { t } = useI18n();
-  const leftReviews = reviewItems.filter((_, idx) => idx % 2 === 0);
-  const rightReviews = reviewItems.filter((_, idx) => idx % 2 === 1);
 
-  const renderReviewCard = (item: LocationReviewRecord) => (
-    <article className="rounded-2xl border border-[#E2E2E8] bg-white p-6" key={item.id}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#E2E2E8] text-sm font-semibold text-[var(--muted-foreground)]">{item.initials}</span>
-          <p className="truncate text-[15px] font-semibold leading-[1.2] text-[var(--foreground)]">{t(item.name)}</p>
+  const renderReviewCard = (item: LocationReviewRecord) => {
+    const numericRating = typeof item.rating === "number" ? item.rating : null;
+
+    return (
+      <article className="mb-6 break-inside-avoid rounded-2xl border border-[#E2E2E8] bg-white p-6" key={item.id}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#E2E2E8] text-sm font-semibold text-[var(--muted-foreground)]">{item.initials}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="truncate text-[15px] font-semibold leading-[1.2] text-[var(--foreground)]">{t(item.name)}</p>
+                {numericRating !== null ? (
+                  <div className="flex items-center gap-2">
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <span
+                        className={`h-3 w-10 rounded-full ${index < numericRating ? "bg-[var(--primary)]" : "bg-[#E4E4E7]"}`}
+                        key={`${item.id}-inline-rating-${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <StatusPill kind="unknown" label={t("Comment")} />
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <p className="text-[13px] leading-[1.2] text-[#A1A1AA]">{item.time}</p>
+            {canDeleteReview(item) ? (
+              <button
+                aria-label={t("Delete Review")}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(220,38,38,0.16)] bg-[rgba(254,242,242,0.88)] text-[#B42318] transition-colors duration-200 hover:bg-[rgba(254,226,226,0.96)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={deletingReviewId === item.id}
+                onClick={() => onDeleteReview(item)}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
-        <p className="shrink-0 text-[13px] leading-[1.2] text-[#A1A1AA]">{item.time}</p>
-      </div>
-      <p className="mt-4 text-sm leading-[1.6] text-[var(--foreground)]">{t(item.content)}</p>
-    </article>
-  );
+        <p className="mt-4 text-sm leading-[1.6] text-[var(--foreground)]">{t(item.content)}</p>
+      </article>
+    );
+  };
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6">
@@ -1749,7 +1915,8 @@ function ReviewsContent({ reviewItems }: { reviewItems: LocationReviewRecord[] }
         <h3 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Reviews")}</h3>
         <button
           className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-6 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-          disabled
+          disabled={addingReview}
+          onClick={onAddReview}
           type="button"
         >
           <Plus className="h-5 w-5" />
@@ -1762,12 +1929,245 @@ function ReviewsContent({ reviewItems }: { reviewItems: LocationReviewRecord[] }
           {t("No reviews recorded yet.")}
         </div>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-6">{leftReviews.map(renderReviewCard)}</div>
-          <div className="flex min-w-0 flex-col gap-6">{rightReviews.map(renderReviewCard)}</div>
+        <div className="min-w-0 columns-1 gap-6 xl:columns-2">
+          {reviewItems.map(renderReviewCard)}
         </div>
       )}
     </div>
+  );
+}
+
+function ReviewRatingSelectorButton({
+  active,
+  value,
+  onClick
+}: {
+  active: boolean;
+  value: number;
+  onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      aria-pressed={active}
+      className={`inline-flex h-12 min-w-12 items-center justify-center rounded-[16px] border px-4 text-sm font-semibold transition-colors duration-200 ${
+        active
+          ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+          : "border-[var(--input)] bg-white text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {value}
+    </button>
+  );
+}
+
+function ReviewComposerDialog({
+  draft,
+  error,
+  locationName,
+  onAddAnother,
+  onContentChange,
+  onModeChange,
+  onOpenChange,
+  onRatingChange,
+  success,
+  onSubmit,
+  open,
+  saving
+}: {
+  draft: ReviewDraft;
+  error: string | null;
+  locationName: string;
+  onAddAnother: () => void;
+  onContentChange: (value: string) => void;
+  onModeChange: (mode: ReviewDraft["mode"]) => void;
+  onOpenChange: (open: boolean) => void;
+  onRatingChange: (value: number) => void;
+  success: ReviewSuccessState | null;
+  onSubmit: () => void;
+  open: boolean;
+  saving: boolean;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const successMode = success?.mode ?? null;
+  const reviewMode = draft.mode === "review";
+  const selectedRating = reviewMode && typeof draft.rating === "number" ? draft.rating : null;
+  const submitLabel = reviewMode ? "Submit Review" : "Submit Comment";
+  const successRating = typeof success?.rating === "number" ? success.rating : null;
+  const successLabel = successMode === "review" ? "Review Added Successfully" : "Comment Added Successfully";
+  const successDescription =
+    successMode === "review"
+      ? "Your review has been saved to this location and is now visible in the Reviews timeline."
+      : "Your comment has been saved to this location and is now visible in the Reviews timeline.";
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className={`${success ? "max-w-[min(720px,calc(100vw-2rem))]" : "max-w-[min(960px,calc(100vw-2rem))]"} max-h-[90vh] gap-0 overflow-hidden rounded-[32px] p-0`}>
+        <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
+          <DialogTitle>{t(success ? successLabel : "Add Review")}</DialogTitle>
+          <DialogDescription>{t(success ? successDescription : "Choose whether you are leaving a scored review or a quick comment for this location.")}</DialogDescription>
+        </DialogHeader>
+
+        {success ? (
+          <div className="flex-1 overflow-y-auto bg-[#FAFAFA] px-4 py-5 sm:px-6 sm:py-6">
+            <div className="rounded-[28px] border border-[var(--border)] bg-[var(--card)] px-5 py-6 sm:px-7 sm:py-8">
+              <div className="flex flex-col items-start gap-4">
+                <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-success)] text-[var(--color-success-foreground)]">
+                  <CheckCircle2 className="h-8 w-8" />
+                </span>
+                <div className="space-y-2">
+                  <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.3px] text-[var(--foreground)]">{t(successLabel)}</h2>
+                  <p className="max-w-[520px] text-sm leading-[1.6] text-[var(--muted-foreground)]">{t(successDescription)}</p>
+                </div>
+              </div>
+
+              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <article className="rounded-2xl border border-[var(--input)] bg-white p-5">
+                  <p className="text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted-foreground)]">{t("Location")}</p>
+                  <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{locationName}</p>
+                </article>
+                <article className="rounded-2xl border border-[var(--input)] bg-white p-5">
+                  <p className="text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted-foreground)]">{t("Entry Type")}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <StatusPill appearance="info" kind={successMode === "review" ? "supported" : "unknown"} label={t(successMode === "review" ? "Review" : "Comment")} />
+                    {successRating !== null ? <StatusPill appearance="info" kind="supported" label={`${successRating}/5`} /> : null}
+                  </div>
+                </article>
+              </div>
+
+              <article className="mt-4 rounded-2xl border border-[var(--input)] bg-white p-5">
+                <p className="text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted-foreground)]">{t("Saved Content")}</p>
+                <p className="mt-3 text-sm leading-[1.7] text-[var(--foreground)]">{success.content}</p>
+              </article>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="flex min-w-0 flex-col gap-5">
+                <AttemptDialogCard title="1. Entry Type">
+                  <div className="flex flex-wrap gap-3">
+                    <AttemptDialogChip active={reviewMode} icon={PenTool} label="Review" onClick={() => onModeChange("review")} />
+                    <AttemptDialogChip active={!reviewMode} icon={MessageSquare} label="Comment" onClick={() => onModeChange("comment")} />
+                  </div>
+                  <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                    {reviewMode
+                      ? t("Scored review with optional rating details.")
+                      : t("Quick comment without a score.")}
+                  </p>
+                </AttemptDialogCard>
+
+                {reviewMode ? (
+                  <AttemptDialogCard title="2. Rating">
+                    <div className="flex flex-wrap gap-3">
+                      {Array.from({ length: 5 }, (_, index) => (
+                        <ReviewRatingSelectorButton
+                          active={draft.rating === index + 1}
+                          key={index + 1}
+                          onClick={() => onRatingChange(index + 1)}
+                          value={index + 1}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                      {t("Use the score to summarize how reliable or helpful this payment experience was.")}
+                    </p>
+                  </AttemptDialogCard>
+                ) : null}
+
+                <AttemptDialogCard title={reviewMode ? "3. Review Details" : "2. Comment Details"}>
+                  <AttemptDialogField
+                    label="What happened at this location?"
+                    multiline
+                    onChange={onContentChange}
+                    placeholder={
+                      reviewMode
+                        ? "Share payment behavior, staff guidance, supported cards, or anything another viewer should know."
+                        : "Leave a short operational note for the next viewer."
+                    }
+                    value={draft.content}
+                  />
+                </AttemptDialogCard>
+
+                {error ? (
+                  <div className="rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">
+                    {t(error)}
+                  </div>
+                ) : null}
+              </div>
+
+              <aside className="rounded-m border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{t("Preview")}</p>
+                <p className="mt-3 text-[22px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{locationName}</p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <StatusPill appearance="info" kind={reviewMode ? "supported" : "unknown"} label={t(reviewMode ? "Review" : "Comment")} />
+                  {selectedRating !== null ? <StatusPill appearance="info" kind="supported" label={`${selectedRating}/5`} /> : null}
+                </div>
+                {selectedRating !== null ? (
+                  <div className="mt-5 flex items-center gap-2">
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <span
+                        className={`h-2.5 w-9 rounded-full ${index < selectedRating ? "bg-[var(--primary)]" : "bg-[#E4E4E7]"}`}
+                        key={`preview-rating-${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-5 rounded-[22px] border border-[var(--input)] bg-white px-4 py-4">
+                  <p className="text-sm leading-[1.7] text-[var(--foreground)]">
+                    {draft.content.trim() || t("Your note will appear in the Reviews timeline once saved.")}
+                  </p>
+                </div>
+              </aside>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
+          {success ? (
+            <>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[#F7F9F7]"
+                onClick={() => onOpenChange(false)}
+                type="button"
+              >
+                <MessageSquare className="h-4 w-4" />
+                {t("Back to Reviews")}
+              </button>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
+                onClick={onAddAnother}
+                type="button"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {t("Add Another Review")}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[#F7F9F7]"
+                onClick={() => onOpenChange(false)}
+                type="button"
+              >
+                <CircleX className="h-4 w-4" />
+                {t("Cancel")}
+              </button>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving}
+                onClick={onSubmit}
+                type="button"
+              >
+                <PenTool className="h-4 w-4" />
+                {saving ? t("Saving...") : t(submitLabel)}
+              </button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1779,10 +2179,10 @@ interface PlaceDetailWebProps {
 }
 
 export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLocation, onViewMap }: PlaceDetailWebProps): React.JSX.Element {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { detail, loading, error, refreshDetail } = useLocationDetail(location);
-  const { isAdmin, loading: viewerAccessLoading } = useViewerAccess({
-    enabled: Boolean(onDeleteLocation)
+  const { isAdmin, viewerId, loading: viewerAccessLoading } = useViewerAccess({
+    enabled: true
   });
   const recordedHistoryLocationIdRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailContentTab>("overview");
@@ -1797,6 +2197,21 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   const [attemptDetailDialogOpen, setAttemptDetailDialogOpen] = useState(false);
   const [attemptSaving, setAttemptSaving] = useState(false);
   const [attemptMutationError, setAttemptMutationError] = useState<string | null>(null);
+  const [attemptNotice, setAttemptNotice] = useState<AttemptNotice | null>(null);
+  const [nuccFeedbackOptIn, setNuccFeedbackOptIn] = useState(false);
+  const [nuccBridgeSession, setNuccBridgeSession] = useState<MastercardNuccBridgeSession | null>(null);
+  const [nuccBridgeLoading, setNuccBridgeLoading] = useState(false);
+  const [nuccBridgeError, setNuccBridgeError] = useState<string | null>(null);
+  const [nuccContactInfo, setNuccContactInfo] = useState("");
+  const [nuccCardBin, setNuccCardBin] = useState("");
+  const [nuccTimeWindow, setNuccTimeWindow] = useState("");
+  const [nuccCaptchaResponse, setNuccCaptchaResponse] = useState("");
+  const [nuccPrivacyAccepted, setNuccPrivacyAccepted] = useState(false);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewMutationError, setReviewMutationError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState<ReviewSuccessState | null>(null);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [highlightedAttemptId, setHighlightedAttemptId] = useState<string | null>(null);
   const [selectedAttempt, setSelectedAttempt] = useState<LocationAttemptRecord | null>(null);
   const [selectedSupportInsight, setSelectedSupportInsight] = useState<LocationSupportInsight | null>(null);
@@ -1812,6 +2227,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   const [staffProficiencySaving, setStaffProficiencySaving] = useState(false);
   const [staffProficiencySavingLevel, setStaffProficiencySavingLevel] = useState<StaffProficiencyLevel | null>(null);
   const [staffProficiencyError, setStaffProficiencyError] = useState<string | null>(null);
+  const nuccBridgeRequestIdRef = useRef(0);
 
   const detailRecord = useMemo(() => {
     if (detail) return detail;
@@ -1819,6 +2235,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     return null;
   }, [detail, location]);
   const [attemptDraft, setAttemptDraft] = useState<AttemptDraft>(() => createAttemptDraft(detailRecord));
+  const [reviewDraft, setReviewDraft] = useState<ReviewDraft>(() => createReviewDraft());
 
   const filteredAttemptsForSuccessRate = useMemo(
     () => filterAttemptsByDateRange(detailRecord?.attempts || [], successRateFilter),
@@ -1826,6 +2243,9 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   );
   const successRateSummary = useMemo(() => summarizeSuccessRate(filteredAttemptsForSuccessRate), [filteredAttemptsForSuccessRate]);
   const successRateFilterError = useMemo(() => validateSuccessRateDateFilter(draftSuccessRateFilter), [draftSuccessRateFilter]);
+  const nuccFeedbackEligible = useMemo(() => isMastercardNuccEligible(attemptDraft), [attemptDraft]);
+  const shouldSubmitToNucc = nuccFeedbackEligible && nuccFeedbackOptIn;
+  const nuccPrivacyPolicyUrl = getMastercardNuccPrivacyPolicyUrl(language);
 
   useEffect(() => {
     const pageSize = 5;
@@ -1844,6 +2264,82 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     setStaffProficiencyUpdatedAt(getStaffProficiencyUpdatedAt(detailRecord));
   }, [detailRecord]);
 
+  const resetNuccFeedbackState = () => {
+    nuccBridgeRequestIdRef.current += 1;
+    setNuccFeedbackOptIn(false);
+    setNuccBridgeSession(null);
+    setNuccBridgeLoading(false);
+    setNuccBridgeError(null);
+    setNuccContactInfo("");
+    setNuccCardBin("");
+    setNuccTimeWindow("");
+    setNuccCaptchaResponse("");
+    setNuccPrivacyAccepted(false);
+  };
+
+  const initializeNuccBridgeSession = async () => {
+    const requestId = nuccBridgeRequestIdRef.current + 1;
+    nuccBridgeRequestIdRef.current = requestId;
+    setNuccBridgeLoading(true);
+    setNuccBridgeError(null);
+    setNuccBridgeSession(null);
+    setNuccCaptchaResponse("");
+
+    try {
+      const session = await createMastercardNuccBridgeSession();
+      if (nuccBridgeRequestIdRef.current !== requestId) return;
+      setNuccBridgeSession(session);
+    } catch (error) {
+      if (nuccBridgeRequestIdRef.current !== requestId) return;
+      setNuccBridgeError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to load the Mastercard NUCC captcha right now."
+      );
+    } finally {
+      if (nuccBridgeRequestIdRef.current === requestId) {
+        setNuccBridgeLoading(false);
+      }
+    }
+  };
+
+  const refreshNuccCaptcha = async () => {
+    if (!nuccBridgeSession) {
+      return;
+    }
+
+    const requestId = nuccBridgeRequestIdRef.current + 1;
+    nuccBridgeRequestIdRef.current = requestId;
+    setNuccBridgeLoading(true);
+    setNuccBridgeError(null);
+    setNuccCaptchaResponse("");
+
+    try {
+      const session = await refreshMastercardNuccBridgeSession(nuccBridgeSession.sessionToken);
+      if (nuccBridgeRequestIdRef.current !== requestId) return;
+      setNuccBridgeSession(session);
+    } catch (error) {
+      if (nuccBridgeRequestIdRef.current !== requestId) return;
+      setNuccBridgeError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to refresh the Mastercard NUCC captcha right now."
+      );
+    } finally {
+      if (nuccBridgeRequestIdRef.current === requestId) {
+        setNuccBridgeLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (nuccFeedbackEligible) {
+      return;
+    }
+
+    resetNuccFeedbackState();
+  }, [nuccFeedbackEligible]);
+
   useEffect(() => {
     setSuccessRateFilter(DEFAULT_SUCCESS_RATE_FILTER);
     setDraftSuccessRateFilter(DEFAULT_SUCCESS_RATE_FILTER);
@@ -1855,6 +2351,12 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     setAttemptDialogOpen(false);
     setAttemptDetailDialogOpen(false);
     setAttemptMutationError(null);
+    setReviewDraft(createReviewDraft());
+    setReviewDialogOpen(false);
+    setReviewSaving(false);
+    setReviewMutationError(null);
+    setReviewSuccess(null);
+    setDeletingReviewId(null);
     setHighlightedAttemptId(null);
     setSelectedAttempt(null);
   }, [detailRecord?.id]);
@@ -1933,16 +2435,78 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     }));
   };
 
+  const handleNuccFeedbackToggle = (checked: boolean) => {
+    setNuccFeedbackOptIn(checked);
+    setNuccBridgeError(null);
+    setNuccCaptchaResponse("");
+    setNuccPrivacyAccepted(false);
+
+    if (!checked) {
+      setNuccBridgeSession(null);
+      setNuccContactInfo("");
+      setNuccCardBin("");
+      setNuccTimeWindow("");
+      return;
+    }
+
+    void initializeNuccBridgeSession();
+  };
+
   const handleAddAttempt = async (): Promise<void> => {
     if (!detailRecord) {
       setAttemptMutationError("Unable to load the current location.");
       return;
     }
 
+    if (shouldSubmitToNucc) {
+      if (nuccBridgeLoading) {
+        setAttemptMutationError("Mastercard NUCC verification is still loading. Please wait a moment and try again.");
+        return;
+      }
+
+      if (!nuccBridgeSession) {
+        setAttemptMutationError("Unable to load the Mastercard NUCC captcha. Please retry the verification step.");
+        return;
+      }
+
+      if (!nuccCaptchaResponse.trim()) {
+        setAttemptMutationError("Please enter the Mastercard NUCC captcha before submitting.");
+        return;
+      }
+
+      if (!nuccPrivacyAccepted) {
+        setAttemptMutationError("Please accept the Mastercard NUCC privacy policy before submitting.");
+        return;
+      }
+
+      if (nuccCardBin.trim() && !/^\d{6}$/.test(nuccCardBin.trim())) {
+        setAttemptMutationError("Please enter exactly 6 digits for the Mastercard NUCC card BIN, or leave it blank.");
+        return;
+      }
+    }
+
     setAttemptSaving(true);
     setAttemptMutationError(null);
+    let nuccSubmitted = false;
 
     try {
+      if (shouldSubmitToNucc) {
+        await submitMastercardNuccFeedback({
+          sessionToken: nuccBridgeSession!.sessionToken,
+          phone: nuccContactInfo.trim(),
+          businessName: detailRecord.name,
+          merchantCity: detailRecord.city,
+          businessAddress: detailRecord.address,
+          date: buildAttemptDateValue(attemptDraft),
+          time: nuccTimeWindow,
+          cardNumber: nuccCardBin.trim(),
+          problemDescription: buildMastercardNuccProblemDescription(detailRecord, attemptDraft),
+          captchaResponse: nuccCaptchaResponse.trim(),
+          privacyAccepted: nuccPrivacyAccepted
+        });
+        nuccSubmitted = true;
+      }
+
       await locationService.createLocationAttempt(detailRecord, {
         cardName: attemptDraft.cardName,
         transactionStatus: attemptDraft.transactionStatus,
@@ -1962,11 +2526,108 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
       setAttemptPage(1);
       setAttemptDialogOpen(false);
       setAttemptDraft(createAttemptDraft(detailRecord));
+      resetNuccFeedbackState();
+      setAttemptNotice(
+        shouldSubmitToNucc
+          ? {
+              kind: "success",
+              message: "The attempt was saved in Fluxa Map and submitted to Mastercard NUCC successfully."
+            }
+          : null
+      );
     } catch (attemptError) {
+      if (attemptError instanceof MastercardNuccBridgeError) {
+        setAttemptMutationError(attemptError.message);
+        if (attemptError.session) {
+          setNuccBridgeSession(attemptError.session);
+        }
+        setNuccCaptchaResponse("");
+        return;
+      }
+
+      if (nuccSubmitted) {
+        setAttemptDialogOpen(false);
+        resetNuccFeedbackState();
+        setAttemptNotice({
+          kind: "error",
+          message:
+            "Mastercard NUCC received the feedback, but Fluxa Map could not save this attempt locally. Please refresh the page before retrying."
+        });
+        return;
+      }
+
       setAttemptMutationError(formatAttemptMutationError(attemptError));
     } finally {
       setAttemptSaving(false);
     }
+  };
+
+  const handleAddReview = async (): Promise<void> => {
+    if (!detailRecord) {
+      setReviewMutationError("Unable to load the current location.");
+      return;
+    }
+
+    const content = reviewDraft.content.trim();
+    if (!content) {
+      setReviewMutationError("Please enter a review or comment before submitting.");
+      return;
+    }
+
+    const rating = reviewDraft.mode === "review" ? reviewDraft.rating : null;
+    if (reviewDraft.mode === "review" && typeof rating !== "number") {
+      setReviewMutationError("Please select a rating before submitting.");
+      return;
+    }
+
+    setReviewSaving(true);
+    setReviewMutationError(null);
+
+    try {
+      const successState = createReviewSuccessState(reviewDraft);
+      const payload: CreateLocationReviewInput = {
+        content,
+        rating
+      };
+
+      await locationService.createLocationReview(detailRecord, payload);
+      await refreshDetail();
+      setReviewSuccess(successState);
+    } catch (reviewError) {
+      setReviewMutationError(formatReviewMutationError(reviewError));
+    } finally {
+      setReviewSaving(false);
+    }
+  };
+
+  const handleDeleteReview = async (review: LocationReviewRecord): Promise<void> => {
+    const mutationService = locationService as unknown as ReviewMutationLocationService;
+    const mutation = mutationService.deleteLocationReview;
+
+    if (!mutation) {
+      setReviewMutationError("Review deletion is not available yet.");
+      return;
+    }
+
+    setDeletingReviewId(review.id);
+    setReviewMutationError(null);
+
+    try {
+      await mutation(review);
+      await refreshDetail();
+    } catch (deleteError) {
+      setReviewMutationError(formatReviewDeleteMutationError(deleteError));
+    } finally {
+      setDeletingReviewId(null);
+    }
+  };
+
+  const canDeleteReview = (review: LocationReviewRecord): boolean => {
+    if (!viewerId) {
+      return false;
+    }
+
+    return isAdmin || Boolean(review.userId && review.userId === viewerId);
   };
 
   const handleDelete = async (): Promise<void> => {
@@ -2188,6 +2849,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         <AttemptContent
           addingAttempt={attemptSaving}
           attemptPage={attemptPage}
+          attemptNotice={attemptNotice}
           attemptRows={detailRecord.attempts}
           canAddAttempt
           focusedAttemptId={highlightedAttemptId}
@@ -2195,6 +2857,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
           onAddAttempt={() => {
             setAttemptDraft(createAttemptDraft(detailRecord));
             setAttemptMutationError(null);
+            setAttemptNotice(null);
+            resetNuccFeedbackState();
             setAttemptDialogOpen(true);
           }}
           onOpenAttemptDetail={(attempt) => {
@@ -2204,7 +2868,22 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
           onPageChange={setAttemptPage}
         />
       ) : null}
-      {activeTab === "reviews" ? <ReviewsContent reviewItems={detailRecord.reviews} /> : null}
+      {activeTab === "reviews" ? (
+        <ReviewsContent
+          addingReview={reviewSaving}
+          canDeleteReview={canDeleteReview}
+          deletingReviewId={deletingReviewId}
+          onAddReview={() => {
+            setReviewMutationError(null);
+            setReviewDraft(createReviewDraft());
+            setReviewDialogOpen(true);
+          }}
+          onDeleteReview={(review) => {
+            void handleDeleteReview(review);
+          }}
+          reviewItems={detailRecord.reviews}
+        />
+      ) : null}
 
       <AttemptDetailDialog
         attempt={selectedAttempt}
@@ -2238,12 +2917,57 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         open={supportSourceDialogOpen}
       />
 
+      <ReviewComposerDialog
+        draft={reviewDraft}
+        error={reviewMutationError}
+        locationName={detailRecord.name}
+        onAddAnother={() => {
+          setReviewSuccess(null);
+          setReviewMutationError(null);
+          setReviewDraft(createReviewDraft());
+        }}
+        onContentChange={(value) =>
+          setReviewDraft((prev) => ({
+            ...prev,
+            content: value
+          }))
+        }
+        onModeChange={(mode) =>
+          setReviewDraft((prev) => ({
+            ...prev,
+            mode,
+            rating: mode === "review" ? prev.rating || 5 : null
+          }))
+        }
+        onOpenChange={(open) => {
+          setReviewDialogOpen(open);
+          if (!open) {
+            setReviewMutationError(null);
+            setReviewSuccess(null);
+            setReviewDraft(createReviewDraft());
+          }
+        }}
+        onRatingChange={(value) =>
+          setReviewDraft((prev) => ({
+            ...prev,
+            rating: value
+          }))
+        }
+        onSubmit={() => {
+          void handleAddReview();
+        }}
+        open={reviewDialogOpen}
+        saving={reviewSaving}
+        success={reviewSuccess}
+      />
+
       <Dialog
         onOpenChange={(open) => {
           setAttemptDialogOpen(open);
           if (!open) {
             setAttemptMutationError(null);
             setAttemptDraft(createAttemptDraft(detailRecord));
+            resetNuccFeedbackState();
           }
         }}
         open={attemptDialogOpen}
@@ -2354,6 +3078,142 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
                     value={attemptDraft.notes}
                   />
                 </AttemptDialogCard>
+
+                {nuccFeedbackEligible ? (
+                  <AttemptDialogCard title="7. Mastercard NUCC Feedback">
+                    <label className="flex items-start gap-3 rounded-m border border-[rgba(209,154,41,0.22)] bg-[rgba(255,248,229,0.72)] px-4 py-4">
+                      <input
+                        checked={nuccFeedbackOptIn}
+                        className="mt-1 h-4 w-4 rounded border border-[var(--input)]"
+                        onChange={(event) => handleNuccFeedbackToggle(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{t("Send this failed MasterCard CN attempt to Mastercard NUCC")}</p>
+                        <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                          {t("Fluxa will fetch the official captcha, collect any optional follow-up details, and submit this failed attempt directly to the Mastercard NUCC contact form.")}
+                        </p>
+                      </div>
+                    </label>
+
+                    {nuccFeedbackOptIn ? (
+                      <div className="rounded-m border border-[var(--border)] bg-[var(--card)] p-4">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <AttemptDialogField
+                            label="Follow-up Phone / Email (optional)"
+                            onChange={setNuccContactInfo}
+                            placeholder="Leave a phone number or email for NUCC follow-up"
+                            value={nuccContactInfo}
+                          />
+                          <AttemptDialogField
+                            label="Card BIN / First 6 Digits (optional)"
+                            onChange={(value) => setNuccCardBin(value.replace(/\D/g, "").slice(0, 6))}
+                            placeholder="540988"
+                            value={nuccCardBin}
+                          />
+                          <AttemptDialogField
+                            isSelect
+                            label="Card Usage Time (optional)"
+                            onChange={setNuccTimeWindow}
+                            options={MASTERCARD_NUCC_TIME_OPTIONS}
+                            placeholder="Select the closest time window"
+                            value={nuccTimeWindow}
+                          />
+                        </div>
+
+                        <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                          {t("Use the closest official time window if you know when the failure happened.")}
+                        </p>
+
+                        {nuccBridgeError ? (
+                          <div className="mt-4 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm leading-[1.6] text-[#7A1F0E]">
+                            <p>{nuccBridgeError}</p>
+                            {!nuccBridgeLoading ? (
+                              <button
+                                className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-pill border border-[#F5B8AA] px-4 text-sm font-medium text-[#7A1F0E] transition-colors duration-200 hover:bg-[#FFE9E4]"
+                                onClick={() => {
+                                  void initializeNuccBridgeSession();
+                                }}
+                                type="button"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                                <span>{t("Retry Loading Captcha")}</span>
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center">
+                          <div className="flex min-h-[84px] w-full items-center justify-center rounded-[20px] border border-dashed border-[var(--border)] bg-[var(--accent)] px-4 py-3 md:w-[220px]">
+                            {nuccBridgeSession ? (
+                              <img
+                                alt={t("Mastercard NUCC captcha")}
+                                className="h-[60px] w-[144px] rounded-[14px] object-cover"
+                                src={nuccBridgeSession.captchaImageDataUrl}
+                              />
+                            ) : (
+                              <span className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                                {nuccBridgeLoading ? t("Loading Mastercard NUCC captcha...") : t("Captcha will appear here after the bridge session is ready.")}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <button
+                                className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={!nuccBridgeSession || nuccBridgeLoading}
+                                onClick={() => {
+                                  void refreshNuccCaptcha();
+                                }}
+                                type="button"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                                <span>{t("Refresh Captcha")}</span>
+                              </button>
+                              <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                                {t("The official image captcha must be completed by the user before Fluxa can submit to Mastercard NUCC.")}
+                              </p>
+                            </div>
+
+                            <div className="mt-4">
+                              <AttemptDialogField
+                                label="Captcha"
+                                onChange={setNuccCaptchaResponse}
+                                placeholder="Enter the image captcha"
+                                value={nuccCaptchaResponse}
+                              />
+                            </div>
+
+                            <label className="mt-4 flex items-start gap-3 rounded-m border border-[var(--border)] bg-white px-4 py-3">
+                              <input
+                                checked={nuccPrivacyAccepted}
+                                className="mt-1 h-4 w-4 rounded border border-[var(--input)]"
+                                onChange={(event) => setNuccPrivacyAccepted(event.target.checked)}
+                                type="checkbox"
+                              />
+                              <div className="min-w-0">
+                                <span className="text-sm leading-[1.6] text-[var(--foreground)]">
+                                  {t("I have read and accept the Mastercard NUCC privacy policy.")}
+                                </span>
+                                <div className="mt-1">
+                                  <a
+                                    className="text-sm leading-[1.6] text-[var(--primary)] underline underline-offset-2"
+                                    href={nuccPrivacyPolicyUrl}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    {t("Open the official Mastercard NUCC privacy policy")}
+                                  </a>
+                                </div>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </AttemptDialogCard>
+                ) : null}
               </div>
             </div>
 
@@ -2373,14 +3233,20 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
             </button>
             <button
               className="inline-flex h-10 items-center gap-1.5 rounded-pill bg-[var(--primary)] px-4 text-sm font-medium leading-[1.4286] text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
-              disabled={attemptSaving}
+              disabled={attemptSaving || (shouldSubmitToNucc && nuccBridgeLoading)}
               onClick={() => {
                 void handleAddAttempt();
               }}
               type="button"
             >
               <Plus className="h-4 w-4" />
-              <span>{attemptSaving ? t("Saving...") : t("Add Attempt")}</span>
+              <span>
+                {attemptSaving
+                  ? t("Saving...")
+                  : shouldSubmitToNucc
+                    ? t("Add Attempt & Submit to Mastercard NUCC")
+                    : t("Add Attempt")}
+              </span>
             </button>
           </DialogFooter>
         </DialogContent>

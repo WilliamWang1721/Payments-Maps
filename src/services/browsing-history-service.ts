@@ -1,4 +1,11 @@
 import { supabase } from "@/lib/supabase";
+import {
+  clearTrialBrowsingHistory,
+  getViewerSessionUser,
+  isTrialViewerUser,
+  readTrialBrowsingHistory,
+  upsertTrialBrowsingHistory
+} from "@/lib/trial-session";
 
 interface UserHistoryRow {
   id: string;
@@ -63,21 +70,17 @@ function isMissingRpcError(error: unknown): boolean {
   return MISSING_RPC_ERROR_CODES.has(code);
 }
 
-async function requireCurrentUserId(): Promise<string> {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-
-  if (error) {
-    throw error;
-  }
+async function requireCurrentUser(): Promise<{ id: string; isTrial: boolean }> {
+  const user = await getViewerSessionUser();
 
   if (!user?.id) {
     throw new Error("You need to sign in before browsing history is available.");
   }
 
-  return user.id;
+  return {
+    id: user.id,
+    isTrial: isTrialViewerUser(user)
+  };
 }
 
 function mapHistoryRow(row: UserHistoryRow): BrowsingHistoryRecord | null {
@@ -139,10 +142,56 @@ async function fallbackRecordVisit(userId: string, posMachineId: string): Promis
   }
 }
 
+async function fetchTrialHistorySnapshot(locationId: string): Promise<Omit<BrowsingHistoryRecord, "id" | "visitedAt">> {
+  const { data: posData, error: posError } = await supabase
+    .from("pos_machines")
+    .select("id, merchant_name, address, merchant_info")
+    .eq("id", locationId)
+    .maybeSingle();
+
+  if (posError && !isIgnorableError(posError)) {
+    throw posError;
+  }
+
+  if (posData) {
+    const merchantInfo = normalizeRecord(posData.merchant_info);
+    return {
+      locationId: posData.id,
+      title: readString(posData.merchant_name) || "Untitled location",
+      address: readString(posData.address) || "No address recorded.",
+      city: readString(merchantInfo.city) || "",
+      brand: readString(merchantInfo.brand_name) || readString(merchantInfo.brand) || ""
+    };
+  }
+
+  const { data: fluxaData, error: fluxaError } = await supabase
+    .from("fluxa_locations")
+    .select("id, merchant_name, address, city, brand")
+    .eq("id", locationId)
+    .maybeSingle();
+
+  if (fluxaError && !isIgnorableError(fluxaError)) {
+    throw fluxaError;
+  }
+
+  return {
+    locationId,
+    title: readString(fluxaData?.merchant_name) || "Untitled location",
+    address: readString(fluxaData?.address) || "No address recorded.",
+    city: readString(fluxaData?.city) || "",
+    brand: readString(fluxaData?.brand) || ""
+  };
+}
+
 export const browsingHistoryService = {
   async list(limit = 100): Promise<BrowsingHistoryRecord[]> {
-    const userId = await requireCurrentUserId();
+    const user = await requireCurrentUser();
     const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 500)) : 100;
+
+    if (user.isTrial) {
+      return readTrialBrowsingHistory().slice(0, safeLimit);
+    }
+
     const { data, error } = await supabase
       .from("user_history")
       .select(`
@@ -156,7 +205,7 @@ export const browsingHistoryService = {
           merchant_info
         )
       `)
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .order("visited_at", { ascending: false })
       .limit(safeLimit);
 
@@ -171,8 +220,14 @@ export const browsingHistoryService = {
   },
 
   async clear(): Promise<void> {
-    const userId = await requireCurrentUserId();
-    const { error } = await supabase.from("user_history").delete().eq("user_id", userId);
+    const user = await requireCurrentUser();
+
+    if (user.isTrial) {
+      clearTrialBrowsingHistory();
+      return;
+    }
+
+    const { error } = await supabase.from("user_history").delete().eq("user_id", user.id);
 
     if (error) {
       throw error;
@@ -185,9 +240,16 @@ export const browsingHistoryService = {
       return;
     }
 
-    const userId = await requireCurrentUserId();
+    const user = await requireCurrentUser();
+
+    if (user.isTrial) {
+      const snapshot = await fetchTrialHistorySnapshot(normalizedPosMachineId);
+      upsertTrialBrowsingHistory(snapshot);
+      return;
+    }
+
     const { error } = await supabase.rpc("upsert_user_history", {
-      p_user_id: userId,
+      p_user_id: user.id,
       p_pos_machine_id: normalizedPosMachineId
     });
 
@@ -199,6 +261,6 @@ export const browsingHistoryService = {
       throw error;
     }
 
-    await fallbackRecordVisit(userId, normalizedPosMachineId);
+    await fallbackRecordVisit(user.id, normalizedPosMachineId);
   }
 };

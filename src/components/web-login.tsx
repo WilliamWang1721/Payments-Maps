@@ -18,6 +18,7 @@ interface WebLoginProps {
   pendingProvider?: LoginProvider | null;
   onManualCallbackSignIn: (provider: LoginProvider, callbackUrl: string) => Promise<string | null>;
   onSignIn: (provider: LoginProvider) => void | Promise<void>;
+  onTrialSignIn: () => Promise<string | null>;
 }
 
 interface ProviderButtonProps {
@@ -107,11 +108,12 @@ export function WebLogin({
   errorMessage,
   pendingProvider = null,
   onManualCallbackSignIn,
-  onSignIn
+  onSignIn,
+  onTrialSignIn
 }: WebLoginProps): React.JSX.Element {
   const { language, t } = useI18n();
   const isChinese = language === "zh";
-  const [debugModeEnabled, setDebugModeEnabled] = useState<boolean>(() => {
+  const [debugModeEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") {
       return false;
     }
@@ -123,47 +125,38 @@ export function WebLogin({
   const [debugCallbackUrl, setDebugCallbackUrl] = useState("");
   const [debugError, setDebugError] = useState<string | null>(null);
   const [debugSubmitting, setDebugSubmitting] = useState(false);
-  const [logoTapCount, setLogoTapCount] = useState(0);
+  const [trialDialogOpen, setTrialDialogOpen] = useState(false);
+  const [trialInput, setTrialInput] = useState("");
+  const [trialError, setTrialError] = useState<string | null>(null);
+  const [trialSubmitting, setTrialSubmitting] = useState(false);
+  const [brandTapCount, setBrandTapCount] = useState(0);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (debugModeEnabled) {
-      window.sessionStorage.setItem(DEBUG_UNLOCK_STORAGE_KEY, "true");
-      return;
-    }
-
-    window.sessionStorage.removeItem(DEBUG_UNLOCK_STORAGE_KEY);
-  }, [debugModeEnabled]);
-
-  useEffect(() => {
-    if (logoTapCount === 0 || typeof window === "undefined") {
+    if (brandTapCount === 0 || typeof window === "undefined") {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      setLogoTapCount(0);
+      setBrandTapCount(0);
     }, 1200);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [logoTapCount]);
+  }, [brandTapCount]);
 
-  const handleLogoTap = (): void => {
-    const nextTapCount = logoTapCount + 1;
+  const handleBrandTap = (): void => {
+    const nextTapCount = brandTapCount + 1;
 
-    if (nextTapCount >= 5) {
-      setLogoTapCount(0);
-      setDebugModeEnabled(true);
-      setDebugDialogOpen(true);
-      setDebugError(null);
+    if (nextTapCount >= 3) {
+      setBrandTapCount(0);
+      setTrialInput("");
+      setTrialError(null);
+      setTrialDialogOpen(true);
       return;
     }
 
-    setLogoTapCount(nextTapCount);
+    setBrandTapCount(nextTapCount);
   };
 
   const handleDebugSubmit = async (): Promise<void> => {
@@ -182,12 +175,33 @@ export function WebLogin({
     setDebugDialogOpen(false);
   };
 
+  const handleTrialSubmit = async (): Promise<void> => {
+    if (trialInput !== "FluxaMap") {
+      setTrialError(t("FluxaMap is required to enter trial mode."));
+      return;
+    }
+
+    setTrialSubmitting(true);
+    setTrialError(null);
+
+    const nextError = await onTrialSignIn();
+
+    if (nextError) {
+      setTrialError(nextError);
+      setTrialSubmitting(false);
+      return;
+    }
+
+    setTrialSubmitting(false);
+    setTrialDialogOpen(false);
+  };
+
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-[#fafafa] px-5 py-8 text-[#2a2933] sm:px-8 sm:py-10 lg:px-12 xl:px-16">
       <div className="grid w-full max-w-[460px] items-center justify-center gap-8 sm:gap-10 lg:max-w-[881px] lg:grid-cols-[324px_1px_460px] lg:gap-x-12 lg:gap-y-0">
         <section className="mx-auto flex w-full max-w-[324px] flex-col items-center text-center lg:mx-0 lg:items-start lg:text-left">
           <div className="flex items-center gap-3">
-            <FluxaBrandWordmark compact onActivate={handleLogoTap} />
+            <FluxaBrandWordmark compact onActivate={handleBrandTap} />
             {debugModeEnabled ? (
               <button
                 className="rounded-pill border border-[#d9d9db] bg-white px-2.5 py-1 text-[11px] font-medium leading-4 text-[#616167]"
@@ -201,7 +215,9 @@ export function WebLogin({
           <h1 className="mt-7 text-[clamp(2.25rem,4.8vw,3.2rem)] font-semibold leading-[1.08] tracking-[-0.045em] sm:mt-8">
             {isChinese ? t("Sign in to") : "Sign in to"}
             <br />
-            Fluxa Map
+            <button className="cursor-default appearance-none border-0 bg-transparent p-0 text-inherit" onClick={handleBrandTap} type="button">
+              Fluxa Map
+            </button>
           </h1>
           <p className="mt-4 text-[15px] leading-6 text-[#616167] sm:text-base">{t("Choose a provider to continue.")}</p>
           <p className="mt-8 max-w-[324px] text-[13px] leading-5 text-[#939399] sm:mt-10">
@@ -221,6 +237,39 @@ export function WebLogin({
           </div>
         </section>
       </div>
+
+      <Dialog onOpenChange={setTrialDialogOpen} open={trialDialogOpen}>
+        <DialogContent className="max-w-md gap-5 rounded-[28px] p-6 sm:p-7">
+          <DialogHeader>
+            <DialogTitle>{t("Trial Login")}</DialogTitle>
+            <DialogDescription>{t("Enter FluxaMap to continue.")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium leading-6 text-[var(--foreground)]" htmlFor="trial-passphrase">
+              {t("Trial Passphrase")}
+            </label>
+            <Input
+              autoFocus
+              id="trial-passphrase"
+              onChange={(event) => setTrialInput(event.target.value)}
+              placeholder={t("Enter FluxaMap")}
+              value={trialInput}
+            />
+          </div>
+
+          {trialError ? <p className="text-sm leading-6 text-[#f04f38]">{trialError}</p> : null}
+
+          <DialogFooter>
+            <Button onClick={() => setTrialDialogOpen(false)} type="button" variant="ghost">
+              {t("Cancel")}
+            </Button>
+            <Button disabled={trialSubmitting || !trialInput.trim()} onClick={() => void handleTrialSubmit()} type="button">
+              {trialSubmitting ? t("Signing in...") : t("Start Trial")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog onOpenChange={setDebugDialogOpen} open={debugDialogOpen}>
         <DialogContent className="max-w-xl gap-5 rounded-[28px] p-6 sm:p-7">

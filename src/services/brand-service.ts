@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { normalizeExternalUrl, normalizeHexColor } from "@/lib/brand-visuals";
+import { getViewerSessionUser } from "@/lib/trial-session";
 import type { BrandBusinessType, BrandRecord, BrandSegment, BrandStatus, CreateBrandInput } from "@/types/brand";
 
 interface BrandRow {
@@ -464,14 +465,7 @@ async function fetchBrandStatsByIds(brandIds: string[]): Promise<Map<string, Bra
 }
 
 async function getCurrentUserId(): Promise<string> {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-
-  if (error) {
-    throw error;
-  }
+  const user = await getViewerSessionUser();
 
   if (!user?.id) {
     throw new Error("Your login session has expired. Sign in again before creating a brand.");

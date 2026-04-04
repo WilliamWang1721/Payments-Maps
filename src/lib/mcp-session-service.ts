@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { isTrialSessionActive } from "@/lib/trial-session";
 import type {
   MCPClientType,
   MCPScopeTemplate,
@@ -26,6 +27,10 @@ function getMcpServerUrl(): string {
 }
 
 async function getAccessToken(): Promise<string> {
+  if (isTrialSessionActive()) {
+    throw new Error("Trial mode does not support MCP sessions.");
+  }
+
   const {
     data: { session },
     error

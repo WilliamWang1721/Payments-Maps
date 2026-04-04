@@ -6,6 +6,14 @@ import App from "./App";
 import { WebLogin, type LoginProvider } from "@/components/web-login";
 import { useI18n } from "@/i18n";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import {
+  TRIAL_VIEWER_EMAIL,
+  TRIAL_VIEWER_NAME,
+  activateTrialSession,
+  addTrialSessionChangeListener,
+  clearTrialSession,
+  isTrialSessionActive
+} from "@/lib/trial-session";
 
 function deriveViewerName(session: Session | null): string {
   const metadata = session?.user.user_metadata;
@@ -88,6 +96,7 @@ export default function RootApp(): React.JSX.Element {
   const [session, setSession] = useState<Session | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [pendingProvider, setPendingProvider] = useState<LoginProvider | null>(null);
+  const [trialActive, setTrialActive] = useState(() => isTrialSessionActive());
 
   useEffect(() => {
     let mounted = true;
@@ -112,20 +121,43 @@ export default function RootApp(): React.JSX.Element {
         return;
       }
 
+      if (nextSession) {
+        clearTrialSession();
+        setTrialActive(false);
+      }
+
       setSession(nextSession);
       setPendingProvider(null);
       setAuthError(null);
       setAuthReady(true);
     });
 
+    const unsubscribeTrial = addTrialSessionChangeListener(() => {
+      if (!mounted) {
+        return;
+      }
+
+      setTrialActive(isTrialSessionActive());
+      setAuthError(null);
+      setPendingProvider(null);
+    });
+
     return () => {
       mounted = false;
+      unsubscribeTrial();
       subscription.unsubscribe();
     };
   }, []);
 
   const viewerName = useMemo(() => deriveViewerName(session), [session]);
-  const viewerEmail = session?.user.email ?? "joe@acmecorp.com";
+  const viewerEmail = session?.user.email ?? (trialActive ? TRIAL_VIEWER_EMAIL : "joe@acmecorp.com");
+
+  const handleTrialSignIn = async (): Promise<string | null> => {
+    activateTrialSession();
+    setTrialActive(true);
+    setAuthError(null);
+    return null;
+  };
 
   const handleSignIn = async (provider: LoginProvider): Promise<void> => {
     setAuthError(null);
@@ -184,6 +216,13 @@ export default function RootApp(): React.JSX.Element {
   };
 
   const handleSignOut = async (): Promise<void> => {
+    if (trialActive && !session) {
+      clearTrialSession();
+      window.history.replaceState(null, "", "/");
+      setTrialActive(false);
+      return;
+    }
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -206,13 +245,14 @@ export default function RootApp(): React.JSX.Element {
     );
   }
 
-  if (!session) {
+  if (!session && !trialActive) {
     return (
       <WebLogin
         configured={isSupabaseConfigured}
         errorMessage={authError}
         onManualCallbackSignIn={handleManualCallbackSignIn}
         onSignIn={handleSignIn}
+        onTrialSignIn={handleTrialSignIn}
         pendingProvider={pendingProvider}
       />
     );
@@ -224,7 +264,7 @@ export default function RootApp(): React.JSX.Element {
       onSignOut={handleSignOut}
       refreshToken={session?.refresh_token ?? ""}
       viewerEmail={viewerEmail}
-      viewerName={viewerName}
+      viewerName={trialActive && !session ? TRIAL_VIEWER_NAME : viewerName}
     />
   );
 }
