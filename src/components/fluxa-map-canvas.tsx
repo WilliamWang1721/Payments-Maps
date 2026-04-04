@@ -337,6 +337,7 @@ interface FluxaMapCanvasProps {
   onOpenDetail?: (location: LocationRecord) => void;
   mapTheme: MapThemeKey;
   locateRequestKey?: number;
+  suppressInitialMapViewportSync?: boolean;
   mapFocusLocation?: LocationRecord | null;
   mapFocusRequestKey?: number;
   mapIndexPoints?: LocationMapIndexRecord[];
@@ -368,6 +369,7 @@ export function FluxaMapCanvas({
   onOpenDetail,
   mapTheme,
   locateRequestKey = 0,
+  suppressInitialMapViewportSync = false,
   mapFocusLocation = null,
   mapFocusRequestKey = 0,
   mapIndexPoints = [],
@@ -803,6 +805,7 @@ export function FluxaMapCanvas({
           active={activeTab === "map"}
           loading={loading}
           locateRequestKey={locateRequestKey}
+          suppressInitialMapViewportSync={suppressInitialMapViewportSync}
           locations={mapLocations}
           mapFocusLocation={searchFocusLocation ?? mapFocusLocation}
           mapFocusRequestKey={searchFocusLocation ? searchFocusRequestKey : mapFocusRequestKey}

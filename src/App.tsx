@@ -81,6 +81,7 @@ export default function App({
   const [selectedBrand, setSelectedBrand] = useState<BrandRecord | null>(null);
   const [locateRequestKey, setLocateRequestKey] = useState(0);
   const [locating, setLocating] = useState(false);
+  const [initialMapLocatePending, setInitialMapLocatePending] = useState(false);
   const [hasVisitedMap, setHasVisitedMap] = useState(() => pageRoute.view === "map");
   const [shouldWarmMapPartitions, setShouldWarmMapPartitions] = useState(() => pageRoute.view === "map");
   const [mapTheme, setMapTheme] = useState<MapThemeKey>(() => {
@@ -401,9 +402,17 @@ export default function App({
   useEffect(() => {
     if (activeView === "map" && !hasAutoLocatedMapInPageSession) {
       hasAutoLocatedMapInPageSession = true;
+      setInitialMapLocatePending(true);
       setLocateRequestKey((prev) => prev + 1);
     }
   }, [activeView]);
+
+  const handleLocatingChange = (nextLocating: boolean): void => {
+    setLocating(nextLocating);
+    if (!nextLocating && initialMapLocatePending) {
+      setInitialMapLocatePending(false);
+    }
+  };
 
   const handleMapThemeChange = (theme: MapThemeKey): void => {
     setMapTheme(theme);
@@ -667,7 +676,8 @@ export default function App({
                   mapTheme={mapTheme}
                   mapFocusLocation={mapFocusLocation}
                   mapFocusRequestKey={mapFocusRequestKey}
-                  onLocatingChange={setLocating}
+                  suppressInitialMapViewportSync={initialMapLocatePending}
+                  onLocatingChange={handleLocatingChange}
                   onMapViewportChange={handleMapViewportChange}
                   onOpenBrandDetail={openBrandDetail}
                   onOpenDetail={openLocationDetail}
