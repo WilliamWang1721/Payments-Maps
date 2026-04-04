@@ -323,14 +323,10 @@ export function BrandDetailWeb({
             </span>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-3 xl:grid-cols-6">
+          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-[24px] border border-[var(--input)] bg-white px-4 py-4 xl:col-span-2">
               <p className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Brand Category")}</p>
               <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{brand.uiCategoryLabel}</p>
-            </div>
-            <div className="rounded-[24px] border border-[var(--input)] bg-white px-4 py-4">
-              <p className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Primary city")}</p>
-              <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{brand.primaryCity || t("Unknown")}</p>
             </div>
             <div className="rounded-[24px] border border-[var(--input)] bg-white px-4 py-4">
               <div className="flex items-center gap-3">
@@ -380,7 +376,25 @@ export function BrandDetailWeb({
                     : t("No locations have been linked to this brand yet.")}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-start gap-2">
+              {[
+                { label: t("All"), value: "all" as const },
+                { label: t("Active"), value: "active" as const },
+                { label: t("Inactive"), value: "inactive" as const }
+              ].map((option) => (
+                <button
+                  className={`ui-hover-shadow inline-flex h-10 items-center justify-center rounded-pill px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                    statusFilter === option.value
+                      ? "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:bg-[var(--secondary-hover)]"
+                      : "border border-[var(--input)] bg-white text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                  }`}
+                  key={option.value}
+                  onClick={() => setStatusFilter(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
               <button
                 className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
                 onClick={() => setSort((prev) => (prev === "updated" ? "name" : prev === "name" ? "distance" : "updated"))}
@@ -399,34 +413,43 @@ export function BrandDetailWeb({
               </button>
               <button
                 className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                onClick={() => setStatusFilter((prev) => (prev === "all" ? "active" : prev === "active" ? "inactive" : "all"))}
+                type="button"
+              >
+                <ListFilter className="h-4 w-4" />
+                <span>{`${t("Filters")}: ${statusFilter === "all" ? t("All") : statusFilter === "active" ? t("Active") : t("Inactive")}`}</span>
+              </button>
+              <button
+                className="ui-hover-shadow inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
                 onClick={() => setPagingMode((prev) => (prev === "scroll" ? "paged" : "scroll"))}
                 type="button"
               >
                 <ListFilter className="h-4 w-4" />
                 <span>{pagingMode === "scroll" ? t("Scroll Mode") : t("Paged Mode")}</span>
               </button>
+              {pagingMode === "paged" && pageCount > 1 ? (
+                <>
+                  <button
+                    className="ui-hover-shadow inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+                    disabled={page === 1}
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    type="button"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                    <span>{t("Previous")}</span>
+                  </button>
+                  <button
+                    className="ui-hover-shadow inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
+                    disabled={page === pageCount}
+                    onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+                    type="button"
+                  >
+                    <span>{t("Next")}</span>
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              ) : null}
             </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {[
-              { label: t("All"), value: "all" as const },
-              { label: t("Active"), value: "active" as const },
-              { label: t("Inactive"), value: "inactive" as const }
-            ].map((option) => (
-              <button
-                className={`ui-hover-shadow inline-flex h-10 items-center justify-center rounded-pill px-4 py-2 text-sm font-medium transition-colors duration-200 ${
-                  statusFilter === option.value
-                    ? "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:bg-[var(--secondary-hover)]"
-                    : "border border-[var(--input)] bg-white text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
-                }`}
-                key={option.value}
-                onClick={() => setStatusFilter(option.value)}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
           </div>
 
           <div
@@ -464,9 +487,11 @@ export function BrandDetailWeb({
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <h3 className="truncate text-base font-semibold leading-6 text-[var(--foreground)]">{location.name}</h3>
-                          <span className={`inline-flex h-8 items-center justify-center rounded-pill px-3 py-2 text-sm font-medium leading-[1.142857] ${locationStatusClass(location.status)}`}>
-                            {t(locationStatusLabel(location.status))}
-                          </span>
+                          {location.status === "inactive" ? (
+                            <span className={`inline-flex h-8 items-center justify-center rounded-pill px-3 py-2 text-sm font-medium leading-[1.142857] ${locationStatusClass(location.status)}`}>
+                              {t(locationStatusLabel(location.status))}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-3 flex flex-col gap-1">
                           <p className="truncate text-[13px] font-normal leading-[1.2] text-[var(--muted-foreground)]">{location.capabilityMeta}</p>
@@ -510,49 +535,6 @@ export function BrandDetailWeb({
                 </p>
               </div>
             </div>
-
-            {pagingMode === "paged" && pageCount > 1 ? (
-              <div className="flex w-full items-center gap-2">
-                <button
-                  className="ui-hover-shadow inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
-                  disabled={page === 1}
-                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  type="button"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                  <span>{t("Previous")}</span>
-                </button>
-
-                <div className="min-w-0 flex-1 overflow-x-auto pb-1">
-                  <div className="flex min-w-max items-center gap-2 px-1">
-                    {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
-                      <button
-                        className={`ui-hover-shadow inline-flex h-10 w-10 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border text-sm transition-colors duration-200 ${
-                          page === pageNumber
-                            ? "border-[var(--primary)] bg-white text-[var(--primary)]"
-                            : "border-transparent text-[var(--foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
-                        }`}
-                        key={pageNumber}
-                        onClick={() => setPage(pageNumber)}
-                        type="button"
-                      >
-                        {pageNumber}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  className="ui-hover-shadow inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-[var(--input)] px-[18px] py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:opacity-50"
-                  disabled={page === pageCount}
-                  onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-                  type="button"
-                >
-                  <span>{t("Next")}</span>
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            ) : null}
           </div>
         </article>
       </div>

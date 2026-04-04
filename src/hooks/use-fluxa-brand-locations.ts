@@ -85,6 +85,7 @@ export function useFluxaBrandLocations({
 }: UseFluxaBrandLocationsOptions): UseFluxaBrandLocationsResult {
   const brandCacheKey = brand?.id || brand?.name || "";
   const [directory, setDirectory] = useState<LocationRecord[]>(() => (brandCacheKey ? sharedDirectoryCache.get(brandCacheKey) || [] : []));
+  const [directoryResolved, setDirectoryResolved] = useState(() => (brandCacheKey ? sharedDirectoryCache.has(brandCacheKey) : false));
   const [detailVersion, setDetailVersion] = useState(0);
   const [loading, setLoading] = useState(enabled && brandCacheKey.length > 0 && !sharedDirectoryCache.has(brandCacheKey));
   const [error, setError] = useState<string | null>(null);
@@ -99,11 +100,13 @@ export function useFluxaBrandLocations({
   const refreshLocations = useCallback(async () => {
     if (!enabled || !brand) {
       setDirectory([]);
+      setDirectoryResolved(false);
       setLoading(false);
       setError(null);
       return;
     }
 
+    setDirectoryResolved(false);
     setLoading(true);
     const nextPromise = locationService.listLocationDirectoryByBrand({
       brandId: brand.id,
@@ -120,6 +123,7 @@ export function useFluxaBrandLocations({
     } catch (nextError) {
       setError(formatBrandLocationError(nextError));
     } finally {
+      setDirectoryResolved(true);
       if (sharedDirectoryPromiseCache.get(brandCacheKey) === nextPromise) {
         sharedDirectoryPromiseCache.delete(brandCacheKey);
       }
@@ -179,6 +183,7 @@ export function useFluxaBrandLocations({
   useEffect(() => {
     if (!enabled || !brand || !brandCacheKey) {
       setDirectory([]);
+      setDirectoryResolved(false);
       setLoading(false);
       setError(null);
       return;
@@ -187,6 +192,7 @@ export function useFluxaBrandLocations({
     const cachedDirectory = sharedDirectoryCache.get(brandCacheKey);
     if (cachedDirectory) {
       setDirectory(cachedDirectory);
+      setDirectoryResolved(true);
       setLoading(false);
       setError(null);
       return;
@@ -194,14 +200,17 @@ export function useFluxaBrandLocations({
 
     const pendingDirectory = sharedDirectoryPromiseCache.get(brandCacheKey);
     if (pendingDirectory) {
+      setDirectoryResolved(false);
       setLoading(true);
       void pendingDirectory
         .then((nextDirectory) => {
           sharedDirectoryCache.set(brandCacheKey, nextDirectory);
           setDirectory(nextDirectory);
+          setDirectoryResolved(true);
           setError(null);
         })
         .catch((nextError) => {
+          setDirectoryResolved(true);
           setError(formatBrandLocationError(nextError));
         })
         .finally(() => {
@@ -339,6 +348,10 @@ export function useFluxaBrandLocations({
     }
 
     if (orderedIds.length === 0) {
+      if (!directoryResolved) {
+        return;
+      }
+
       setLoading(false);
       setError(null);
       return;
@@ -389,7 +402,7 @@ export function useFluxaBrandLocations({
       }
       prefetchTimerRef.current = null;
     };
-  }, [enabled, loadLocationIds, orderedIds, page, pageSize, pagingMode, scrollPageCount]);
+  }, [directoryResolved, enabled, loadLocationIds, orderedIds, page, pageSize, pagingMode, scrollPageCount]);
 
   return {
     loading,

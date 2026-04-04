@@ -10,7 +10,6 @@ import {
   CheckCircle,
   CheckCircle2,
   ChevronDown,
-  Clock3,
   CreditCard,
   Globe,
   Hash,
@@ -19,16 +18,11 @@ import {
   MinusCircle,
   Nfc,
   PenTool,
-  PlayCircle,
   Plus,
-  ScanFace,
   Smartphone,
-  StopCircle,
   Trash2,
-  User,
   Wallet,
   Wifi,
-  Wrench,
   Sparkles,
   XCircle
 } from "lucide-react";
@@ -44,7 +38,6 @@ import {
 import { useI18n } from "@/i18n";
 import {
   STAFF_PROFICIENCY_OPTIONS,
-  formatStaffProficiencyValue
 } from "@/lib/staff-proficiency";
 import type { MapThemeKey } from "@/lib/map-theme";
 import { inferBrandMatch } from "@/services/ai-service";
@@ -56,8 +49,7 @@ import type {
 import type {
   CreateLocationInput,
   LocationBusinessHours,
-  LocationSpecialDateHours,
-  StaffProficiencyLevel
+  LocationSpecialDateHours
 } from "@/types/location";
 
 type WizardStep = 1 | 2 | 3;
@@ -93,9 +85,9 @@ interface InlineBannerState {
 }
 
 const STEP_SUBTITLE: Record<WizardStep, string> = {
-  1: "Step 1 of 3: Base Information",
-  2: "Step 2 of 3: Transaction Record",
-  3: "Step 3 of 3: Device & Acquirer Information"
+  1: "第 1 / 3 步：基础信息与地址",
+  2: "第 2 / 3 步：交易信息与联系方式",
+  3: "第 3 / 3 步：POS 设置与补充说明"
 };
 
 const DEFAULT_BRAND_OPTIONS = ["McDonald's", "Starbucks", "KFC", "Subway", "UNIQLO"];
@@ -110,7 +102,7 @@ function CardFrame({ title, children }: { title: string; children: React.ReactNo
   const { t } = useI18n();
 
   return (
-    <article className="rounded-m border border-[var(--border)] bg-[var(--card)] p-6">
+    <article className="rounded-m border border-[var(--border)] bg-[var(--card)] p-5">
       <h3 className="text-lg font-semibold leading-[1.2] text-[var(--foreground)]">{t(title)}</h3>
       <div className="mt-4 flex flex-col gap-3">{children}</div>
     </article>
@@ -240,6 +232,59 @@ function Chip({
       <Icon className="h-4 w-4" />
       <span>{t(label)}</span>
     </button>
+  );
+}
+
+interface SliderChoiceOption {
+  label: string;
+  value: string;
+}
+
+function SliderChoice({
+  value,
+  options,
+  onChange
+}: {
+  value: string;
+  options: SliderChoiceOption[];
+  onChange: (value: string) => void;
+}): React.JSX.Element {
+  const activeIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value)
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[var(--accent)] accent-[var(--primary)]"
+        max={Math.max(0, options.length - 1)}
+        min={0}
+        onChange={(event) => {
+          const nextIndex = Number(event.target.value);
+          onChange(options[nextIndex]?.value || options[0]?.value || "");
+        }}
+        step={1}
+        type="range"
+        value={activeIndex}
+      />
+      <div className="grid gap-2 text-xs" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+        {options.map((option) => (
+          <button
+            className={`rounded-[16px] border px-3 py-2 text-center transition-colors duration-200 ${
+              option.value === value
+                ? "border-[rgba(87,73,244,0.28)] bg-[rgba(87,73,244,0.08)] text-[var(--foreground)]"
+                : "border-[var(--border)] bg-white text-[var(--muted-foreground)] hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+            }`}
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -555,7 +600,7 @@ function StepOneContent({
   };
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-6 px-4 pb-4 pt-20 sm:px-6 sm:pt-24 lg:px-8 xl:flex-row xl:gap-8 xl:px-12 xl:pb-8 xl:pt-16">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 pb-4 pt-18 sm:px-6 sm:pt-20 lg:px-8 xl:flex-row xl:items-stretch xl:gap-6 xl:px-12 xl:pb-6 xl:pt-12">
       <div className="pointer-events-none absolute left-1/2 top-4 z-20 flex -translate-x-1/2 flex-col items-center gap-2 px-4 sm:top-5 xl:top-4">
         {successBannerMessage ? (
           <FloatingBanner
@@ -582,65 +627,37 @@ function StepOneContent({
         ) : null}
       </div>
 
-      <div className="flex w-full flex-col gap-6 xl:w-[min(440px,34vw)] xl:shrink-0">
-        <CardFrame title="Basic Information & Address">
+      <div className="flex w-full flex-col gap-4 xl:w-[min(430px,32vw)] xl:shrink-0">
+        <CardFrame title="基础信息与地址">
           <Field
-            label="Merchant Name"
+            label="商户名称"
             loading={merchantNameLoading && !draft.name.trim()}
-            loadingLabel="Auto-reading merchant name..."
+            loadingLabel="正在自动识别商户名称..."
             onChange={(value) => onFieldChange("name", value)}
-            placeholder="Enter merchant name manually"
+            placeholder="手动输入商户名称"
             value={draft.name}
           />
-          <Field label="Address" onChange={(value) => onFieldChange("address", value)} placeholder="Select on map" value={draft.address} />
-          <Field label="City" onChange={(value) => onFieldChange("city", value)} placeholder="e.g. Shanghai" value={draft.city} />
+          <Field label="地址" onChange={(value) => onFieldChange("address", value)} placeholder="请在地图中选择" value={draft.address} />
+          <Field label="城市" onChange={(value) => onFieldChange("city", value)} placeholder="例如：上海" value={draft.city} />
         </CardFrame>
 
-        <CardFrame title="Billing Settings">
-          <Field label="Statement Descriptor" onChange={(value) => onFieldChange("notes", value)} placeholder="Optional internal note" value={draft.notes} />
+        <CardFrame title="政策设置">
+          <Field label="账单备注" onChange={(value) => onFieldChange("notes", value)} placeholder="选填，供内部识别" value={draft.notes} />
           <Field
             isSelect
-            label="Brand"
+            label="品牌"
             onChange={(value) => {
               autoFilledBrandRef.current = null;
               onFieldChange("brand", value);
             }}
             options={brandOptions}
-            placeholder="Select brand"
+            placeholder="选择品牌"
             value={draft.brand}
           />
         </CardFrame>
-
-        <CardFrame title="Business Hours & Contact">
-          <Field
-            label="Contact Information"
-            onChange={(value) => onFieldChange("contactInfo", value)}
-            placeholder="Phone / WeChat / Telegram / Email"
-            value={draft.contactInfo}
-          />
-          <Field
-            label="Weekday Business Hours"
-            onChange={(value) => onFieldChange("weekdayBusinessHours", value)}
-            placeholder="e.g. Mon-Fri 09:00 - 18:00"
-            value={draft.weekdayBusinessHours}
-          />
-          <Field
-            label="Weekend Business Hours"
-            onChange={(value) => onFieldChange("weekendBusinessHours", value)}
-            placeholder="e.g. Sat-Sun 10:00 - 20:00"
-            value={draft.weekendBusinessHours}
-          />
-          <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium leading-[1.35] text-[var(--foreground)]">{t("Special Date Hours")}</p>
-            <SpecialDateHoursEditor
-              onChange={(value) => onFieldChange("specialDateHours", value)}
-              value={draft.specialDateHours}
-            />
-          </div>
-        </CardFrame>
       </div>
 
-      <div className="relative min-h-[320px] min-w-0 flex-1 overflow-hidden rounded-m border border-[var(--border)] bg-[var(--card)] sm:min-h-[420px] xl:min-h-0">
+      <div className="relative min-h-[340px] min-w-0 flex-1 overflow-hidden rounded-m border border-[var(--border)] bg-[var(--card)] sm:min-h-[420px] xl:min-h-0">
         <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
           <div
             className={`inline-flex h-10 items-center rounded-pill border px-4 text-sm font-medium shadow-[0_14px_32px_-26px_rgba(15,23,42,0.4)] backdrop-blur-xl ${
@@ -654,9 +671,9 @@ function StepOneContent({
         </div>
 
         <div className="absolute left-4 right-4 top-4 z-10 rounded-m border border-[var(--border)] bg-[var(--card)] p-4 sm:left-6 sm:right-auto sm:top-6 sm:max-w-[320px] sm:p-6">
-          <p className="text-[13px] font-medium leading-[1.3] text-[var(--muted-foreground)]">{hasSelectedLocation ? t("Location Selected") : t("Choose Location")}</p>
-          <p className="mt-1 text-base font-semibold leading-[1.2] text-[var(--foreground)]">{draft.name || t("Pinned Location")}</p>
-          <p className="mt-1 text-[13px] leading-[1.3] text-[var(--muted-foreground)]">{draft.address || t("Select on map")}</p>
+          <p className="text-[13px] font-medium leading-[1.3] text-[var(--muted-foreground)]">{hasSelectedLocation ? "已选择地点" : "地图定位"}</p>
+          <p className="mt-1 text-base font-semibold leading-[1.2] text-[var(--foreground)]">{draft.name || "已固定地图卡片"}</p>
+          <p className="mt-1 text-[13px] leading-[1.3] text-[var(--muted-foreground)]">{draft.address || "请在地图中点选地点"}</p>
           <p className="mt-1 text-[12px] leading-[1.3] text-[var(--muted-foreground)]">
             {draft.lat.toFixed(4)}, {draft.lng.toFixed(4)}
           </p>
@@ -679,65 +696,6 @@ function StepOneContent({
   );
 }
 
-function StaffProficiencySelector({
-  currentLevel,
-  onChange
-}: {
-  currentLevel: StaffProficiencyLevel | null;
-  onChange: (value: StaffProficiencyLevel | null) => void;
-}): React.JSX.Element {
-  const { t } = useI18n();
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm leading-[1.5] text-[var(--muted-foreground)]">
-          {t("Choose the closest level for how comfortably the store staff can operate the POS today.")}
-        </p>
-        <button
-          className="ui-hover-shadow inline-flex h-9 shrink-0 items-center justify-center rounded-pill border border-[var(--input)] px-3 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={currentLevel === null}
-          onClick={() => onChange(null)}
-          type="button"
-        >
-          {t("Clear")}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {STAFF_PROFICIENCY_OPTIONS.map((option) => {
-          const active = currentLevel === option.level;
-
-          return (
-            <button
-              className={`rounded-[24px] border px-5 py-4 text-left transition-colors duration-200 ${
-                active
-                  ? `${option.cardClassName} shadow-[0_18px_40px_-28px_rgba(15,23,42,0.4)]`
-                  : "border-[var(--input)] bg-white hover:border-[var(--border-hover)] hover:bg-[#FAFAFA]"
-              }`}
-              key={option.level}
-              onClick={() => onChange(option.level)}
-              type="button"
-            >
-              <div className="flex items-start gap-3">
-                <span className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold ${option.badgeClassName}`}>
-                  {option.level}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">
-                    {t(formatStaffProficiencyValue(option))}
-                  </p>
-                  <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t(option.description)}</p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function StepTwoContent({
   draft,
   onFieldChange
@@ -745,62 +703,97 @@ function StepTwoContent({
   draft: DraftState;
   onFieldChange: <K extends keyof DraftState>(key: K, value: DraftState[K]) => void;
 }): React.JSX.Element {
+  const { t } = useI18n();
   const [walletSelected, setWalletSelected] = useState(false);
 
   return (
-    <div className="grid min-w-0 flex-1 grid-cols-1 gap-6 px-4 pb-4 pt-4 sm:px-6 lg:px-8 xl:grid-cols-2 xl:px-12 xl:pb-8 xl:pt-8">
+    <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 px-4 pb-4 pt-4 sm:px-6 lg:px-8 xl:grid-cols-2 xl:px-12 xl:pb-6 xl:pt-6">
       <div className="flex min-w-0 flex-col gap-6">
-        <CardFrame title="1. Transaction Status">
+        <CardFrame title="1. 交易状态">
           <div className="flex flex-wrap gap-3">
-            <Chip active={draft.transactionStatus === "Success"} icon={CheckCircle} label="Success" onClick={() => onFieldChange("transactionStatus", "Success")} />
-            <Chip active={draft.transactionStatus === "Fault"} icon={XCircle} label="Fault" onClick={() => onFieldChange("transactionStatus", "Fault")} />
-            <Chip active={draft.transactionStatus === "Unknown"} icon={HelpCircle} label="Unknown" onClick={() => onFieldChange("transactionStatus", "Unknown")} />
+            <Chip active={draft.transactionStatus === "Success"} icon={CheckCircle} label="成功" onClick={() => onFieldChange("transactionStatus", "Success")} />
+            <Chip active={draft.transactionStatus === "Fault"} icon={XCircle} label="故障" onClick={() => onFieldChange("transactionStatus", "Fault")} />
+            <Chip active={draft.transactionStatus === "Unknown"} icon={HelpCircle} label="未知" onClick={() => onFieldChange("transactionStatus", "Unknown")} />
           </div>
         </CardFrame>
 
-        <CardFrame title="2. Card Info">
+        <CardFrame title="2. 银行卡信息">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[140px_1fr]">
-            <Field isSelect label="Network" onChange={(value) => onFieldChange("network", value)} options={NETWORK_OPTIONS} placeholder="Visa" value={draft.network} />
+            <Field isSelect label="卡组织" onChange={(value) => onFieldChange("network", value)} options={NETWORK_OPTIONS} placeholder="Visa" value={draft.network} />
           </div>
           <div className="pt-1">
-            <Chip active={walletSelected} icon={Wallet} label="Select from Wallet" onClick={() => setWalletSelected((prev) => !prev)} />
+            <Chip active={walletSelected} icon={Wallet} label="从卡册选择" onClick={() => setWalletSelected((prev) => !prev)} />
           </div>
         </CardFrame>
 
-        <CardFrame title="3. CVM Validation">
+        <CardFrame title="3. 身份验证">
           <div className="flex flex-wrap gap-3">
-            <Chip active={draft.cvm === "No CVM"} icon={MinusCircle} label="No CVM" onClick={() => onFieldChange("cvm", "No CVM")} />
-            <Chip active={draft.cvm === "PIN"} icon={Hash} label="PIN" onClick={() => onFieldChange("cvm", "PIN")} />
-            <Chip active={draft.cvm === "Signature"} icon={PenTool} label="Signature" onClick={() => onFieldChange("cvm", "Signature")} />
+            <Chip active={draft.cvm === "No CVM"} icon={MinusCircle} label="免验证" onClick={() => onFieldChange("cvm", "No CVM")} />
+            <Chip active={draft.cvm === "PIN"} icon={Hash} label="密码" onClick={() => onFieldChange("cvm", "PIN")} />
+            <Chip active={draft.cvm === "Signature"} icon={PenTool} label="签名" onClick={() => onFieldChange("cvm", "Signature")} />
+          </div>
+        </CardFrame>
+
+        <CardFrame title="4. 支付方式">
+          <div className="flex flex-wrap gap-3">
+            <Chip active={draft.paymentMethod === "Apple Pay"} icon={Smartphone} label="Apple Pay" onClick={() => onFieldChange("paymentMethod", "Apple Pay")} />
+            <Chip active={draft.paymentMethod === "Google Pay"} icon={Smartphone} label="Google Pay" onClick={() => onFieldChange("paymentMethod", "Google Pay")} />
+            <Chip active={draft.paymentMethod === "Tap"} icon={Wifi} label="轻触" onClick={() => onFieldChange("paymentMethod", "Tap")} />
+            <Chip active={draft.paymentMethod === "Insert"} icon={CreditCard} label="插卡" onClick={() => onFieldChange("paymentMethod", "Insert")} />
+            <Chip active={draft.paymentMethod === "Swipe"} icon={CreditCard} label="刷卡" onClick={() => onFieldChange("paymentMethod", "Swipe")} />
+            <Chip active={draft.paymentMethod === "HCE"} icon={Nfc} label="HCE" onClick={() => onFieldChange("paymentMethod", "HCE")} />
           </div>
         </CardFrame>
       </div>
 
       <div className="flex min-w-0 flex-col gap-6">
-        <CardFrame title="4. Payment Method">
-          <div className="flex flex-wrap gap-3">
-            <Chip active={draft.paymentMethod === "Apple Pay"} icon={Smartphone} label="Apple Pay" onClick={() => onFieldChange("paymentMethod", "Apple Pay")} />
-            <Chip active={draft.paymentMethod === "Google Pay"} icon={Smartphone} label="Google Pay" onClick={() => onFieldChange("paymentMethod", "Google Pay")} />
-            <Chip active={draft.paymentMethod === "Tap"} icon={Wifi} label="Tap" onClick={() => onFieldChange("paymentMethod", "Tap")} />
-            <Chip active={draft.paymentMethod === "Insert"} icon={CreditCard} label="Insert" onClick={() => onFieldChange("paymentMethod", "Insert")} />
-            <Chip active={draft.paymentMethod === "Swipe"} icon={CreditCard} label="Swipe" onClick={() => onFieldChange("paymentMethod", "Swipe")} />
-            <Chip active={draft.paymentMethod === "HCE"} icon={Nfc} label="HCE" onClick={() => onFieldChange("paymentMethod", "HCE")} />
-          </div>
-        </CardFrame>
-
-        <CardFrame title="5. Transaction Time">
+        <CardFrame title="5. 交易时间">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field isSelect label="Year" onChange={(value) => onFieldChange("attemptYear", value)} options={YEAR_OPTIONS} placeholder="2026" value={draft.attemptYear} />
-            <Field isSelect label="Month" onChange={(value) => onFieldChange("attemptMonth", value)} options={MONTH_OPTIONS} placeholder="02" value={draft.attemptMonth} />
-            <Field isSelect label="Day" onChange={(value) => onFieldChange("attemptDay", value)} options={DAY_OPTIONS} placeholder="22" value={draft.attemptDay} />
+            <Field isSelect label="年" onChange={(value) => onFieldChange("attemptYear", value)} options={YEAR_OPTIONS} placeholder="2026" value={draft.attemptYear} />
+            <Field isSelect label="月" onChange={(value) => onFieldChange("attemptMonth", value)} options={MONTH_OPTIONS} placeholder="02" value={draft.attemptMonth} />
+            <Field isSelect label="日" onChange={(value) => onFieldChange("attemptDay", value)} options={DAY_OPTIONS} placeholder="22" value={draft.attemptDay} />
           </div>
         </CardFrame>
 
-        <CardFrame title="6. Acquirer Mode">
+        <CardFrame title="6. 收单方式">
           <div className="flex flex-wrap gap-3">
             <Chip active={draft.acquiringMode === "EDC"} icon={Building2} label="EDC" onClick={() => onFieldChange("acquiringMode", "EDC")} />
             <Chip active={draft.acquiringMode === "DCC"} icon={Globe} label="DCC" onClick={() => onFieldChange("acquiringMode", "DCC")} />
-            <Chip active={draft.acquiringMode === "Unknown"} icon={HelpCircle} label="Unknown" onClick={() => onFieldChange("acquiringMode", "Unknown")} />
+            <Chip active={draft.acquiringMode === "Unknown"} icon={HelpCircle} label="未知" onClick={() => onFieldChange("acquiringMode", "Unknown")} />
+          </div>
+        </CardFrame>
+
+        <CardFrame title="7. 营业时间">
+          <Field
+            label="工作日营业时间"
+            onChange={(value) => onFieldChange("weekdayBusinessHours", value)}
+            placeholder="例如：周一至周五 09:00 - 18:00"
+            value={draft.weekdayBusinessHours}
+          />
+          <Field
+            label="周末营业时间"
+            onChange={(value) => onFieldChange("weekendBusinessHours", value)}
+            placeholder="例如：周六至周日 10:00 - 20:00"
+            value={draft.weekendBusinessHours}
+          />
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium leading-[1.35] text-[var(--foreground)]">{t("Special Date Hours")}</p>
+            <SpecialDateHoursEditor
+              onChange={(value) => onFieldChange("specialDateHours", value)}
+              value={draft.specialDateHours}
+            />
+          </div>
+        </CardFrame>
+
+        <CardFrame title="8. 联系方式">
+          <Field
+            label="联系方式"
+            onChange={(value) => onFieldChange("contactInfo", value)}
+            placeholder="电话 / 微信 / Telegram / Email"
+            value={draft.contactInfo}
+          />
+          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--accent)] px-4 py-3 text-sm leading-[1.5] text-[var(--muted-foreground)]">
+            页面已按紧凑模式重排，营业时间和联系方式统一放在第二步。
           </div>
         </CardFrame>
       </div>
@@ -815,63 +808,62 @@ function StepThreeContent({
   draft: DraftState;
   onFieldChange: <K extends keyof DraftState>(key: K, value: DraftState[K]) => void;
 }): React.JSX.Element {
-  const { t } = useI18n();
-  const [inactiveReason, setInactiveReason] = useState("Temporary Unavailable");
+  const checkoutOptions: SliderChoiceOption[] = [
+    { label: "人工收银", value: "Staffed Checkout" },
+    { label: "自助收银", value: "Self-checkout" }
+  ];
+  const statusOptions: SliderChoiceOption[] = [
+    { label: "可用", value: "active" },
+    { label: "停用", value: "inactive" }
+  ];
+  const staffOptions: SliderChoiceOption[] = STAFF_PROFICIENCY_OPTIONS.map((option) => ({
+    label: `L${option.level}`,
+    value: String(option.level)
+  }));
 
   return (
-    <div className="grid min-w-0 flex-1 grid-cols-1 gap-6 px-4 pb-4 pt-4 sm:px-6 lg:px-8 xl:grid-cols-2 xl:px-12 xl:pb-8 xl:pt-8">
+    <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 px-4 pb-4 pt-4 sm:px-6 lg:px-8 xl:grid-cols-2 xl:px-12 xl:pb-6 xl:pt-6">
       <div className="flex min-w-0 flex-col gap-6">
-        <CardFrame title="1. Device Status">
-          <div className="flex flex-wrap gap-3">
-            <Chip active={draft.status === "active"} icon={PlayCircle} label="Active" onClick={() => onFieldChange("status", "active")} />
-            <Chip active={draft.status === "inactive"} icon={StopCircle} label="Inactive" onClick={() => onFieldChange("status", "inactive")} />
-          </div>
-
-          {draft.status === "inactive" ? (
-            <>
-              <p className="text-xs font-medium leading-[1.3] text-[var(--muted-foreground)]">{t("↳ Please select Inactive Reason:")}</p>
-
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap gap-3">
-                  <Chip active={inactiveReason === "Temporary Unavailable"} icon={Clock3} label="Temporary Unavailable" onClick={() => setInactiveReason("Temporary Unavailable")} />
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Chip active={inactiveReason === "Maintenance"} icon={Wrench} label="Maintenance" onClick={() => setInactiveReason("Maintenance")} />
-                  <Chip active={inactiveReason === "Unknown"} icon={HelpCircle} label="Unknown" onClick={() => setInactiveReason("Unknown")} />
-                </div>
-              </div>
-            </>
-          ) : null}
+        <CardFrame title="1. 收据信息状态">
+          <SliderChoice
+            onChange={(value) => onFieldChange("status", value as DraftState["status"])}
+            options={statusOptions}
+            value={draft.status}
+          />
         </CardFrame>
 
-        <CardFrame title="2. Acquirer">
-          <Field isSelect label="Select Acquirer" onChange={(value) => onFieldChange("acquirer", value)} options={ACQUIRER_OPTIONS} placeholder="Lakala" value={draft.acquirer} />
-          <Field label="Custom Acquirer (Optional)" onChange={(value) => onFieldChange("acquirer", value)} placeholder="Enter acquirer name if not in list..." value={draft.acquirer} />
+        <CardFrame title="2. 收单机构">
+          <Field isSelect label="选择收单机构" onChange={(value) => onFieldChange("acquirer", value)} options={ACQUIRER_OPTIONS} placeholder="Lakala" value={draft.acquirer} />
+          <Field label="自定义收单机构" onChange={(value) => onFieldChange("acquirer", value)} placeholder="列表没有时手动输入" value={draft.acquirer} />
         </CardFrame>
       </div>
 
       <div className="flex min-w-0 flex-col gap-6">
-        <CardFrame title="3. Checkout Info">
-          <div className="flex flex-wrap gap-3">
-            <Chip active={draft.checkoutLocation === "Staffed Checkout"} icon={User} label="Staffed Checkout" onClick={() => onFieldChange("checkoutLocation", "Staffed Checkout")} />
-            <Chip active={draft.checkoutLocation === "Self-checkout"} icon={ScanFace} label="Self-checkout" onClick={() => onFieldChange("checkoutLocation", "Self-checkout")} />
+        <CardFrame title="3. 收费信息">
+          <SliderChoice
+            onChange={(value) => onFieldChange("checkoutLocation", value as DraftState["checkoutLocation"])}
+            options={checkoutOptions}
+            value={draft.checkoutLocation}
+          />
+          <div className="pt-1">
+            <p className="text-sm font-medium leading-[1.35] text-[var(--foreground)]">操作熟练度</p>
+            <div className="mt-3">
+              <SliderChoice
+                onChange={(value) => onFieldChange("staffProficiencyLevel", Number(value) as DraftState["staffProficiencyLevel"])}
+                options={staffOptions}
+                value={String(draft.staffProficiencyLevel || 3)}
+              />
+            </div>
           </div>
         </CardFrame>
 
-        <CardFrame title="4. POS Configuration">
-          <Field isSelect label="Select POS Model" onChange={(value) => onFieldChange("posModel", value)} options={POS_MODEL_OPTIONS} placeholder="Ingenico Move 5000" value={draft.posModel} />
-          <Field label="Custom POS Model (Optional)" onChange={(value) => onFieldChange("posModel", value)} placeholder="Enter model name if not in list..." value={draft.posModel} />
+        <CardFrame title="4. POS 设置">
+          <Field isSelect label="选择 POS 型号" onChange={(value) => onFieldChange("posModel", value)} options={POS_MODEL_OPTIONS} placeholder="Ingenico Move 5000" value={draft.posModel} />
+          <Field label="自定义 POS 型号" onChange={(value) => onFieldChange("posModel", value)} placeholder="列表没有时手动输入" value={draft.posModel} />
         </CardFrame>
 
-        <CardFrame title="5. Staff Proficiency">
-          <StaffProficiencySelector
-            currentLevel={draft.staffProficiencyLevel}
-            onChange={(value) => onFieldChange("staffProficiencyLevel", value)}
-          />
-        </CardFrame>
-
-        <CardFrame title="6. Additional Remarks">
-          <Field label="Notes / Internal Comments" multiline onChange={(value) => onFieldChange("notes", value)} placeholder="Enter any additional information or internal notes here..." value={draft.notes} />
+        <CardFrame title="补充备注">
+          <Field label="内部备注" multiline onChange={(value) => onFieldChange("notes", value)} placeholder="填写额外说明、收费备注或交接信息" value={draft.notes} />
         </CardFrame>
       </div>
     </div>
@@ -1112,7 +1104,7 @@ export function AddLocationWizard({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {step === 1 ? (
           <StepOneContent
             autoReadMerchantNameEnabled={autoReadMerchantNameEnabled}
