@@ -2291,7 +2291,7 @@ async function getFluxaLocationDetail(id: string): Promise<LocationDetailRecord 
     .sort((left, right) => right.sortKey - left.sortKey)
     .map((entry) => entry.item);
 
-  return buildDetailRecord(base, "Fluxa Location", [], reviews, buildLocationMetaLine(base.brand, base.city), {
+  return buildDetailRecord(base, "地点空壳条目", [], reviews, buildLocationMetaLine(base.brand, base.city), {
     networks: [],
     paymentMethods: []
   });

@@ -206,6 +206,7 @@ interface AttemptNotice {
   message: string;
 }
 
+const MASTERCARD_CN_WANSHENG_PREVIEW_ONLY = true;
 const ATTEMPT_NETWORK_OPTIONS = ["Visa", "MasterCard", "MasterCard CN", "UnionPay", "American Express", "Discover", "JCB"];
 const ATTEMPT_YEAR_OPTIONS = Array.from({ length: 5 }, (_, index) => String(new Date().getFullYear() - 2 + index));
 const ATTEMPT_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
@@ -2244,8 +2245,11 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   const successRateSummary = useMemo(() => summarizeSuccessRate(filteredAttemptsForSuccessRate), [filteredAttemptsForSuccessRate]);
   const successRateFilterError = useMemo(() => validateSuccessRateDateFilter(draftSuccessRateFilter), [draftSuccessRateFilter]);
   const nuccFeedbackEligible = useMemo(() => isMastercardNuccEligible(attemptDraft), [attemptDraft]);
-  const shouldSubmitToNucc = nuccFeedbackEligible && nuccFeedbackOptIn;
+  const shouldSubmitToNucc = nuccFeedbackEligible && nuccFeedbackOptIn && !MASTERCARD_CN_WANSHENG_PREVIEW_ONLY;
   const nuccPrivacyPolicyUrl = getMastercardNuccPrivacyPolicyUrl(language);
+  const feedbackCardTitle = "7. Mastercard NUCC Feedback";
+  const acquirerDeviceCardTitle = "5. Acquirer & Device";
+  const paymentMethodCardTitle = "6. Payment Method";
 
   useEffect(() => {
     const pageSize = 5;
@@ -2972,15 +2976,15 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         }}
         open={attemptDialogOpen}
       >
-        <DialogContent className="max-h-[90vh] max-w-[min(1080px,calc(100vw-2rem))] gap-0 overflow-hidden rounded-[32px] p-0">
-          <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
+        <DialogContent className="flex max-h-[90vh] max-w-[min(1080px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-[32px] p-0">
+          <DialogHeader className="shrink-0 border-b border-[var(--input)] px-6 py-5 sm:px-8">
             <DialogTitle>{t("Add Attempt Record")}</DialogTitle>
             <DialogDescription>
               {t("Use the same transaction fields as Add Location, but submit this attempt as a modal without leaving the detail page.")}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
               <div className="flex min-w-0 flex-col gap-5">
                 <AttemptDialogCard title="1. Transaction Status">
@@ -3017,29 +3021,18 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
                     <AttemptDialogChip active={attemptDraft.cvm === "Signature"} icon={PenTool} label="Signature" onClick={() => handleAttemptFieldChange("cvm", "Signature")} />
                   </div>
                 </AttemptDialogCard>
-              </div>
 
-              <div className="flex min-w-0 flex-col gap-5">
-                <AttemptDialogCard title="4. Payment Method">
-                  <div className="flex flex-wrap gap-3">
-                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Apple Pay"} icon={Smartphone} label="Apple Pay" onClick={() => handleAttemptFieldChange("paymentMethod", "Apple Pay")} />
-                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Google Pay"} icon={Smartphone} label="Google Pay" onClick={() => handleAttemptFieldChange("paymentMethod", "Google Pay")} />
-                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Tap"} icon={Wifi} label="Tap" onClick={() => handleAttemptFieldChange("paymentMethod", "Tap")} />
-                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Insert"} icon={CreditCard} label="Insert" onClick={() => handleAttemptFieldChange("paymentMethod", "Insert")} />
-                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Swipe"} icon={CreditCard} label="Swipe" onClick={() => handleAttemptFieldChange("paymentMethod", "Swipe")} />
-                    <AttemptDialogChip active={attemptDraft.paymentMethod === "HCE"} icon={Nfc} label="HCE" onClick={() => handleAttemptFieldChange("paymentMethod", "HCE")} />
-                  </div>
-                </AttemptDialogCard>
-
-                <AttemptDialogCard title="5. Transaction Time">
+                <AttemptDialogCard title="4. Transaction Time">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <AttemptDialogField isSelect label="Year" onChange={(value) => handleAttemptFieldChange("attemptYear", value)} options={ATTEMPT_YEAR_OPTIONS} placeholder="2026" value={attemptDraft.attemptYear} />
                     <AttemptDialogField isSelect label="Month" onChange={(value) => handleAttemptFieldChange("attemptMonth", value)} options={ATTEMPT_MONTH_OPTIONS} placeholder="02" value={attemptDraft.attemptMonth} />
                     <AttemptDialogField isSelect label="Day" onChange={(value) => handleAttemptFieldChange("attemptDay", value)} options={ATTEMPT_DAY_OPTIONS} placeholder="22" value={attemptDraft.attemptDay} />
                   </div>
                 </AttemptDialogCard>
+              </div>
 
-                <AttemptDialogCard title="6. Acquirer & Device">
+              <div className="flex min-w-0 flex-col gap-5">
+                <AttemptDialogCard title={acquirerDeviceCardTitle}>
                   <div className="flex flex-wrap gap-3">
                     <AttemptDialogChip active={attemptDraft.acquiringMode === "EDC"} icon={Building2} label="EDC" onClick={() => handleAttemptFieldChange("acquiringMode", "EDC")} />
                     <AttemptDialogChip active={attemptDraft.acquiringMode === "DCC"} icon={Globe} label="DCC" onClick={() => handleAttemptFieldChange("acquiringMode", "DCC")} />
@@ -3079,150 +3072,175 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
                   />
                 </AttemptDialogCard>
 
-                {nuccFeedbackEligible ? (
-                  <AttemptDialogCard title="7. Mastercard NUCC Feedback">
-                    <label className="flex items-start gap-3 rounded-m border border-[rgba(209,154,41,0.22)] bg-[rgba(255,248,229,0.72)] px-4 py-4">
-                      <input
-                        checked={nuccFeedbackOptIn}
-                        className="mt-1 h-4 w-4 rounded border border-[var(--input)]"
-                        onChange={(event) => handleNuccFeedbackToggle(event.target.checked)}
-                        type="checkbox"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{t("Send this failed MasterCard CN attempt to Mastercard NUCC")}</p>
-                        <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                          {t("Fluxa will fetch the official captcha, collect any optional follow-up details, and submit this failed attempt directly to the Mastercard NUCC contact form.")}
-                        </p>
-                      </div>
-                    </label>
-
-                    {nuccFeedbackOptIn ? (
-                      <div className="rounded-m border border-[var(--border)] bg-[var(--card)] p-4">
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <AttemptDialogField
-                            label="Follow-up Phone / Email (optional)"
-                            onChange={setNuccContactInfo}
-                            placeholder="Leave a phone number or email for NUCC follow-up"
-                            value={nuccContactInfo}
-                          />
-                          <AttemptDialogField
-                            label="Card BIN / First 6 Digits (optional)"
-                            onChange={(value) => setNuccCardBin(value.replace(/\D/g, "").slice(0, 6))}
-                            placeholder="540988"
-                            value={nuccCardBin}
-                          />
-                          <AttemptDialogField
-                            isSelect
-                            label="Card Usage Time (optional)"
-                            onChange={setNuccTimeWindow}
-                            options={MASTERCARD_NUCC_TIME_OPTIONS}
-                            placeholder="Select the closest time window"
-                            value={nuccTimeWindow}
-                          />
-                        </div>
-
-                        <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                          {t("Use the closest official time window if you know when the failure happened.")}
-                        </p>
-
-                        {nuccBridgeError ? (
-                          <div className="mt-4 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm leading-[1.6] text-[#7A1F0E]">
-                            <p>{nuccBridgeError}</p>
-                            {!nuccBridgeLoading ? (
-                              <button
-                                className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-pill border border-[#F5B8AA] px-4 text-sm font-medium text-[#7A1F0E] transition-colors duration-200 hover:bg-[#FFE9E4]"
-                                onClick={() => {
-                                  void initializeNuccBridgeSession();
-                                }}
-                                type="button"
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                                <span>{t("Retry Loading Captcha")}</span>
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center">
-                          <div className="flex min-h-[84px] w-full items-center justify-center rounded-[20px] border border-dashed border-[var(--border)] bg-[var(--accent)] px-4 py-3 md:w-[220px]">
-                            {nuccBridgeSession ? (
-                              <img
-                                alt={t("Mastercard NUCC captcha")}
-                                className="h-[60px] w-[144px] rounded-[14px] object-cover"
-                                src={nuccBridgeSession.captchaImageDataUrl}
-                              />
-                            ) : (
-                              <span className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                                {nuccBridgeLoading ? t("Loading Mastercard NUCC captcha...") : t("Captcha will appear here after the bridge session is ready.")}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex-1">
-                            <div className="flex flex-wrap items-center gap-3">
-                              <button
-                                className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                                disabled={!nuccBridgeSession || nuccBridgeLoading}
-                                onClick={() => {
-                                  void refreshNuccCaptcha();
-                                }}
-                                type="button"
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                                <span>{t("Refresh Captcha")}</span>
-                              </button>
-                              <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                                {t("The official image captcha must be completed by the user before Fluxa can submit to Mastercard NUCC.")}
-                              </p>
-                            </div>
-
-                            <div className="mt-4">
-                              <AttemptDialogField
-                                label="Captcha"
-                                onChange={setNuccCaptchaResponse}
-                                placeholder="Enter the image captcha"
-                                value={nuccCaptchaResponse}
-                              />
-                            </div>
-
-                            <label className="mt-4 flex items-start gap-3 rounded-m border border-[var(--border)] bg-white px-4 py-3">
-                              <input
-                                checked={nuccPrivacyAccepted}
-                                className="mt-1 h-4 w-4 rounded border border-[var(--input)]"
-                                onChange={(event) => setNuccPrivacyAccepted(event.target.checked)}
-                                type="checkbox"
-                              />
-                              <div className="min-w-0">
-                                <span className="text-sm leading-[1.6] text-[var(--foreground)]">
-                                  {t("I have read and accept the Mastercard NUCC privacy policy.")}
-                                </span>
-                                <div className="mt-1">
-                                  <a
-                                    className="text-sm leading-[1.6] text-[var(--primary)] underline underline-offset-2"
-                                    href={nuccPrivacyPolicyUrl}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    {t("Open the official Mastercard NUCC privacy policy")}
-                                  </a>
-                                </div>
-                              </div>
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </AttemptDialogCard>
-                ) : null}
+                <AttemptDialogCard title={paymentMethodCardTitle}>
+                  <div className="flex flex-wrap gap-3">
+                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Apple Pay"} icon={Smartphone} label="Apple Pay" onClick={() => handleAttemptFieldChange("paymentMethod", "Apple Pay")} />
+                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Google Pay"} icon={Smartphone} label="Google Pay" onClick={() => handleAttemptFieldChange("paymentMethod", "Google Pay")} />
+                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Tap"} icon={Wifi} label="Tap" onClick={() => handleAttemptFieldChange("paymentMethod", "Tap")} />
+                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Insert"} icon={CreditCard} label="Insert" onClick={() => handleAttemptFieldChange("paymentMethod", "Insert")} />
+                    <AttemptDialogChip active={attemptDraft.paymentMethod === "Swipe"} icon={CreditCard} label="Swipe" onClick={() => handleAttemptFieldChange("paymentMethod", "Swipe")} />
+                    <AttemptDialogChip active={attemptDraft.paymentMethod === "HCE"} icon={Nfc} label="HCE" onClick={() => handleAttemptFieldChange("paymentMethod", "HCE")} />
+                  </div>
+                </AttemptDialogCard>
               </div>
             </div>
+
+            {nuccFeedbackEligible ? (
+              <div className="mt-5">
+                <AttemptDialogCard title={feedbackCardTitle}>
+                  <label className="flex items-start gap-3 rounded-m border border-[rgba(209,154,41,0.22)] bg-[rgba(255,248,229,0.72)] px-4 py-4">
+                    <input
+                      checked={nuccFeedbackOptIn && !MASTERCARD_CN_WANSHENG_PREVIEW_ONLY}
+                      className="mt-1 h-4 w-4 rounded border border-[var(--input)] disabled:cursor-not-allowed disabled:opacity-100"
+                      disabled={MASTERCARD_CN_WANSHENG_PREVIEW_ONLY}
+                      onChange={(event) => handleNuccFeedbackToggle(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{t("Send this failed MasterCard CN attempt to Mastercard NUCC")}</p>
+                        <span className="inline-flex items-center rounded-pill border border-[rgba(148,163,184,0.28)] bg-[rgba(255,255,255,0.9)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
+                          {t("Coming Soon")}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                        {t("Fluxa will fetch the official captcha, collect any optional follow-up details, and submit this failed attempt directly to the Mastercard NUCC contact form.")}
+                      </p>
+                    </div>
+                  </label>
+
+                  {MASTERCARD_CN_WANSHENG_PREVIEW_ONLY ? (
+                    <div className="rounded-m border border-dashed border-[rgba(148,163,184,0.28)] bg-[rgba(255,255,255,0.88)] px-4 py-3 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                      {t("Preview only: this entry is currently disabled and will not send any real data.")}
+                    </div>
+                  ) : null}
+
+                  {nuccFeedbackOptIn ? (
+                    <div className="rounded-m border border-[var(--border)] bg-[var(--card)] p-4">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <AttemptDialogField
+                          label="Follow-up Phone / Email (optional)"
+                          onChange={setNuccContactInfo}
+                          placeholder="Leave a phone number or email for NUCC follow-up"
+                          value={nuccContactInfo}
+                        />
+                        <AttemptDialogField
+                          label="Card BIN / First 6 Digits (optional)"
+                          onChange={(value) => setNuccCardBin(value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="540988"
+                          value={nuccCardBin}
+                        />
+                        <AttemptDialogField
+                          isSelect
+                          label="Card Usage Time (optional)"
+                          onChange={setNuccTimeWindow}
+                          options={MASTERCARD_NUCC_TIME_OPTIONS}
+                          placeholder="Select the closest time window"
+                          value={nuccTimeWindow}
+                        />
+                      </div>
+
+                      <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                        {t("Use the closest official time window if you know when the failure happened.")}
+                      </p>
+
+                      {nuccBridgeError ? (
+                        <div className="mt-4 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm leading-[1.6] text-[#7A1F0E]">
+                          <p>{nuccBridgeError}</p>
+                          {!nuccBridgeLoading ? (
+                            <button
+                              className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-pill border border-[#F5B8AA] px-4 text-sm font-medium text-[#7A1F0E] transition-colors duration-200 hover:bg-[#FFE9E4]"
+                              onClick={() => {
+                                void initializeNuccBridgeSession();
+                              }}
+                              type="button"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              <span>{t("Retry Loading Captcha")}</span>
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center">
+                        <div className="flex min-h-[84px] w-full items-center justify-center rounded-[20px] border border-dashed border-[var(--border)] bg-[var(--accent)] px-4 py-3 md:w-[220px]">
+                          {nuccBridgeSession ? (
+                            <img
+                              alt={t("Mastercard NUCC captcha")}
+                              className="h-[60px] w-[144px] rounded-[14px] object-cover"
+                              src={nuccBridgeSession.captchaImageDataUrl}
+                            />
+                          ) : (
+                            <span className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                              {nuccBridgeLoading ? t("Loading Mastercard NUCC captcha...") : t("Captcha will appear here after the bridge session is ready.")}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <button
+                              className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={!nuccBridgeSession || nuccBridgeLoading}
+                              onClick={() => {
+                                void refreshNuccCaptcha();
+                              }}
+                              type="button"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              <span>{t("Refresh Captcha")}</span>
+                            </button>
+                            <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                              {t("The official image captcha must be completed by the user before Fluxa can submit to Mastercard NUCC.")}
+                            </p>
+                          </div>
+
+                          <div className="mt-4">
+                            <AttemptDialogField
+                              label="Captcha"
+                              onChange={setNuccCaptchaResponse}
+                              placeholder="Enter the image captcha"
+                              value={nuccCaptchaResponse}
+                            />
+                          </div>
+
+                          <label className="mt-4 flex items-start gap-3 rounded-m border border-[var(--border)] bg-white px-4 py-3">
+                            <input
+                              checked={nuccPrivacyAccepted}
+                              className="mt-1 h-4 w-4 rounded border border-[var(--input)]"
+                              onChange={(event) => setNuccPrivacyAccepted(event.target.checked)}
+                              type="checkbox"
+                            />
+                            <div className="min-w-0">
+                              <span className="text-sm leading-[1.6] text-[var(--foreground)]">
+                                {t("I have read and accept the Mastercard NUCC privacy policy.")}
+                              </span>
+                              <div className="mt-1">
+                                <a
+                                  className="text-sm leading-[1.6] text-[var(--primary)] underline underline-offset-2"
+                                  href={nuccPrivacyPolicyUrl}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  {t("Open the official Mastercard NUCC privacy policy")}
+                                </a>
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </AttemptDialogCard>
+              </div>
+            ) : null}
 
             {attemptMutationError ? (
               <div className="mt-5 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">{attemptMutationError}</div>
             ) : null}
           </div>
 
-          <DialogFooter className="border-t border-[var(--input)] px-6 py-4 sm:px-8">
+          <DialogFooter className="shrink-0 border-t border-[var(--input)] bg-white px-6 py-4 sm:px-8">
             <button
               className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
               disabled={attemptSaving}
