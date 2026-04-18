@@ -17,7 +17,6 @@ import {
   MinusCircle,
   Nfc,
   PenTool,
-  Phone,
   PlayCircle,
   Plus,
   Radio,
@@ -1358,17 +1357,12 @@ function OverviewContent({
           {hasBusinessInfo ? t("Structured business information for this location.") : t("No business hours or contact information yet.")}
         </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-x-10 gap-y-8 xl:grid-cols-2">
-          <section className="min-w-0">
-            <div className="flex items-start gap-3">
-              <SectionIconBadge icon={CalendarRange} tone="primary" />
-              <div className="min-w-0">
-                <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Business Hours")}</h4>
-                <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                  {businessHoursRows.length > 0 ? t("Displayed in the order people usually read them.") : t("No business hours have been added yet.")}
-                </p>
-              </div>
-            </div>
+        <div className="mt-6 flex flex-col divide-y divide-[var(--input)]">
+          <section className="min-w-0 pb-8">
+            <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Business Hours")}</h4>
+            <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+              {businessHoursRows.length > 0 ? t("Displayed in the order people usually read them.") : t("No business hours have been added yet.")}
+            </p>
 
             {businessHoursRows.length > 0 ? (
               <div className="mt-5 flex flex-1 flex-col divide-y divide-[var(--input)] border-t border-[var(--input)]">
@@ -1389,17 +1383,12 @@ function OverviewContent({
             )}
           </section>
 
-          <section className="min-w-0 xl:border-l xl:border-[var(--input)] xl:pl-10">
-            <div className="flex items-start gap-3">
-              <SectionIconBadge icon={Phone} tone="success" />
-              <div className="min-w-0">
-                <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Contact Information")}</h4>
-                <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
-              </div>
-            </div>
+          <section className="min-w-0 pt-8">
+            <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Contact Information")}</h4>
+            <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
 
             <div className="mt-5 border-t border-[var(--input)] pt-5">
-              <p className="break-words whitespace-pre-wrap text-base font-semibold leading-[1.7] text-[var(--foreground)]">
+              <p className="break-words whitespace-pre-wrap text-sm font-semibold leading-[1.7] text-[var(--foreground)]">
                 {detail.contactInfo?.trim() || t("Not set")}
               </p>
               <p className="mt-4 text-sm leading-[1.6] text-[var(--muted-foreground)]">
