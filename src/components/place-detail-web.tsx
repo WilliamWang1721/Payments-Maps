@@ -1358,8 +1358,8 @@ function OverviewContent({
           {hasBusinessInfo ? t("Structured business information for this location.") : t("No business hours or contact information yet.")}
         </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div className="flex h-full min-w-0 flex-col rounded-[24px] border border-[var(--input)] bg-[#FAFAFA] p-6">
+        <div className="mt-6 grid grid-cols-1 gap-x-10 gap-y-8 xl:grid-cols-2">
+          <section className="min-w-0">
             <div className="flex items-start gap-3">
               <SectionIconBadge icon={CalendarRange} tone="primary" />
               <div className="min-w-0">
@@ -1371,9 +1371,9 @@ function OverviewContent({
             </div>
 
             {businessHoursRows.length > 0 ? (
-              <div className="mt-5 flex flex-1 flex-col gap-3">
+              <div className="mt-5 flex flex-1 flex-col divide-y divide-[var(--input)] border-t border-[var(--input)]">
                 {businessHoursRows.map((row) => (
-                  <div className="rounded-[20px] border border-[var(--input)] bg-white px-4 py-4" key={row.id}>
+                  <div className="py-4 first:pt-5 last:pb-0" key={row.id}>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{row.label}</p>
                       {row.kind === "special" ? <StatusPill appearance="info" kind="supported" label="Special" /> : null}
@@ -1383,13 +1383,13 @@ function OverviewContent({
                 ))}
               </div>
             ) : (
-              <div className="mt-5 flex flex-1 items-center rounded-[20px] border border-dashed border-[var(--input)] bg-white px-4 py-4">
+              <div className="mt-5 border-t border-dashed border-[var(--input)] pt-5">
                 <p className="text-sm font-medium leading-[1.6] text-[var(--foreground)]">{t("Not set")}</p>
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="flex h-full min-w-0 flex-col rounded-[24px] border border-[var(--input)] bg-[#FAFAFA] p-6">
+          <section className="min-w-0 xl:border-l xl:border-[var(--input)] xl:pl-10">
             <div className="flex items-start gap-3">
               <SectionIconBadge icon={Phone} tone="success" />
               <div className="min-w-0">
@@ -1398,7 +1398,7 @@ function OverviewContent({
               </div>
             </div>
 
-            <div className="mt-5 flex flex-1 flex-col rounded-[20px] border border-[var(--input)] bg-white p-5">
+            <div className="mt-5 border-t border-[var(--input)] pt-5">
               <p className="break-words whitespace-pre-wrap text-base font-semibold leading-[1.7] text-[var(--foreground)]">
                 {detail.contactInfo?.trim() || t("Not set")}
               </p>
@@ -1406,7 +1406,7 @@ function OverviewContent({
                 {detail.contactInfo?.trim() ? t("Use the contact details above when you need to reach this location.") : t("No contact information is available for this location yet.")}
               </p>
             </div>
-          </div>
+          </section>
         </div>
       </article>
     </div>
