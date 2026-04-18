@@ -43,6 +43,11 @@ import { useLocationDetail } from "@/hooks/use-location-detail";
 import { useViewerAccess } from "@/hooks/use-viewer-access";
 import { useI18n } from "@/i18n";
 import {
+  getStaffProficiencyOption,
+  normalizeStaffProficiencyLevel,
+  STAFF_PROFICIENCY_OPTIONS
+} from "@/lib/staff-proficiency";
+import {
   MastercardNuccBridgeError,
   createMastercardNuccBridgeSession,
   refreshMastercardNuccBridgeSession,
@@ -59,6 +64,7 @@ import type {
   LocationDetailRecord,
   LocationRecord,
   LocationReviewRecord,
+  StaffProficiencyLevel,
   LocationSupportInsight,
   SupportEvidenceStatus
 } from "@/types/location";
@@ -98,17 +104,6 @@ interface SuccessRateSummary {
   totalAttempts: number;
 }
 
-type StaffProficiencyLevel = 1 | 2 | 3 | 4 | 5;
-
-interface StaffProficiencyOption {
-  level: StaffProficiencyLevel;
-  label: string;
-  description: string;
-  badgeClassName: string;
-  cardClassName: string;
-  pillKind: "supported" | "unknown" | "limited" | "unsupported";
-}
-
 interface DetailStaffProficiencyShape {
   staffProficiencyLevel?: number | null;
   staffProficiencyUpdatedAt?: string | null;
@@ -129,49 +124,6 @@ const DEFAULT_SUCCESS_RATE_FILTER: SuccessRateDateFilter = {
   endDate: ""
 };
 
-const STAFF_PROFICIENCY_OPTIONS: StaffProficiencyOption[] = [
-  {
-    level: 1,
-    label: "Completely Unfamiliar",
-    description: "Has never used a POS device and does not know the basic workflow.",
-    badgeClassName: "bg-[#FEF2F2] text-[#B42318] ring-1 ring-inset ring-[#FECACA]",
-    cardClassName: "border-[#FECACA] bg-[#FFF7F7]",
-    pillKind: "unsupported"
-  },
-  {
-    level: 2,
-    label: "Knows the Basics",
-    description: "Understands what the POS is for but cannot complete a transaction alone.",
-    badgeClassName: "bg-[#FFF7ED] text-[#C2410C] ring-1 ring-inset ring-[#FED7AA]",
-    cardClassName: "border-[#FED7AA] bg-[#FFFBF5]",
-    pillKind: "limited"
-  },
-  {
-    level: 3,
-    label: "Needs Guided Operation",
-    description: "Can finish basic checkout steps with docs or someone guiding them.",
-    badgeClassName: "bg-[#FFFBEA] text-[#A16207] ring-1 ring-inset ring-[#FDE68A]",
-    cardClassName: "border-[#FDE68A] bg-[#FFFDF5]",
-    pillKind: "unknown"
-  },
-  {
-    level: 4,
-    label: "Independent Operator",
-    description: "Can independently handle everyday checkout and refund flows.",
-    badgeClassName: "bg-[#ECFDF3] text-[#027A48] ring-1 ring-inset ring-[#A7F3D0]",
-    cardClassName: "border-[#A7F3D0] bg-[#F5FFF9]",
-    pillKind: "supported"
-  },
-  {
-    level: 5,
-    label: "Highly Proficient",
-    description: "Comfortable with advanced flows such as reports, inventory, and issue handling.",
-    badgeClassName: "bg-[#E8FFF4] text-[#05603A] ring-1 ring-inset ring-[#6EE7B7]",
-    cardClassName: "border-[#6EE7B7] bg-[#F2FFF8]",
-    pillKind: "supported"
-  }
-];
-
 const DETAIL_TABS: Array<{ key: DetailContentTab; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "attempt", label: "Attempt" },
@@ -191,6 +143,7 @@ interface AttemptDraft {
   attemptYear: string;
   attemptMonth: string;
   attemptDay: string;
+  staffProficiencyLevel: StaffProficiencyLevel | null;
   notes: string;
 }
 
@@ -236,6 +189,7 @@ function createAttemptDraft(detail?: LocationDetailRecord | null): AttemptDraft 
     attemptYear: String(today.getFullYear()),
     attemptMonth: String(today.getMonth() + 1).padStart(2, "0"),
     attemptDay: String(today.getDate()).padStart(2, "0"),
+    staffProficiencyLevel: getStaffProficiencyLevel(detail),
     notes: ""
   };
 }
@@ -462,6 +416,115 @@ function AttemptDialogChip({
   );
 }
 
+function AttemptDialogStaffProficiencyCard({
+  value,
+  baselineValue,
+  updatedAt,
+  onChange
+}: {
+  value: StaffProficiencyLevel | null;
+  baselineValue: StaffProficiencyLevel | null;
+  updatedAt: string | null;
+  onChange: (level: StaffProficiencyLevel | null) => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const activeOption = getStaffProficiencyOption(value);
+  const lastUpdatedLabel = formatStaffProficiencyUpdatedAt(updatedAt);
+  const hasPendingChange = value !== baselineValue;
+
+  return (
+    <AttemptDialogCard title="5. Staff Proficiency">
+      <div
+        className={`rounded-[22px] border px-4 py-4 ${
+          activeOption ? activeOption.cardClassName : "border-dashed border-[var(--border)] bg-[var(--accent)]"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              className={`inline-flex h-10 min-w-10 items-center justify-center rounded-[12px] px-2 text-sm font-semibold ${
+                activeOption ? activeOption.badgeClassName : "bg-[var(--tile)] text-[var(--muted-foreground)]"
+              }`}
+            >
+              {activeOption ? `L${activeOption.level}` : "--"}
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-base font-semibold leading-[1.35] text-[var(--foreground)]">
+                  {activeOption ? t(activeOption.label) : t("Not set")}
+                </p>
+                {activeOption ? <StatusPill appearance="info" kind={activeOption.pillKind} label="Selected" /> : null}
+              </div>
+              <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                {activeOption
+                  ? t(activeOption.description)
+                  : t("Record how confident the observed staff seemed with the POS flow during this attempt.")}
+              </p>
+              {lastUpdatedLabel ? (
+                <p className="mt-3 text-xs font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
+                  {t("Current location value")} · {lastUpdatedLabel}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {hasPendingChange ? (
+            <button
+              className="inline-flex h-9 shrink-0 items-center rounded-pill border border-[var(--input)] px-3 text-sm font-medium leading-[1.2] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              onClick={() => onChange(baselineValue)}
+              type="button"
+            >
+              {t(baselineValue ? "Reset" : "Clear")}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3">
+        {STAFF_PROFICIENCY_OPTIONS.map((option) => {
+          const active = option.level === value;
+
+          return (
+            <button
+              aria-pressed={active}
+              className={`rounded-[20px] border px-4 py-4 text-left transition-colors duration-200 ${
+                active
+                  ? `${option.cardClassName} shadow-[0_10px_30px_rgba(15,23,42,0.06)]`
+                  : "border-[var(--input)] bg-white hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              }`}
+              key={option.level}
+              onClick={() => onChange(option.level)}
+              type="button"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className={`inline-flex h-9 min-w-9 items-center justify-center rounded-[10px] px-2 text-sm font-semibold ${
+                      active ? option.badgeClassName : "bg-[var(--tile)] text-[var(--muted-foreground)]"
+                    }`}
+                  >
+                    L{option.level}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-[1.35] text-[var(--foreground)]">{t(option.label)}</p>
+                    <p className="mt-1 text-sm leading-[1.55] text-[var(--muted-foreground)]">{t(option.description)}</p>
+                  </div>
+                </div>
+                {active ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" /> : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="text-sm leading-[1.6] text-[var(--muted-foreground)]">
+        {hasPendingChange
+          ? t("This updated level will be saved together with the new attempt.")
+          : t("Leave this unchanged if the current location-level proficiency still applies.")}
+      </p>
+    </AttemptDialogCard>
+  );
+}
+
 function parseDateBoundary(dateValue: string, boundary: "start" | "end"): number | null {
   if (!dateValue) return null;
   const parsed = new Date(`${dateValue}T${boundary === "start" ? "00:00:00.000" : "23:59:59.999"}`);
@@ -530,14 +593,6 @@ function formatStatusLabel(status: LocationRecord["status"]): string {
   return status === "inactive" ? "Inactive" : "Active";
 }
 
-function normalizeStaffProficiencyLevel(value: number | null | undefined): StaffProficiencyLevel | null {
-  if (value === 1 || value === 2 || value === 3 || value === 4 || value === 5) {
-    return value;
-  }
-
-  return null;
-}
-
 function getStaffProficiencyLevel(detail: LocationDetailRecord | null | undefined): StaffProficiencyLevel | null {
   return normalizeStaffProficiencyLevel((detail as DetailStaffProficiencyShape | null | undefined)?.staffProficiencyLevel);
 }
@@ -545,14 +600,6 @@ function getStaffProficiencyLevel(detail: LocationDetailRecord | null | undefine
 function getStaffProficiencyUpdatedAt(detail: LocationDetailRecord | null | undefined): string | null {
   const value = (detail as DetailStaffProficiencyShape | null | undefined)?.staffProficiencyUpdatedAt;
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function findStaffProficiencyOption(level: StaffProficiencyLevel | null): StaffProficiencyOption | null {
-  if (!level) {
-    return null;
-  }
-
-  return STAFF_PROFICIENCY_OPTIONS.find((option) => option.level === level) || null;
 }
 
 function formatStaffProficiencyUpdatedAt(value: string | null): string | null {
@@ -580,6 +627,14 @@ function formatStaffProficiencyMutationError(error: unknown): string {
   }
 
   return "Unable to update staff proficiency right now.";
+}
+
+function getStaffProficiencyMutation():
+  | ((location: LocationRecord, level: StaffProficiencyLevel | null) => Promise<unknown>)
+  | null {
+  const mutationService = locationService as unknown as StaffProficiencyMutationLocationService;
+
+  return mutationService.updateLocationStaffProficiency || mutationService.updateStaffProficiency || null;
 }
 
 function buildFallbackDetail(location: LocationRecord): LocationDetailRecord {
@@ -1078,7 +1133,7 @@ function StaffProficiencyCard({
   onClear: () => void;
 }): React.JSX.Element {
   const { t } = useI18n();
-  const activeOption = findStaffProficiencyOption(currentLevel);
+  const activeOption = getStaffProficiencyOption(currentLevel);
   const lastUpdatedLabel = formatStaffProficiencyUpdatedAt(updatedAt);
 
   return (
@@ -2343,9 +2398,10 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   const nuccFeedbackEligible = useMemo(() => isMastercardNuccEligible(attemptDraft), [attemptDraft]);
   const shouldSubmitToNucc = nuccFeedbackEligible && nuccFeedbackOptIn && !MASTERCARD_CN_WANSHENG_PREVIEW_ONLY;
   const nuccPrivacyPolicyUrl = getMastercardNuccPrivacyPolicyUrl(language);
-  const feedbackCardTitle = "7. Mastercard NUCC Feedback";
-  const acquirerDeviceCardTitle = "5. Acquirer & Device";
-  const paymentMethodCardTitle = "6. Payment Method";
+  const feedbackCardTitle = "8. Mastercard NUCC Feedback";
+  const acquirerDeviceCardTitle = "6. Acquirer & Device";
+  const paymentMethodCardTitle = "7. Payment Method";
+  const attemptBaselineStaffProficiencyLevel = getStaffProficiencyLevel(detailRecord);
 
   useEffect(() => {
     const pageSize = 5;
@@ -2588,6 +2644,9 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     setAttemptSaving(true);
     setAttemptMutationError(null);
     let nuccSubmitted = false;
+    let staffProficiencySyncError: string | null = null;
+    const nextStaffProficiencyLevel = normalizeStaffProficiencyLevel(attemptDraft.staffProficiencyLevel);
+    const previousStaffProficiencyLevel = getStaffProficiencyLevel(detailRecord);
 
     try {
       if (shouldSubmitToNucc) {
@@ -2622,18 +2681,38 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         isConclusiveFailure: attemptDraft.transactionStatus === "Fault"
       });
 
+      if (nextStaffProficiencyLevel !== previousStaffProficiencyLevel) {
+        const mutation = getStaffProficiencyMutation();
+
+        if (!mutation) {
+          staffProficiencySyncError = "The attempt was saved, but staff proficiency updates are not available yet.";
+        } else {
+          try {
+            await mutation(detailRecord, nextStaffProficiencyLevel);
+          } catch (proficiencyError) {
+            const message = formatStaffProficiencyMutationError(proficiencyError);
+            staffProficiencySyncError = `The attempt was saved, but staff proficiency could not be updated. ${message}`;
+          }
+        }
+      }
+
       await refreshDetail();
       setAttemptPage(1);
       setAttemptDialogOpen(false);
       setAttemptDraft(createAttemptDraft(detailRecord));
       resetNuccFeedbackState();
       setAttemptNotice(
-        shouldSubmitToNucc
+        staffProficiencySyncError
           ? {
-              kind: "success",
-              message: "The attempt was saved in Fluxa Map and submitted to Mastercard NUCC successfully."
+              kind: "error",
+              message: staffProficiencySyncError
             }
-          : null
+          : shouldSubmitToNucc
+            ? {
+                kind: "success",
+                message: "The attempt was saved in Fluxa Map and submitted to Mastercard NUCC successfully."
+              }
+            : null
       );
     } catch (attemptError) {
       if (attemptError instanceof MastercardNuccBridgeError) {
@@ -2757,10 +2836,7 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
 
     const previousLevel = getStaffProficiencyLevel(detailRecord);
     const previousUpdatedAt = getStaffProficiencyUpdatedAt(detailRecord);
-    const mutationService = locationService as unknown as StaffProficiencyMutationLocationService;
-    const mutation =
-      mutationService.updateLocationStaffProficiency ||
-      mutationService.updateStaffProficiency;
+    const mutation = getStaffProficiencyMutation();
 
     if (!mutation) {
       setStaffProficiencyError("Staff proficiency updates are not available yet.");
@@ -3125,6 +3201,13 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
                     <AttemptDialogField isSelect label="Day" onChange={(value) => handleAttemptFieldChange("attemptDay", value)} options={ATTEMPT_DAY_OPTIONS} placeholder="22" value={attemptDraft.attemptDay} />
                   </div>
                 </AttemptDialogCard>
+
+                <AttemptDialogStaffProficiencyCard
+                  baselineValue={attemptBaselineStaffProficiencyLevel}
+                  onChange={(value) => handleAttemptFieldChange("staffProficiencyLevel", value)}
+                  updatedAt={staffProficiencyUpdatedAt}
+                  value={attemptDraft.staffProficiencyLevel}
+                />
               </div>
 
               <div className="flex min-w-0 flex-col gap-5">
