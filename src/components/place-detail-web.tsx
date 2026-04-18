@@ -80,6 +80,12 @@ interface BusinessHoursRow {
   kind: "regular" | "special";
 }
 
+interface ContactInfoRow {
+  id: string;
+  label: string;
+  value: string;
+}
+
 interface SuccessRateDateFilter {
   mode: SuccessRateFilterMode;
   startDate: string;
@@ -678,6 +684,104 @@ function buildBusinessHoursRows(
   return rows;
 }
 
+const CONTACT_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+const CONTACT_PHONE_REGEX = /(?:\+?\d[\d\s\-()]{5,}|\b400[-\s]?\d{3}[-\s]?\d{4}\b|\b\d{3,4}[-\s]?\d{7,8}\b)/;
+const CONTACT_URL_REGEX = /^(https?:\/\/|www\.)/i;
+const CONTACT_ADDRESS_HINT_REGEX = /(省|市|区|县|路|街|道|号|层|室|弄|大厦|广场|center|building|tower|road|street|avenue|floor)/i;
+
+function buildContactInfoRows(
+  value: string | undefined,
+  t: (text: string) => string
+): ContactInfoRow[] {
+  const normalized = value?.trim() || "";
+
+  if (!normalized) {
+    return [];
+  }
+
+  let segments = normalized
+    .split(/\r?\n+|[;；|｜]+/g)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 1) {
+    segments = segments[0]
+      .split(/\s+[\/／·•]\s+/g)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+  }
+
+  return segments.map((segment, index) => {
+    const parsed = parseContactInfoSegment(segment, segments.length, index, t);
+
+    return {
+      id: `contact-${index}-${parsed.label}-${parsed.value}`,
+      ...parsed
+    };
+  });
+}
+
+function parseContactInfoSegment(
+  segment: string,
+  totalSegments: number,
+  index: number,
+  t: (text: string) => string
+): Omit<ContactInfoRow, "id"> {
+  const prefixRules = [
+    { label: "Phone", regex: /^(电话|联系电话|手机|座机|热线|tel|phone)[:：\s-]*/i },
+    { label: "Email", regex: /^(邮箱|电子邮箱|email|mail)[:：\s-]*/i },
+    { label: "WeChat", regex: /^(微信|wechat)[:：\s-]*/i },
+    { label: "Telegram", regex: /^(telegram|tg)[:：\s-]*/i },
+    { label: "Website", regex: /^(官网|网站|website|web|url)[:：\s-]*/i },
+    { label: "Address", regex: /^(地址|address|location)[:：\s-]*/i }
+  ];
+  const normalizedSegment = segment.trim();
+
+  for (const rule of prefixRules) {
+    if (rule.regex.test(normalizedSegment)) {
+      const stripped = normalizedSegment.replace(rule.regex, "").trim();
+
+      return {
+        label: t(rule.label),
+        value: stripped || normalizedSegment
+      };
+    }
+  }
+
+  if (CONTACT_EMAIL_REGEX.test(normalizedSegment)) {
+    return {
+      label: t("Email"),
+      value: normalizedSegment
+    };
+  }
+
+  if (CONTACT_URL_REGEX.test(normalizedSegment) || /^[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(normalizedSegment)) {
+    return {
+      label: t("Website"),
+      value: normalizedSegment
+    };
+  }
+
+  if (CONTACT_PHONE_REGEX.test(normalizedSegment)) {
+    return {
+      label: t("Phone"),
+      value: normalizedSegment
+    };
+  }
+
+  if (CONTACT_ADDRESS_HINT_REGEX.test(normalizedSegment)) {
+    return {
+      label: t("Address"),
+      value: normalizedSegment
+    };
+  }
+
+  return {
+    label: totalSegments === 1 ? t("Contact") : `${t("Contact")} ${index + 1}`,
+    value: normalizedSegment
+  };
+}
+
 function formatSupportedNetworkLabel(network: string): string {
   const normalized = network.trim().toLowerCase();
 
@@ -850,6 +954,9 @@ const FLAT_ACTION_BUTTON_CLASS =
 const FLAT_ICON_BUTTON_CLASS =
   "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--input)] bg-white text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]";
 const DETAIL_CARD_CLASS = "flex min-w-0 flex-col rounded-[40px] border border-[var(--input)] bg-white p-8";
+const DETAIL_INFO_SECTION_TITLE_CLASS = "text-base font-semibold leading-[1.35] text-[var(--foreground)]";
+const DETAIL_INFO_ROW_LABEL_CLASS = "text-[11px] font-semibold leading-[1.3] tracking-[0.04em] text-[var(--muted-foreground)]";
+const DETAIL_INFO_ROW_VALUE_CLASS = "mt-1.5 break-words whitespace-pre-wrap text-[17px] font-semibold leading-[1.45] tracking-[-0.01em] text-[var(--foreground)]";
 
 function SectionIconBadge({
   icon: Icon,
@@ -1239,6 +1346,7 @@ function OverviewContent({
   const { t } = useI18n();
   const networkRows = buildNetworkRows(detail);
   const businessHoursRows = buildBusinessHoursRows(detail.businessHours, t);
+  const contactInfoRows = buildContactInfoRows(detail.contactInfo, t);
   const paymentMethodRows = buildPaymentMethodRows(detail);
   const visibleNetworkRows = showUnknownNetworksOnly ? networkRows.filter((row) => row.status === "unknown") : networkRows;
   const visiblePaymentMethodRows = showLimitedPaymentMethodsOnly
@@ -1359,42 +1467,41 @@ function OverviewContent({
 
         <div className="mt-6 flex flex-col divide-y divide-[var(--input)]">
           <section className="min-w-0 pb-8">
-            <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Business Hours")}</h4>
-            <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-              {businessHoursRows.length > 0 ? t("Displayed in the order people usually read them.") : t("No business hours have been added yet.")}
-            </p>
+            <h4 className={DETAIL_INFO_SECTION_TITLE_CLASS}>{t("Business Hours")}</h4>
 
             {businessHoursRows.length > 0 ? (
-              <div className="mt-5 flex flex-1 flex-col divide-y divide-[var(--input)] border-t border-[var(--input)]">
+              <div className="mt-5 flex flex-1 flex-col divide-y divide-[var(--input)]">
                 {businessHoursRows.map((row) => (
-                  <div className="py-4 first:pt-5 last:pb-0" key={row.id}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold leading-[1.5] text-[var(--foreground)]">{row.label}</p>
-                      {row.kind === "special" ? <StatusPill appearance="info" kind="supported" label="Special" /> : null}
-                    </div>
-                    <p className="mt-2 break-words text-sm leading-[1.6] text-[var(--muted-foreground)]">{row.value}</p>
+                  <div className="py-4 first:pt-0 last:pb-0" key={row.id}>
+                    <p className={DETAIL_INFO_ROW_LABEL_CLASS}>{row.label}</p>
+                    <p className={DETAIL_INFO_ROW_VALUE_CLASS}>{row.value}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="mt-5 border-t border-dashed border-[var(--input)] pt-5">
+              <div className="mt-5 border-t border-dashed border-[var(--input)] pt-4">
                 <p className="text-sm font-medium leading-[1.6] text-[var(--foreground)]">{t("Not set")}</p>
               </div>
             )}
           </section>
 
           <section className="min-w-0 pt-8">
-            <h4 className="text-[20px] font-bold leading-[1.2] tracking-[-0.2px] text-[var(--foreground)]">{t("Contact Information")}</h4>
-            <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t("Use the best way to reach this location.")}</p>
+            <h4 className={DETAIL_INFO_SECTION_TITLE_CLASS}>{t("Contact Information")}</h4>
 
-            <div className="mt-5 border-t border-[var(--input)] pt-5">
-              <p className="break-words whitespace-pre-wrap text-sm font-semibold leading-[1.7] text-[var(--foreground)]">
-                {detail.contactInfo?.trim() || t("Not set")}
-              </p>
-              <p className="mt-4 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                {detail.contactInfo?.trim() ? t("Use the contact details above when you need to reach this location.") : t("No contact information is available for this location yet.")}
-              </p>
-            </div>
+            {contactInfoRows.length > 0 ? (
+              <div className="mt-5 flex flex-col divide-y divide-[var(--input)]">
+                {contactInfoRows.map((row) => (
+                  <div className="py-4 first:pt-0 last:pb-0" key={row.id}>
+                    <p className={DETAIL_INFO_ROW_LABEL_CLASS}>{row.label}</p>
+                    <p className={DETAIL_INFO_ROW_VALUE_CLASS}>{row.value}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-5 border-t border-dashed border-[var(--input)] pt-4">
+                <p className="text-sm font-medium leading-[1.6] text-[var(--foreground)]">{t("Not set")}</p>
+              </div>
+            )}
           </section>
         </div>
       </article>
