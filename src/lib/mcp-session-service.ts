@@ -22,7 +22,7 @@ interface SessionCreateResponse {
 }
 
 function getMcpServerUrl(): string {
-  const configured = import.meta.env.VITE_MCP_SERVER_URL;
+  const configured = typeof import.meta.env.VITE_MCP_SERVER_URL === "string" ? import.meta.env.VITE_MCP_SERVER_URL.trim() : "";
   return (configured || DEFAULT_MCP_SERVER_URL).replace(/\/$/, "");
 }
 

@@ -1,8 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder-key";
-export const isSupabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+function normalizeEnvValue(value: string | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+const supabaseUrl = normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL) || "https://placeholder.supabase.co";
+const supabaseAnonKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_ANON_KEY) || "placeholder-key";
+export const isSupabaseConfigured = Boolean(
+  normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL) && normalizeEnvValue(import.meta.env.VITE_SUPABASE_ANON_KEY)
+);
 
 if (!isSupabaseConfigured) {
   console.warn("Supabase environment variables are missing. Fluxa backend features will stay read-only.");

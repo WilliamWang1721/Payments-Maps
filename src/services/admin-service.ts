@@ -4,7 +4,7 @@ import type { AdminStatisticsRecord, AdminUserListRecord } from "@/types/admin";
 const DEFAULT_ADMIN_SERVER_URL = typeof window !== "undefined" ? window.location.origin : "http://localhost:3030";
 
 function getAdminServerUrl(): string {
-  const configured = import.meta.env.VITE_MCP_SERVER_URL;
+  const configured = typeof import.meta.env.VITE_MCP_SERVER_URL === "string" ? import.meta.env.VITE_MCP_SERVER_URL.trim() : "";
   return (configured || DEFAULT_ADMIN_SERVER_URL).replace(/\/$/, "");
 }
 
