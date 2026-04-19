@@ -8,10 +8,12 @@ import { MAP_THEME_OPTIONS, type MapThemeKey } from "@/lib/map-theme";
 interface WebSettingsProps {
   addLocationAutoReadMerchantNameEnabled: boolean;
   addLocationSmartAddEnabled: boolean;
+  isAdmin?: boolean;
   mapTheme: MapThemeKey;
   onAddLocationAutoReadMerchantNameChange: (enabled: boolean) => void;
   onAddLocationSmartAddChange: (enabled: boolean) => void;
   onMapThemeChange: (theme: MapThemeKey) => void;
+  onOpenErrorReportsAdmin?: () => void;
 }
 
 function Toggle({
@@ -103,10 +105,12 @@ function BetaBadge(): React.JSX.Element {
 export function WebSettings({
   addLocationAutoReadMerchantNameEnabled,
   addLocationSmartAddEnabled,
+  isAdmin = false,
   mapTheme,
   onAddLocationAutoReadMerchantNameChange,
   onAddLocationSmartAddChange,
-  onMapThemeChange
+  onMapThemeChange,
+  onOpenErrorReportsAdmin
 }: WebSettingsProps): React.JSX.Element {
   const { language, setLanguage, t } = useI18n();
   const [theme, setTheme] = useState("Auto (System Default)");
@@ -276,6 +280,27 @@ export function WebSettings({
             />
           </div>
         </article>
+
+        {isAdmin && onOpenErrorReportsAdmin ? (
+          <article className="rounded-[24px] border border-[var(--input)] bg-white p-6">
+            <h2 className="text-[18px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Admin Tools")}</h2>
+            <div className="mt-4 flex flex-col gap-4">
+              <SettingRow
+                control={
+                  <button
+                    className="inline-flex h-10 items-center justify-center rounded-pill bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
+                    onClick={onOpenErrorReportsAdmin}
+                    type="button"
+                  >
+                    {t("Open Error Report Queue")}
+                  </button>
+                }
+                description={t("Review, process, and close user-submitted error reports from Location Detail.")}
+                title={t("Error Report Queue")}
+              />
+            </div>
+          </article>
+        ) : null}
 
         <footer className="mt-auto px-1 pt-2 text-center text-[11px] leading-[1.4] text-[var(--muted-foreground)]">
           致谢：小红书@momoPT

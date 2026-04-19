@@ -38,6 +38,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
+import { LocationErrorReportDialog } from "@/components/location-error-report-dialog";
 import { TabsWarp } from "@/components/ui/tabs-warp";
 import { useLocationDetail } from "@/hooks/use-location-detail";
 import { useViewerAccess } from "@/hooks/use-viewer-access";
@@ -68,6 +69,11 @@ import type {
   LocationSupportInsight,
   SupportEvidenceStatus
 } from "@/types/location";
+import type {
+  LocationErrorReportCategory,
+  LocationErrorReportRelatedReviewSource,
+  LocationErrorReportSeverity
+} from "@/types/location-error-report";
 
 type DetailContentTab = "overview" | "attempt" | "reviews";
 type SuccessRateFilterMode = "all" | "custom";
@@ -157,6 +163,20 @@ interface ReviewSuccessState {
   mode: ReviewDraft["mode"];
   rating: number | null;
   content: string;
+}
+
+interface ErrorReportDialogSeed {
+  category?: LocationErrorReportCategory;
+  severity?: LocationErrorReportSeverity;
+  summary?: string;
+  details?: string;
+  fieldKey?: string;
+  contextTab?: DetailContentTab | null;
+  relatedAttemptId?: string | null;
+  relatedReviewId?: string | null;
+  relatedReviewSource?: LocationErrorReportRelatedReviewSource | null;
+  evidenceText?: string;
+  reportContext?: Record<string, unknown>;
 }
 
 interface AttemptNotice {
@@ -2122,6 +2142,7 @@ function ReviewComposerDialog({
   onContentChange,
   onModeChange,
   onOpenChange,
+  onReportError,
   onRatingChange,
   success,
   onSubmit,
@@ -2135,6 +2156,7 @@ function ReviewComposerDialog({
   onContentChange: (value: string) => void;
   onModeChange: (mode: ReviewDraft["mode"]) => void;
   onOpenChange: (open: boolean) => void;
+  onReportError?: () => void;
   onRatingChange: (value: number) => void;
   success: ReviewSuccessState | null;
   onSubmit: () => void;
@@ -2245,6 +2267,17 @@ function ReviewComposerDialog({
                 {error ? (
                   <div className="rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">
                     {t(error)}
+                    {onReportError ? (
+                      <div className="mt-3">
+                        <button
+                          className="inline-flex h-9 items-center rounded-pill border border-[#F5B8AA] px-4 text-sm font-medium text-[#7A1F0E] transition-colors duration-200 hover:bg-[#FFE9E4]"
+                          onClick={onReportError}
+                          type="button"
+                        >
+                          {t("Report This Error")}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -2333,7 +2366,7 @@ interface PlaceDetailWebProps {
 export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLocation, onViewMap }: PlaceDetailWebProps): React.JSX.Element {
   const { language, t } = useI18n();
   const { detail, loading, error, refreshDetail } = useLocationDetail(location);
-  const { isAdmin, viewerId, loading: viewerAccessLoading } = useViewerAccess({
+  const { isAdmin, isTrial, viewerId, loading: viewerAccessLoading } = useViewerAccess({
     enabled: true
   });
   const recordedHistoryLocationIdRef = useRef<string | null>(null);
@@ -2363,6 +2396,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewMutationError, setReviewMutationError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<ReviewSuccessState | null>(null);
+  const [errorReportDialogOpen, setErrorReportDialogOpen] = useState(false);
+  const [errorReportDialogSeed, setErrorReportDialogSeed] = useState<ErrorReportDialogSeed | undefined>(undefined);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [highlightedAttemptId, setHighlightedAttemptId] = useState<string | null>(null);
   const [selectedAttempt, setSelectedAttempt] = useState<LocationAttemptRecord | null>(null);
@@ -2512,6 +2547,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
     setReviewSaving(false);
     setReviewMutationError(null);
     setReviewSuccess(null);
+    setErrorReportDialogOpen(false);
+    setErrorReportDialogSeed(undefined);
     setDeletingReviewId(null);
     setHighlightedAttemptId(null);
     setSelectedAttempt(null);
@@ -2607,6 +2644,23 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
 
     void initializeNuccBridgeSession();
   };
+
+  const openErrorReportDialog = (seed?: ErrorReportDialogSeed): void => {
+    setErrorReportDialogSeed(seed);
+    setErrorReportDialogOpen(true);
+  };
+
+  const buildFeatureBugReportSeed = (message: string, reportContext?: Record<string, unknown>): ErrorReportDialogSeed => ({
+    category: "feature_bug",
+    severity: "high",
+    summary: `Location Detail issue on ${detailRecord?.name || location?.name || "current location"}`,
+    details: message,
+    contextTab: activeTab,
+    reportContext: {
+      source: "location_detail",
+      ...reportContext
+    }
+  });
 
   const handleAddAttempt = async (): Promise<void> => {
     if (!detailRecord) {
@@ -2887,7 +2941,26 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         </div>
       ) : null}
 
-      {error ? <div className="rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">{error}</div> : null}
+      {error ? (
+        <div className="rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{error}</span>
+            <button
+              className="inline-flex h-9 items-center rounded-pill border border-[#F5B8AA] px-4 text-sm font-medium text-[#7A1F0E] transition-colors duration-200 hover:bg-[#FFE9E4]"
+              onClick={() =>
+                openErrorReportDialog(
+                  buildFeatureBugReportSeed(error, {
+                    trigger: "detail_load_error_banner"
+                  })
+                )
+              }
+              type="button"
+            >
+              {t("Report This Error")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <header className="flex flex-wrap items-start justify-between gap-4 pb-4">
         <div className="min-w-0 space-y-2">
@@ -2928,6 +3001,23 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         </div>
 
         <div className="flex items-center gap-3">
+          {!viewerAccessLoading ? (
+            <button
+              className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium leading-[1.4286] text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              onClick={() =>
+                openErrorReportDialog({
+                  contextTab: activeTab,
+                  reportContext: {
+                    trigger: "detail_header_button"
+                  }
+                })
+              }
+              type="button"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>{t("Report Error")}</span>
+            </button>
+          ) : null}
           {onDeleteLocation && isAdmin && !viewerAccessLoading ? (
             <button
               className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[rgba(220,38,38,0.18)] bg-[rgba(254,242,242,0.88)] px-4 text-sm font-medium leading-[1.4286] text-[#991b1b] transition-colors duration-200 hover:bg-[rgba(254,226,226,0.96)]"
@@ -3123,6 +3213,16 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
             setReviewDraft(createReviewDraft());
           }
         }}
+        onReportError={() =>
+          reviewMutationError
+            ? openErrorReportDialog(
+                buildFeatureBugReportSeed(reviewMutationError, {
+                  trigger: "review_submit_error",
+                  reviewMode: reviewDraft.mode
+                })
+              )
+            : undefined
+        }
         onRatingChange={(value) =>
           setReviewDraft((prev) => ({
             ...prev,
@@ -3415,7 +3515,25 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
             ) : null}
 
             {attemptMutationError ? (
-              <div className="mt-5 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">{attemptMutationError}</div>
+              <div className="mt-5 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm text-[#7A1F0E]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span>{attemptMutationError}</span>
+                  <button
+                    className="inline-flex h-9 items-center rounded-pill border border-[#F5B8AA] px-4 text-sm font-medium text-[#7A1F0E] transition-colors duration-200 hover:bg-[#FFE9E4]"
+                    onClick={() =>
+                      openErrorReportDialog(
+                        buildFeatureBugReportSeed(attemptMutationError, {
+                          trigger: "attempt_submit_error",
+                          attemptDraft
+                        })
+                      )
+                    }
+                    type="button"
+                  >
+                    {t("Report This Error")}
+                  </button>
+                </div>
+              </div>
             ) : null}
           </div>
 
@@ -3498,6 +3616,20 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LocationErrorReportDialog
+        activeTab={activeTab}
+        initialDraft={errorReportDialogSeed}
+        isTrial={isTrial}
+        location={detailRecord}
+        onOpenChange={(open) => {
+          setErrorReportDialogOpen(open);
+          if (!open) {
+            setErrorReportDialogSeed(undefined);
+          }
+        }}
+        open={errorReportDialogOpen}
+      />
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { AddBrandSuccess } from "@/components/add-brand-success";
 import { AddBrandWizard } from "@/components/add-brand-wizard";
+import { AdminLocationErrorReports } from "@/components/admin-location-error-reports";
 import { AddLocationSuccess } from "@/components/add-location-success";
 import { AddLocationWizard } from "@/components/add-location-wizard";
 import { BrandDetailWeb } from "@/components/brand-detail-web";
@@ -22,6 +23,7 @@ import { invalidateFluxaLocationMapIndexCache, useFluxaLocationMapIndex } from "
 import { invalidateFluxaLocationSearchDirectoryCache, useFluxaLocationSearchDirectory } from "@/hooks/use-fluxa-location-search-directory";
 import { invalidateFluxaMapPartitionCaches, useFluxaMapPartitions } from "@/hooks/use-fluxa-map-partitions";
 import { useFluxaLocations } from "@/hooks/use-fluxa-locations";
+import { useViewerAccess } from "@/hooks/use-viewer-access";
 import { useViewerProfile } from "@/hooks/use-viewer-profile";
 import { buildLocationSearchIndex, searchLocationSearchIndex } from "@/lib/location-search";
 import { buildFluxaPagePath, isSidebarTab, parseFluxaPageRoute, type FluxaPageRoute, type FluxaPageView } from "@/lib/fluxa-routes";
@@ -34,7 +36,7 @@ const ADD_LOCATION_AUTO_READ_MERCHANT_NAME_STORAGE_KEY = "fluxa_add_location_aut
 const ADD_LOCATION_SMART_ADD_STORAGE_KEY = "fluxa_add_location_smart_add_beta";
 const MCP_BETA_STORAGE_KEY = "fluxa_mcp_beta_enabled";
 
-type OverlayView = "cards" | "addLocation" | "addLocationSuccess" | "addBrand" | "addBrandSuccess" | "webSettings" | "mcpSettings";
+type OverlayView = "cards" | "addLocation" | "addLocationSuccess" | "addBrand" | "addBrandSuccess" | "webSettings" | "mcpSettings" | "adminErrorReports";
 type AppView = FluxaPageView | OverlayView;
 type ListPagingMode = "paged" | "scroll";
 type BrandPagingMode = "paged" | "scroll";
@@ -119,6 +121,9 @@ export default function App({
     return window.localStorage.getItem(MCP_BETA_STORAGE_KEY) === "true";
   });
   const activeView: AppView = overlayView ?? pageRoute.view;
+  const { isAdmin } = useViewerAccess({
+    enabled: true
+  });
   const sidebarActiveTab: SidebarTab = isSidebarTab(activeView)
     ? activeView
     : isSidebarTab(pageRoute.view)
@@ -210,6 +215,14 @@ export default function App({
 
   const openMcpSettings = (): void => {
     setOverlayView("mcpSettings");
+  };
+
+  const openAdminErrorReports = (): void => {
+    if (!isAdmin) {
+      return;
+    }
+
+    setOverlayView("adminErrorReports");
   };
 
   const openCards = (options?: { create?: boolean }): void => {
@@ -487,6 +500,28 @@ export default function App({
     })();
   };
 
+  const handleOpenLocationFromAdminReports = async (locationId: string): Promise<void> => {
+    let matchedLocation =
+      locations.find((location) => location.id === locationId)
+      || mapLocations.find((location) => location.id === locationId)
+      || listDirectoryLocations.find((location) => location.id === locationId);
+
+    if (!matchedLocation) {
+      const fetchedLocations = await locationService.listLocationsByIds([locationId]);
+      matchedLocation = fetchedLocations[0] || null;
+    }
+
+    if (matchedLocation) {
+      setSelectedLocation(matchedLocation);
+    }
+
+    navigatePage({
+      view: "detail",
+      locationId,
+      from: "map"
+    });
+  };
+
   return (
     <div className="h-dvh min-h-dvh w-full overflow-hidden bg-[var(--background)] font-sans text-[var(--foreground)]">
       <main className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] md:flex-row">
@@ -598,10 +633,12 @@ export default function App({
             <WebSettings
               addLocationAutoReadMerchantNameEnabled={addLocationAutoReadMerchantNameEnabled}
               addLocationSmartAddEnabled={addLocationSmartAddEnabled}
+              isAdmin={isAdmin}
               mapTheme={mapTheme}
               onAddLocationAutoReadMerchantNameChange={handleAddLocationAutoReadMerchantNameChange}
               onAddLocationSmartAddChange={handleAddLocationSmartAddChange}
               onMapThemeChange={handleMapThemeChange}
+              onOpenErrorReportsAdmin={openAdminErrorReports}
             />
           </div>
         ) : null}
@@ -611,6 +648,15 @@ export default function App({
             <WebMcpSettings
               mcpEnabled={mcpEnabled}
               onMcpEnabledChange={handleMcpEnabledChange}
+            />
+          </div>
+        ) : null}
+
+        {activeView === "adminErrorReports" ? (
+          <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
+            <AdminLocationErrorReports
+              isAdmin={isAdmin}
+              onOpenLocation={handleOpenLocationFromAdminReports}
             />
           </div>
         ) : null}
