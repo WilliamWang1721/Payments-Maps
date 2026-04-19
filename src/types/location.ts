@@ -33,6 +33,7 @@ export interface LocationAttemptRecord {
   deviceStatus?: LocationStatus;
   checkoutLocation?: string;
   isConclusiveFailure?: boolean;
+  staffProficiencyLevel?: StaffProficiencyLevel | null;
 }
 
 export interface LocationReviewRecord {
@@ -105,7 +106,7 @@ export interface LocationSupportInsight {
 export interface LocationSupportInsights {
   networks: LocationSupportInsight[];
   paymentMethods: LocationSupportInsight[];
-  staffProficiency?: LocationSupportInsight | null;
+  staffProficiency: LocationSupportInsight[];
 }
 
 export interface LocationDetailRecord extends LocationRecord {
@@ -134,6 +135,7 @@ export interface CreateLocationAttemptInput {
   notes?: string;
   attemptedAt?: string;
   isConclusiveFailure?: boolean;
+  staffProficiencyLevel?: StaffProficiencyLevel | null;
 }
 
 export interface CreateLocationReviewInput {

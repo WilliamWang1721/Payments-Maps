@@ -672,7 +672,7 @@ function buildFallbackDetail(location: LocationRecord): LocationDetailRecord {
     supportInsights: {
       networks: [],
       paymentMethods: [],
-      staffProficiency: null
+      staffProficiency: []
     }
   };
 }
@@ -1144,7 +1144,7 @@ function StaffProficiencyCard({
   currentLevel,
   updatedAt,
   error,
-  supportInsight,
+  sourceInsights,
   onOpenSourceDetails
 }: {
   currentLevel: StaffProficiencyLevel | null;
@@ -1152,21 +1152,20 @@ function StaffProficiencyCard({
   saving: boolean;
   savingLevel: StaffProficiencyLevel | null;
   error: string | null;
-  supportInsight?: LocationSupportInsight | null;
+  sourceInsights: LocationSupportInsight[];
   onSelectLevel: (level: StaffProficiencyLevel) => void;
   onClear: () => void;
-  onOpenSourceDetails?: () => void;
+  onOpenSourceDetails: (insight: LocationSupportInsight) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
   const activeOption = getStaffProficiencyOption(currentLevel);
   const lastUpdatedLabel = formatStaffProficiencyUpdatedAt(updatedAt);
+  const hasSourceInsights = sourceInsights.length > 0;
 
   return (
     <article className={`${DETAIL_CARD_CLASS} h-full xl:col-span-1`}>
       <SectionHeader
-        buttonLabel={supportInsight ? "Source Details" : undefined}
         meta={activeOption ? <StatusPill appearance="info" kind="supported" label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
-        onAction={supportInsight ? onOpenSourceDetails : undefined}
         title="Staff Proficiency"
       />
 
@@ -1198,28 +1197,39 @@ function StaffProficiencyCard({
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col">
-        {STAFF_PROFICIENCY_OPTIONS.map((option) => {
-          const active = currentLevel === option.level;
+      <div className="mt-6 flex flex-col gap-3">
+        {hasSourceInsights ? (
+          sourceInsights.map((insight, idx) => {
+            const levelMatch = insight.key.match(/^staff-proficiency:(\d)$/);
+            const level = levelMatch ? Number(levelMatch[1]) as StaffProficiencyLevel : null;
 
-          return (
-            <div
-              className={`flex items-start justify-between gap-3 px-0 py-4 ${option.level !== STAFF_PROFICIENCY_OPTIONS.length ? "border-b border-[var(--input)]" : ""}`}
-              key={option.level}
-            >
-              <div className="flex min-w-0 items-start gap-3">
-                <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-[8px] px-2 text-sm font-semibold ${active ? "bg-[var(--color-info)] text-[var(--color-info-foreground)]" : "bg-[var(--tile)] text-[var(--muted-foreground)]"}`}>
-                  {option.level}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-base font-semibold leading-[1.35] text-[var(--foreground)]">{t(option.label)}</p>
-                  <p className="mt-1 text-sm leading-[1.6] text-[var(--muted-foreground)]">{t(option.description)}</p>
+            return (
+              <button
+                className={`flex min-h-[64px] items-center justify-between gap-3 rounded-[20px] border border-[var(--input)] bg-white px-4 py-4 text-left transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] ${idx !== sourceInsights.length - 1 ? "" : ""}`}
+                key={insight.key}
+                onClick={() => onOpenSourceDetails(insight)}
+                type="button"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-[8px] bg-[var(--tile)] px-2 text-sm font-semibold text-[var(--primary)]">
+                    {level ? `L${level}` : "--"}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold leading-[1.2] text-[var(--foreground)]">{t(insight.title)}</p>
+                    <p className="mt-1 text-sm leading-[1.45] text-[var(--muted-foreground)]">
+                      {t("Recorded staff proficiency entries for this location.")}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              {active ? <StatusPill appearance="info" kind="supported" label="Current Level" /> : null}
-            </div>
-          );
-        })}
+                <ChevronRight className="h-4 w-4 text-[var(--muted-foreground)]" />
+              </button>
+            );
+          })
+        ) : (
+          <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+            {t("No staff proficiency records have been added yet.")}
+          </div>
+        )}
       </div>
 
       {error ? (
@@ -1430,7 +1440,7 @@ function OverviewContent({
   const businessHoursRows = buildBusinessHoursRows(detail.businessHours, t);
   const contactInfoRows = buildContactInfoRows(detail.contactInfo, t);
   const paymentMethodRows = buildPaymentMethodRows(detail);
-  const staffProficiencyInsight = detail.supportInsights?.staffProficiency || null;
+  const staffProficiencyInsights = detail.supportInsights?.staffProficiency || [];
   const visibleNetworkRows = showUnknownNetworksOnly ? networkRows.filter((row) => row.status === "unknown") : networkRows;
   const visiblePaymentMethodRows = showLimitedPaymentMethodsOnly
     ? paymentMethodRows.filter((row) => row.status === "limited" || row.status === "unsupported")
@@ -1532,11 +1542,11 @@ function OverviewContent({
         currentLevel={proficiencyLevel}
         error={proficiencyError}
         onClear={onClearProficiencyLevel}
-        onOpenSourceDetails={staffProficiencyInsight ? () => onOpenSupportInsight(staffProficiencyInsight) : undefined}
+        onOpenSourceDetails={(insight) => onOpenSupportInsight(insight)}
         onSelectLevel={onSelectProficiencyLevel}
         saving={proficiencySaving}
         savingLevel={proficiencySavingLevel}
-        supportInsight={staffProficiencyInsight}
+        sourceInsights={staffProficiencyInsights}
         updatedAt={proficiencyUpdatedAt}
       />
 
@@ -1608,58 +1618,35 @@ function SupportSourceDialog({
   const { t } = useI18n();
   const officialEvidence = insight?.evidence.filter((item) => item.kind === "official") || [];
   const attemptEvidence = insight?.evidence.filter((item) => item.kind === "attempt") || [];
+  const isStaffProficiencyInsight = Boolean(insight?.key.startsWith("staff-proficiency:"));
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-h-[94vh] max-w-[min(1120px,calc(100vw-1.5rem))] gap-0 overflow-hidden rounded-[32px] p-0">
         <DialogHeader className="border-b border-[var(--input)] px-6 py-5 sm:px-8">
-          <DialogTitle>{insight ? `${insight.title} · ${t("Source Details")}` : t("Source Details")}</DialogTitle>
-          <DialogDescription>{t("Review the current status, official data, and recorded evidence for this item.")}</DialogDescription>
+          <DialogTitle>{insight ? `${t(insight.title)} · ${t("Source Details")}` : t("Source Details")}</DialogTitle>
+          <DialogDescription>
+            {isStaffProficiencyInsight
+              ? t("Review the recorded staff proficiency entries for this location.")
+              : t("Review the current status, official data, and recorded evidence for this item.")}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
           {insight ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_repeat(3,minmax(0,1fr))]">
-                <div className="rounded-[22px] border border-[var(--input)] bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Current Status")}</p>
-                  <div className="mt-3 flex items-center gap-3">
-                    <StatusPill
-                      kind={insight.status === "unsupported" ? "unsupported" : insight.status === "limited" ? "limited" : insight.status === "unknown" ? "unknown" : "supported"}
-                      label={formatSupportStatusLabel(insight.status)}
-                    />
-                  </div>
+            isStaffProficiencyInsight ? (
+              <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
+                <div>
+                  <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Record Sources")}</p>
+                  <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">
+                    {t("Recorded staff proficiency entries for this location.")}
+                  </p>
                 </div>
 
-                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Positive Attempts")}</p>
-                  <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.supportingAttempts}</p>
-                </div>
-
-                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Conflicting Attempts")}</p>
-                  <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.conflictingAttempts}</p>
-                </div>
-
-                <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Official Data")}</p>
-                  <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.officialSources}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Record Sources")}</p>
-                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("System-recorded payment attempts that support or challenge this item.")}</p>
-                    </div>
-                    <StatusPill label={String(attemptEvidence.length)} />
-                  </div>
-
-                  <div className="mt-5 flex-1 overflow-y-auto pr-1">
-                    <div className="flex flex-col gap-3">
-                      {attemptEvidence.length > 0 ? attemptEvidence.map((item) => (
+                <div className="mt-5 flex-1 overflow-y-auto pr-1">
+                  {attemptEvidence.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {attemptEvidence.map((item) => (
                         <button
                           className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4 text-left transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-white"
                           key={item.id}
@@ -1668,88 +1655,167 @@ function SupportSourceDialog({
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <StatusPill
-                                  kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
-                                  label={formatSupportStatusLabel(item.status)}
-                                />
-                                {item.invalidated ? <StatusPill kind="limited" label="Challenging" /> : null}
-                              </div>
+                              <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{t(item.title)}</p>
                               <div className="mt-3 grid grid-cols-1 gap-2 text-sm leading-[1.6] text-[var(--muted-foreground)] sm:grid-cols-2">
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Card Used")}</p>
-                                  <p className="mt-1 text-[var(--foreground)]">{item.cardName || "-"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Payment Method")}</p>
-                                  <p className="mt-1 text-[var(--foreground)]">{item.paymentMethodLabel || "-"}</p>
-                                </div>
                                 <div>
                                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("User")}</p>
                                   <p className="mt-1 text-[var(--foreground)]">{item.addedBy || "-"}</p>
                                 </div>
                                 <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Card Network")}</p>
-                                  <p className="mt-1 text-[var(--foreground)]">{item.networkLabel || "-"}</p>
-                                </div>
-                                <div className="sm:col-span-2">
                                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Transaction Time")}</p>
                                   <p className="mt-1 text-[var(--foreground)]">{item.dateTimeLabel || "-"}</p>
                                 </div>
+                                <div className="sm:col-span-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Notes")}</p>
+                                  <p className="mt-1 text-[var(--foreground)]">{item.notes?.trim() || "-"}</p>
+                                </div>
                               </div>
                             </div>
-                            {item.attemptId ? (
-                              <span className="inline-flex items-center gap-1 text-sm font-medium leading-[1.4] text-[var(--primary)]">
-                                <span>{t("View Attempt")}</span>
-                                <ChevronRight className="h-4 w-4" />
-                              </span>
-                            ) : null}
+                            {item.attemptId ? <ChevronRight className="mt-0.5 h-4 w-4 text-[var(--muted-foreground)]" /> : null}
                           </div>
                         </button>
-                      )) : (
-                        <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                          {t("No record source has been added for this item yet.")}
-                        </div>
-                      )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                      {t("No staff proficiency records have been added yet.")}
+                    </div>
+                  )}
+                </div>
+              </article>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_repeat(3,minmax(0,1fr))]">
+                  <div className="rounded-[22px] border border-[var(--input)] bg-white px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Current Status")}</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <StatusPill
+                        kind={insight.status === "unsupported" ? "unsupported" : insight.status === "limited" ? "limited" : insight.status === "unknown" ? "unknown" : "supported"}
+                        label={formatSupportStatusLabel(insight.status)}
+                      />
                     </div>
                   </div>
-                </article>
 
-                <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Official Data Sources")}</p>
-                      <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Official data currently attached to this location for this item.")}</p>
-                    </div>
-                    <StatusPill label={String(officialEvidence.length)} />
+                  <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Positive Attempts")}</p>
+                    <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.supportingAttempts}</p>
                   </div>
 
-                  <div className="mt-5 flex-1 overflow-y-auto pr-1">
-                    <div className="flex flex-col gap-3">
-                      {officialEvidence.length > 0 ? officialEvidence.map((item) => (
-                        <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{t(item.title)}</p>
-                            <StatusPill
-                              kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
-                              label={formatSupportStatusLabel(item.status)}
-                            />
-                            {item.invalidated ? <StatusPill kind="limited" label="Needs Review" /> : null}
+                  <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Conflicting Attempts")}</p>
+                    <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.conflictingAttempts}</p>
+                  </div>
+
+                  <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Official Data")}</p>
+                    <p className="mt-3 text-2xl font-bold leading-[1.1] text-[var(--foreground)]">{insight.counters.officialSources}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Record Sources")}</p>
+                        <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("System-recorded payment attempts that support or challenge this item.")}</p>
+                      </div>
+                      <StatusPill label={String(attemptEvidence.length)} />
+                    </div>
+
+                    <div className="mt-5 flex-1 overflow-y-auto pr-1">
+                      <div className="flex flex-col gap-3">
+                        {attemptEvidence.length > 0 ? attemptEvidence.map((item) => (
+                          <button
+                            className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4 text-left transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-white"
+                            key={item.id}
+                            onClick={() => item.attemptId && onJumpToAttempt(item.attemptId)}
+                            type="button"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <StatusPill
+                                    kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
+                                    label={formatSupportStatusLabel(item.status)}
+                                  />
+                                  {item.invalidated ? <StatusPill kind="limited" label="Challenging" /> : null}
+                                </div>
+                                <div className="mt-3 grid grid-cols-1 gap-2 text-sm leading-[1.6] text-[var(--muted-foreground)] sm:grid-cols-2">
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Card Used")}</p>
+                                    <p className="mt-1 text-[var(--foreground)]">{item.cardName || "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Payment Method")}</p>
+                                    <p className="mt-1 text-[var(--foreground)]">{item.paymentMethodLabel || "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("User")}</p>
+                                    <p className="mt-1 text-[var(--foreground)]">{item.addedBy || "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Card Network")}</p>
+                                    <p className="mt-1 text-[var(--foreground)]">{item.networkLabel || "-"}</p>
+                                  </div>
+                                  <div className="sm:col-span-2">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A1A1AA]">{t("Transaction Time")}</p>
+                                    <p className="mt-1 text-[var(--foreground)]">{item.dateTimeLabel || "-"}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              {item.attemptId ? (
+                                <span className="inline-flex items-center gap-1 text-sm font-medium leading-[1.4] text-[var(--primary)]">
+                                  <span>{t("View Attempt")}</span>
+                                  <ChevronRight className="h-4 w-4" />
+                                </span>
+                              ) : null}
+                            </div>
+                          </button>
+                        )) : (
+                          <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                            {t("No record source has been added for this item yet.")}
                           </div>
-                          <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                            {t("This item is currently backed by official data captured for the location.")}
-                          </p>
-                        </div>
-                      )) : (
-                        <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
-                          {t("No official data has been attached for this item yet.")}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </article>
+                  </article>
+
+                  <article className="flex min-h-[440px] flex-col rounded-[28px] border border-[var(--input)] bg-white p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold leading-[1.3] text-[var(--foreground)]">{t("Official Data Sources")}</p>
+                        <p className="mt-1 text-sm leading-[1.5] text-[var(--muted-foreground)]">{t("Official data currently attached to this location for this item.")}</p>
+                      </div>
+                      <StatusPill label={String(officialEvidence.length)} />
+                    </div>
+
+                    <div className="mt-5 flex-1 overflow-y-auto pr-1">
+                      <div className="flex flex-col gap-3">
+                        {officialEvidence.length > 0 ? officialEvidence.map((item) => (
+                          <div className="rounded-[20px] border border-[var(--input)] bg-[#FAFAFA] px-4 py-4" key={item.id}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold leading-[1.4] text-[var(--foreground)]">{t(item.title)}</p>
+                              <StatusPill
+                                kind={item.status === "unsupported" ? "unsupported" : item.status === "limited" ? "limited" : item.status === "unknown" ? "unknown" : "supported"}
+                                label={formatSupportStatusLabel(item.status)}
+                              />
+                              {item.invalidated ? <StatusPill kind="limited" label="Needs Review" /> : null}
+                            </div>
+                            <p className="mt-2 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                              {t("This item is currently backed by official data captured for the location.")}
+                            </p>
+                          </div>
+                        )) : (
+                          <div className="rounded-[20px] border border-dashed border-[var(--input)] px-4 py-6 text-sm leading-[1.6] text-[var(--muted-foreground)]">
+                            {t("No official data has been attached for this item yet.")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                </div>
               </div>
-            </div>
+            )
           ) : null}
         </div>
 
@@ -2742,7 +2808,8 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
         checkoutLocation: attemptDraft.checkoutLocation,
         notes: attemptDraft.notes,
         attemptedAt: buildAttemptedAtFromDraft(attemptDraft),
-        isConclusiveFailure: attemptDraft.transactionStatus === "Fault"
+        isConclusiveFailure: attemptDraft.transactionStatus === "Fault",
+        staffProficiencyLevel: attemptDraft.staffProficiencyLevel
       });
 
       if (nextStaffProficiencyLevel !== previousStaffProficiencyLevel) {

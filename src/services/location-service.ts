@@ -146,6 +146,7 @@ interface PosAttemptRow {
   result: string | null;
   attempt_result: string | null;
   notes: string | null;
+  staff_proficiency_level: number | null;
 }
 
 interface ReviewRow {
@@ -348,7 +349,8 @@ const POS_ATTEMPT_COLUMNS = `
   is_conclusive_failure,
   result,
   attempt_result,
-  notes
+  notes,
+  staff_proficiency_level
 `;
 
 const REVIEW_COLUMNS = `
@@ -919,37 +921,86 @@ function buildSupportInsightRationale(
   return `${title} does not have enough evidence yet. ${counterSummary}.`;
 }
 
-function buildStaffProficiencySupportInsight(base: LocationRecord): LocationSupportInsight | null {
-  const option = getStaffProficiencyOption(base.staffProficiencyLevel);
+function buildStaffProficiencyEvidenceTitle(level: StaffProficiencyLevel): string {
+  const option = getStaffProficiencyOption(level);
+  return option ? formatStaffProficiencyValue(option) : `Level ${level}`;
+}
 
-  if (!option) {
-    return null;
+function buildStaffProficiencyEvidenceSummary(attempt: LocationAttemptRecord): string {
+  const fragments = [attempt.dateTime, attempt.addedBy, attempt.notes?.trim() || ""].filter(Boolean);
+  return fragments.join(" · ");
+}
+
+function buildStaffProficiencyInsights(attempts: LocationAttemptRecord[]): LocationSupportInsight[] {
+  const grouped = new Map<StaffProficiencyLevel, LocationSupportEvidenceItem[]>();
+
+  attempts.forEach((attempt) => {
+    const level = normalizeStaffProficiencyLevel(attempt.staffProficiencyLevel);
+    if (!level) {
+      return;
+    }
+
+    const evidence = grouped.get(level) || [];
+    evidence.push({
+      id: `attempt-${attempt.id}-staff-proficiency`,
+      kind: "attempt",
+      title: buildStaffProficiencyEvidenceTitle(level),
+      summary: buildStaffProficiencyEvidenceSummary(attempt),
+      status: "supported",
+      attemptId: attempt.id,
+      createdAt: attempt.occurredAt,
+      dateTimeLabel: attempt.dateTime,
+      addedBy: attempt.addedBy,
+      notes: attempt.notes
+    });
+    grouped.set(level, evidence);
+  });
+
+  return Array.from(grouped.entries())
+    .map(([level, evidence]) => {
+      const option = getStaffProficiencyOption(level);
+      const title = option ? option.label : `Level ${level}`;
+
+      return {
+        key: `staff-proficiency:${level}`,
+        title,
+        status: "supported" as const,
+        rationale: `Recorded staff proficiency entries for ${title}.`,
+        evidence,
+        counters: {
+          supportingAttempts: evidence.length,
+          conflictingAttempts: 0,
+          officialSources: 0
+        }
+      } satisfies LocationSupportInsight;
+    })
+    .sort((left, right) => {
+      const leftLevel = Number(left.key.split(":")[1] || 0);
+      const rightLevel = Number(right.key.split(":")[1] || 0);
+      return leftLevel - rightLevel;
+    });
+}
+
+function deriveStaffProficiencySnapshot(
+  attempts: LocationAttemptRecord[],
+  fallbackLevel: StaffProficiencyLevel | null,
+  fallbackUpdatedAt: string | null | undefined
+): { level: StaffProficiencyLevel | null; updatedAt: string | null } {
+  for (const attempt of attempts) {
+    const level = normalizeStaffProficiencyLevel(attempt.staffProficiencyLevel);
+    if (level === null) {
+      continue;
+    }
+
+    return {
+      level,
+      updatedAt: attempt.occurredAt || fallbackUpdatedAt || null
+    };
   }
 
-  const title = formatStaffProficiencyValue(option);
-  const supportingAttempts = 0;
-  const conflictingAttempts = 0;
-  const officialSources = 1;
-  const status: SupportEvidenceStatus = "supported";
-
   return {
-    key: "staff-proficiency",
-    title,
-    status,
-    rationale: buildSupportInsightRationale(title, status, supportingAttempts, conflictingAttempts, officialSources),
-    evidence: [
-      {
-        id: "staff-proficiency-official-1",
-        kind: "official",
-        title: "Official Data",
-        status: "supported"
-      }
-    ],
-    counters: {
-      supportingAttempts,
-      conflictingAttempts,
-      officialSources
-    }
+    level: fallbackLevel,
+    updatedAt: fallbackUpdatedAt || null
   };
 }
 
@@ -1168,7 +1219,7 @@ function buildSupportInsights(
   return {
     networks: finalizeInsights(networkMap),
     paymentMethods: finalizeInsights(paymentMethodMap),
-    staffProficiency: buildStaffProficiencySupportInsight(base)
+    staffProficiency: buildStaffProficiencyInsights(attempts)
   };
 }
 
@@ -1669,6 +1720,7 @@ function buildPosMachineInsertPayload(
 
 function buildPosAttemptInsertPayload(input: CreateLocationInput, posId: string, userId: string) {
   const attemptResult = normalizeAttemptResult(input.transactionStatus);
+  const staffProficiencyLevel = normalizeStaffProficiencyLevel(input.staffProficiencyLevel);
 
   return {
     pos_id: posId,
@@ -1687,7 +1739,8 @@ function buildPosAttemptInsertPayload(input: CreateLocationInput, posId: string,
     card_name: normalizeOptionalString(input.brand) || normalizeOptionalString(input.name),
     notes: input.notes?.trim() || null,
     attempted_at: input.attemptedAt || new Date().toISOString(),
-    is_conclusive_failure: input.transactionStatus === "Fault"
+    is_conclusive_failure: input.transactionStatus === "Fault",
+    staff_proficiency_level: staffProficiencyLevel
   };
 }
 
@@ -1712,6 +1765,7 @@ async function createPosMachineAttempt(location: LocationRecord, input: CreateLo
   const user = await getCurrentUserIdentity();
   const attemptNumber = await getNextAttemptNumber(location.id);
   const attemptResult = normalizeAttemptResult(input.transactionStatus);
+  const staffProficiencyLevel = normalizeStaffProficiencyLevel(input.staffProficiencyLevel);
 
   const insertPayload = {
     pos_id: location.id,
@@ -1730,7 +1784,8 @@ async function createPosMachineAttempt(location: LocationRecord, input: CreateLo
     checkout_location: normalizeCheckoutLocation(input.checkoutLocation),
     notes: input.notes?.trim() || null,
     attempted_at: input.attemptedAt || new Date().toISOString(),
-    is_conclusive_failure: attemptResult === "failure" && Boolean(input.isConclusiveFailure)
+    is_conclusive_failure: attemptResult === "failure" && Boolean(input.isConclusiveFailure),
+    staff_proficiency_level: staffProficiencyLevel
   };
 
   const { data, error } = await supabase.from("pos_attempts").insert(insertPayload).select(POS_ATTEMPT_COLUMNS).single();
@@ -2329,7 +2384,8 @@ async function getFluxaLocationDetail(id: string): Promise<LocationDetailRecord 
 
   return buildDetailRecord(base, "地点空壳条目", [], reviews, buildLocationMetaLine(base.brand, base.city), {
     networks: [],
-    paymentMethods: []
+    paymentMethods: [],
+    staffProficiency: []
   });
 }
 
@@ -2395,11 +2451,17 @@ async function getPosMachineDetail(id: string): Promise<LocationDetailRecord | n
       checkoutLocation: normalizeString(attempt.checkout_location),
       status,
       notes: normalizeString(attempt.notes),
-      isConclusiveFailure: Boolean(attempt.is_conclusive_failure)
+      isConclusiveFailure: Boolean(attempt.is_conclusive_failure),
+      staffProficiencyLevel: normalizeStaffProficiencyLevel(attempt.staff_proficiency_level)
     };
   });
-
-  const supportInsights = buildSupportInsights(base, attempts, basicInfo, merchantInfo);
+  const staffProficiencySnapshot = deriveStaffProficiencySnapshot(attempts, base.staffProficiencyLevel ?? null, base.staffProficiencyUpdatedAt);
+  const detailBase: LocationRecord = {
+    ...base,
+    staffProficiencyLevel: staffProficiencySnapshot.level,
+    staffProficiencyUpdatedAt: staffProficiencySnapshot.updatedAt || undefined
+  };
+  const supportInsights = buildSupportInsights(detailBase, attempts, basicInfo, merchantInfo);
 
   const reviews = [
     ...trialReviewEntries.map(mapTrialLocationReviewEntry),
@@ -2442,7 +2504,7 @@ async function getPosMachineDetail(id: string): Promise<LocationDetailRecord | n
     .map((entry) => entry.item);
 
   const deviceName = normalizeString(row.name, "POS Device");
-  return buildDetailRecord(base, deviceName, attempts, reviews, buildMetaLine(base.brand, base.city, `设备：${deviceName}`), supportInsights);
+  return buildDetailRecord(detailBase, deviceName, attempts, reviews, buildMetaLine(detailBase.brand, detailBase.city, `设备：${deviceName}`), supportInsights);
 }
 
 async function createPosMachineLocation(input: CreateLocationInput): Promise<LocationRecord> {
@@ -2663,7 +2725,7 @@ function buildFallbackDetail(location: LocationRecord): LocationDetailRecord {
   const supportInsights = {
     networks: [],
     paymentMethods: [],
-    staffProficiency: buildStaffProficiencySupportInsight(location)
+    staffProficiency: []
   };
 
   return {
