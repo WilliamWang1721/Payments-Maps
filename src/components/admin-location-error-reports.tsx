@@ -20,6 +20,7 @@ interface AdminLocationErrorReportsProps {
   embedded?: boolean;
   isAdmin: boolean;
   onOpenLocation: (locationId: string) => Promise<void>;
+  showHeader?: boolean;
 }
 
 function formatDateTime(value: string | null | undefined): string {
@@ -66,7 +67,8 @@ function matchesQuery(report: LocationErrorReportRecord, query: string): boolean
 export function AdminLocationErrorReports({
   embedded = false,
   isAdmin,
-  onOpenLocation
+  onOpenLocation,
+  showHeader = true
 }: AdminLocationErrorReportsProps): React.JSX.Element {
   const { t } = useI18n();
   const { reports, loading, error, refreshReports } = useAdminLocationErrorReports({
@@ -288,31 +290,37 @@ export function AdminLocationErrorReports({
 
   return (
     <section className={`flex min-h-0 min-w-0 flex-1 flex-col ${embedded ? "h-full" : "bg-[#FAFAFA] p-3 sm:p-4"}`}>
-      <header className="flex flex-col gap-4 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
-        <div className="space-y-1">
-          <h1 className="text-[28px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Error Report Queue")}</h1>
-          <p className="text-sm leading-[1.5] text-[var(--muted-foreground)]">
-            {t("Triage, process, and close user-submitted errors from Location Detail.")}
-          </p>
-        </div>
+      {showHeader ? (
+        <>
+          <header className="flex flex-col gap-4 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
+            <div className="space-y-1">
+              <h1 className="text-[28px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Error Report Queue")}</h1>
+              <p className="text-sm leading-[1.5] text-[var(--muted-foreground)]">
+                {t("Triage, process, and close user-submitted errors from Location Detail.")}
+              </p>
+            </div>
 
-        <button
-          className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
-          onClick={() => {
-            void handleRefresh();
-          }}
-          type="button"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          <span>{loading ? t("Loading...") : t("Refresh")}</span>
-        </button>
-      </header>
+            <button
+              className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+              onClick={() => {
+                void handleRefresh();
+              }}
+              type="button"
+            >
+              <RefreshCcw className="h-4 w-4" />
+              <span>{loading ? t("Loading...") : t("Refresh")}</span>
+            </button>
+          </header>
 
-      <div className="h-px w-full bg-[var(--input)]" />
+          <div className="h-px w-full bg-[var(--input)]" />
+        </>
+      ) : null}
 
       <div
-        className={`grid min-h-0 grid-cols-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:px-10 ${
-          embedded ? "h-[980px]" : "flex-1"
+        className={`grid min-h-0 grid-cols-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[360px_minmax(0,1fr)] ${
+          showHeader ? "lg:px-10" : "lg:px-4"
+        } ${
+          embedded ? "min-h-[820px]" : "flex-1"
         }`}
       >
         <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-[var(--input)] bg-white">

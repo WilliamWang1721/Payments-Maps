@@ -2,6 +2,8 @@ import type { User } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase.js";
 import type {
+  AdminUserListRecord,
+  AdminUserRecord,
   BrandRecord,
   BulkImportBrandLocationsFromMapInput,
   BulkImportBrandLocationsFromMapResult,
@@ -18,7 +20,6 @@ import type {
   LocationRecord,
   LocationReviewRecord,
   MapBrandLocationSearchRecord,
-  SiteStatisticsRecord,
   UpdateViewerProfileInput,
   ViewerProfileRecord
 } from "./types.js";
@@ -151,6 +152,13 @@ interface UserHistoryRow {
         merchant_info: RecordValue | null;
       }>
     | null;
+}
+
+interface AdminUserTableRow {
+  id: string;
+  username: string | null;
+  email: string | null;
+  created_at: string | null;
 }
 
 interface ContributionPreviewRow {
@@ -1549,6 +1557,58 @@ async function getCurrentSupabaseUser(userId: string): Promise<User> {
   return data.user;
 }
 
+async function listAllAuthUsers(): Promise<User[]> {
+  const users: User[] = [];
+  let page = 1;
+  const perPage = 200;
+
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    const batch = data?.users || [];
+    users.push(...batch);
+
+    if (batch.length < perPage) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return users;
+}
+
+async function countRowsByUser(table: string, column: string): Promise<Map<string, number>> {
+  const { data, error } = await supabase.from(table).select(`id, ${column}`);
+
+  if (error) {
+    if (isIgnorableError(error)) {
+      return new Map<string, number>();
+    }
+    throw error;
+  }
+
+  const counts = new Map<string, number>();
+
+  ((data || []) as unknown as Array<Record<string, unknown>>).forEach((row) => {
+    const userId = normalizeString(row[column]);
+    if (!userId) {
+      return;
+    }
+
+    counts.set(userId, (counts.get(userId) || 0) + 1);
+  });
+
+  return counts;
+}
+
 function buildFluxaLocationInsertPayload(input: CreateLocationInput, options?: { id?: string }) {
   const city = inferCity(input.address, input.city || "");
 
@@ -1819,7 +1879,7 @@ export class FluxaService {
     return posRows.map((row) => mapPosMachineToLocation(row, brandsById, usersById, networksByPosId));
   }
 
-  private async loadMergedLocations(): Promise<LocationRecord[]> {
+  async listMergedLocations(): Promise<LocationRecord[]> {
     const [fluxaResult, posLocations] = await Promise.all([
       supabase.from("fluxa_locations").select(LOCATION_COLUMNS).order("updated_at", { ascending: false }),
       this.loadPosLocations()
@@ -1839,6 +1899,10 @@ export class FluxaService {
     return collapseDuplicateLocations(Array.from(mergedById.values())).sort(
       (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
     );
+  }
+
+  private async loadMergedLocations(): Promise<LocationRecord[]> {
+    return this.listMergedLocations();
   }
 
   private filterLocations(
@@ -2019,58 +2083,6 @@ export class FluxaService {
     };
   }
 
-  async getSiteStatistics(options?: { topN?: number }): Promise<SiteStatisticsRecord> {
-    const topN = clampLimit(options?.topN, 10, 25);
-    const [locations, brandCountResult, cardScopeRows, userCountResult] = await Promise.all([
-      this.loadMergedLocations(),
-      supabase.from("brands").select("id", { count: "exact", head: true }),
-      supabase.from("card_album_cards").select("scope"),
-      supabase.from("users").select("id", { count: "exact", head: true })
-    ]);
-
-    if (brandCountResult.error) {
-      throw brandCountResult.error;
-    }
-    if (cardScopeRows.error) {
-      throw cardScopeRows.error;
-    }
-    if (userCountResult.error && !isIgnorableError(userCountResult.error)) {
-      throw userCountResult.error;
-    }
-
-    const statusCounts = new Map<string, number>();
-    const sourceCounts = new Map<string, number>();
-    const cityCounts = new Map<string, number>();
-    const brandCounts = new Map<string, number>();
-
-    locations.forEach((location) => {
-      incrementCount(statusCounts, location.status || "unknown");
-      incrementCount(sourceCounts, location.source || "unknown");
-      incrementCount(cityCounts, location.city || "Unknown");
-      incrementCount(brandCounts, location.brand || "Unknown");
-    });
-
-    const publicCards = ((cardScopeRows.data || []) as Array<{ scope: CardAlbumScope }>).filter((row) => row.scope === "public").length;
-    const personalCards = ((cardScopeRows.data || []) as Array<{ scope: CardAlbumScope }>).filter((row) => row.scope === "personal").length;
-
-    return {
-      generatedAt: new Date().toISOString(),
-      totals: {
-        locations: locations.length,
-        posLocations: locations.filter((location) => location.source === "pos_machines").length,
-        fluxaLocations: locations.filter((location) => location.source === "fluxa_locations").length,
-        brands: brandCountResult.count || 0,
-        publicCards,
-        personalCards,
-        users: userCountResult.count || 0
-      },
-      locationStatusBreakdown: toTopCountEntries(statusCounts, "status", 10),
-      locationSourceBreakdown: toTopCountEntries(sourceCounts, "source", 10),
-      topCities: toTopCountEntries(cityCounts, "city", topN),
-      topBrands: toTopCountEntries(brandCounts, "brand", topN)
-    };
-  }
-
   async rankLocationContributors(filters?: {
     city?: string;
     brand?: string;
@@ -2178,6 +2190,80 @@ export class FluxaService {
         topCities: toTopCountEntries(entry.cityCounts, "city", 3).map((item) => item.city),
         topBrands: toTopCountEntries(entry.brandCounts, "brand", 3).map((item) => item.brand)
       }));
+  }
+
+  async listAdminUsers(options?: { limit?: number; query?: string }): Promise<AdminUserListRecord> {
+    const safeLimit = clampLimit(options?.limit, 20, 200);
+    const normalizedQuery = normalizeString(options?.query).toLocaleLowerCase("zh-CN");
+
+    const [authUsers, publicUsersResult, locationCounts, reviewCounts, reportCounts, sessionCounts] = await Promise.all([
+      listAllAuthUsers(),
+      supabase.from("users").select("id, username, email, created_at"),
+      countRowsByUser("pos_machines", "created_by"),
+      countRowsByUser("reviews", "user_id"),
+      countRowsByUser("location_error_reports", "reporter_user_id"),
+      countRowsByUser("mcp_sessions", "user_id")
+    ]);
+
+    if (publicUsersResult.error && !isIgnorableError(publicUsersResult.error)) {
+      throw publicUsersResult.error;
+    }
+
+    const publicUsersById = new Map<string, RecordValue>();
+    ((publicUsersResult.data || []) as AdminUserTableRow[]).forEach((row) => {
+      publicUsersById.set(row.id, {
+        username: row.username,
+        email: row.email,
+        created_at: row.created_at
+      });
+    });
+
+    const results = authUsers
+      .map((user) => {
+        const publicRecord = publicUsersById.get(user.id) || null;
+        const name = deriveProfileName(
+          user,
+          publicRecord,
+          normalizeString((publicRecord as RecordValue | null)?.username)
+        );
+        const email = user.email || readUserRecordValue(publicRecord, "email") || "Unknown";
+        const joinedAt = normalizeString(user.created_at, readUserRecordValue(publicRecord, "created_at") || new Date().toISOString());
+
+        return {
+          id: user.id,
+          name,
+          email,
+          joinedAt,
+          lastSignInAt: user.last_sign_in_at || null,
+          location: deriveProfileLocation(user),
+          isAdmin: isAdminUserRecord(user),
+          locationsAdded: locationCounts.get(user.id) || 0,
+          reviews: reviewCounts.get(user.id) || 0,
+          errorReports: reportCounts.get(user.id) || 0,
+          mcpSessions: sessionCounts.get(user.id) || 0
+        } satisfies AdminUserRecord;
+      })
+      .filter((user) => {
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        return [user.name, user.email, user.id, user.location]
+          .some((value) => value.toLocaleLowerCase("zh-CN").includes(normalizedQuery));
+      })
+      .sort((left, right) => {
+        if (Number(right.isAdmin) !== Number(left.isAdmin)) {
+          return Number(right.isAdmin) - Number(left.isAdmin);
+        }
+
+        return new Date(right.joinedAt).getTime() - new Date(left.joinedAt).getTime();
+      });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      total: results.length,
+      results: results.slice(0, safeLimit)
+    };
   }
 
   async getLocationDetail(locationId: string): Promise<LocationDetailRecord> {

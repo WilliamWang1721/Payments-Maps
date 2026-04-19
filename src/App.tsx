@@ -138,7 +138,7 @@ export default function App({
   const deferredSearchQuery = useDeferredValue(currentSearchQuery);
   const listUsesFullDirectory = activeView === "list" && listPagingMode === "scroll";
   const listUsesLightIndex = activeView === "list" && !listUsesFullDirectory;
-  const locationSearchDirectoryEnabled = currentSearchQuery.trim().length > 0 || activeView === "admin";
+  const locationSearchDirectoryEnabled = currentSearchQuery.trim().length > 0;
   const fullLocationsEnabled =
     activeView === "history" ||
     activeView === "detail";
@@ -223,7 +223,7 @@ export default function App({
       return;
     }
 
-    navigatePage({ view: "admin" });
+    navigatePage({ view: "admin", adminSection: "overview" });
   };
 
   const openCards = (options?: { create?: boolean }): void => {
@@ -523,6 +523,21 @@ export default function App({
     });
   };
 
+  if (activeView === "admin") {
+    return (
+      <div className="h-dvh min-h-dvh w-full overflow-hidden bg-[#F5F4EF] font-sans text-[var(--foreground)]">
+        <AdminDashboard
+          accessToken={accessToken}
+          adminSection={pageRoute.adminSection || "overview"}
+          isAdmin={isAdmin}
+          onNavigate={(section) => navigatePage({ view: "admin", adminSection: section })}
+          onOpenLocation={handleOpenLocationFromAdminReports}
+          onReturnToApp={() => navigatePage({ view: "map" })}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-dvh min-h-dvh w-full overflow-hidden bg-[var(--background)] font-sans text-[var(--foreground)]">
       <main className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] md:flex-row">
@@ -651,18 +666,6 @@ export default function App({
             <WebMcpSettings
               mcpEnabled={mcpEnabled}
               onMcpEnabledChange={handleMcpEnabledChange}
-            />
-          </div>
-        ) : null}
-
-        {activeView === "admin" ? (
-          <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
-            <AdminDashboard
-              isAdmin={isAdmin}
-              locationSearchDirectory={locationSearchDirectory}
-              locationSearchLoading={locationSearchLoading}
-              onOpenLocation={handleOpenLocationFromAdminReports}
-              onOpenMcpSettings={openMcpSettings}
             />
           </div>
         ) : null}

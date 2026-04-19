@@ -8,6 +8,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { AuditLogService } from "./audit-log-service.js";
 import { type MCPScopeKey, SESSION_TEMPLATE_DEFINITIONS } from "./constants.js";
 import { FluxaService } from "./fluxa-service.js";
+import { StatisticsService } from "./statistics-service.js";
 import { ConfigurationError, isSupabaseServerConfigured } from "./supabase.js";
 import { SessionService } from "./session-service.js";
 import type { AuthenticatedSession } from "./types.js";
@@ -36,6 +37,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const sessionService = new SessionService();
 const fluxaService = new FluxaService();
+const statisticsService = new StatisticsService(fluxaService);
 const auditLogService = new AuditLogService();
 
 function getConfiguredPublicBaseUrl(): string | null {
@@ -311,6 +313,15 @@ const adminMapBrandImportRequestSchema = adminMapBrandSearchRequestSchema.extend
   createAsShell: z.boolean().optional()
 });
 
+const adminUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  query: z.string().trim().optional()
+});
+
+const adminStatisticsQuerySchema = z.object({
+  topN: z.coerce.number().int().min(1).max(25).optional()
+});
+
 async function withAudit<T>(
   authSession: AuthenticatedSession,
   toolName: string,
@@ -373,7 +384,7 @@ function createMcpServer(sessionToken: string): McpServer {
       const liveSession = await sessionService.authenticateMcpSession(sessionToken);
       ensureScope(liveSession, "analytics.read");
       return withAudit(liveSession, "get_site_statistics", { top_n }, async () => {
-        const stats = await fluxaService.getSiteStatistics({ topN: top_n });
+        const stats = await statisticsService.getSiteStatistics({ topN: top_n });
         return {
           summary: `Aggregated site statistics for ${stats.totals.locations} total locations.`,
           data: stats
@@ -1010,6 +1021,41 @@ app.post("/api/mcp/sessions/revoke", async (request, response) => {
   } catch (error) {
     response.status(getErrorStatus(error, 400)).json({
       error: getErrorMessage(error, "Unable to revoke MCP session.")
+    });
+  }
+});
+
+app.get("/api/admin/users", async (request, response) => {
+  try {
+    const user = await authenticateUserRequest(request);
+    await fluxaService.requireAdminUser(user.id);
+    const parsed = adminUsersQuerySchema.parse(request.query);
+    const result = await fluxaService.listAdminUsers({
+      limit: parsed.limit,
+      query: parsed.query
+    });
+
+    response.json(result);
+  } catch (error) {
+    response.status(getErrorStatus(error, 400)).json({
+      error: getErrorMessage(error, "Unable to load admin users.")
+    });
+  }
+});
+
+app.get("/api/admin/statistics", async (request, response) => {
+  try {
+    const user = await authenticateUserRequest(request);
+    await fluxaService.requireAdminUser(user.id);
+    const parsed = adminStatisticsQuerySchema.parse(request.query);
+    const result = await statisticsService.getSiteStatistics({
+      topN: parsed.topN
+    });
+
+    response.json(result);
+  } catch (error) {
+    response.status(getErrorStatus(error, 400)).json({
+      error: getErrorMessage(error, "Unable to load admin statistics.")
     });
   }
 });
