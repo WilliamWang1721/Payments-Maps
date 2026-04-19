@@ -13,7 +13,7 @@ interface WebSettingsProps {
   onAddLocationAutoReadMerchantNameChange: (enabled: boolean) => void;
   onAddLocationSmartAddChange: (enabled: boolean) => void;
   onMapThemeChange: (theme: MapThemeKey) => void;
-  onOpenErrorReportsAdmin?: () => void;
+  onOpenAdminDashboard?: () => void;
 }
 
 function Toggle({
@@ -110,7 +110,7 @@ export function WebSettings({
   onAddLocationAutoReadMerchantNameChange,
   onAddLocationSmartAddChange,
   onMapThemeChange,
-  onOpenErrorReportsAdmin
+  onOpenAdminDashboard
 }: WebSettingsProps): React.JSX.Element {
   const { language, setLanguage, t } = useI18n();
   const [theme, setTheme] = useState("Auto (System Default)");
@@ -281,7 +281,7 @@ export function WebSettings({
           </div>
         </article>
 
-        {isAdmin && onOpenErrorReportsAdmin ? (
+        {isAdmin && onOpenAdminDashboard ? (
           <article className="rounded-[24px] border border-[var(--input)] bg-white p-6">
             <h2 className="text-[18px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Admin Tools")}</h2>
             <div className="mt-4 flex flex-col gap-4">
@@ -289,14 +289,14 @@ export function WebSettings({
                 control={
                   <button
                     className="inline-flex h-10 items-center justify-center rounded-pill bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)]"
-                    onClick={onOpenErrorReportsAdmin}
+                    onClick={onOpenAdminDashboard}
                     type="button"
                   >
-                    {t("Open Error Report Queue")}
+                    {t("Open Admin Dashboard")}
                   </button>
                 }
-                description={t("Review, process, and close user-submitted error reports from Location Detail.")}
-                title={t("Error Report Queue")}
+                description={t("Review error reports, MCP admin workflows, and location governance in one place.")}
+                title={t("Admin Dashboard")}
               />
             </div>
           </article>

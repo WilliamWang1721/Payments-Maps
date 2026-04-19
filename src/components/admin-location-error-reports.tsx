@@ -17,6 +17,7 @@ import {
 } from "@/types/location-error-report";
 
 interface AdminLocationErrorReportsProps {
+  embedded?: boolean;
   isAdmin: boolean;
   onOpenLocation: (locationId: string) => Promise<void>;
 }
@@ -63,6 +64,7 @@ function matchesQuery(report: LocationErrorReportRecord, query: string): boolean
 }
 
 export function AdminLocationErrorReports({
+  embedded = false,
   isAdmin,
   onOpenLocation
 }: AdminLocationErrorReportsProps): React.JSX.Element {
@@ -268,7 +270,7 @@ export function AdminLocationErrorReports({
 
   if (!isAdmin) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 items-center justify-center bg-[#FAFAFA] p-6">
+      <section className={`flex min-h-0 min-w-0 flex-1 items-center justify-center ${embedded ? "p-6" : "bg-[#FAFAFA] p-6"}`}>
         <div className="max-w-lg rounded-[28px] border border-[rgba(245,158,11,0.18)] bg-white px-6 py-6">
           <div className="flex items-start gap-3">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#B45309]" />
@@ -285,7 +287,7 @@ export function AdminLocationErrorReports({
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#FAFAFA] p-3 sm:p-4">
+    <section className={`flex min-h-0 min-w-0 flex-1 flex-col ${embedded ? "h-full" : "bg-[#FAFAFA] p-3 sm:p-4"}`}>
       <header className="flex flex-col gap-4 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
         <div className="space-y-1">
           <h1 className="text-[28px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Error Report Queue")}</h1>
@@ -308,7 +310,11 @@ export function AdminLocationErrorReports({
 
       <div className="h-px w-full bg-[var(--input)]" />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:px-10">
+      <div
+        className={`grid min-h-0 grid-cols-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:px-10 ${
+          embedded ? "h-[980px]" : "flex-1"
+        }`}
+      >
         <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-[var(--input)] bg-white">
           <div className="border-b border-[var(--input)] px-5 py-4">
             <input

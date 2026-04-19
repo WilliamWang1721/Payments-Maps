@@ -1,6 +1,6 @@
 import type { SidebarTab } from "@/components/fluxa-sidebar";
 
-export type FluxaPageView = SidebarTab | "detail" | "brandDetail";
+export type FluxaPageView = SidebarTab | "detail" | "brandDetail" | "admin";
 
 export interface FluxaPageRoute {
   view: FluxaPageView;
@@ -40,6 +40,10 @@ export function parseFluxaPageRoute(pathname: string, search: string): FluxaPage
 
   if (cleanPath === "/history") {
     return { view: "history" };
+  }
+
+  if (cleanPath === "/admin") {
+    return { view: "admin" };
   }
 
   const brandDetailMatch = cleanPath.match(/^\/brands\/([^/]+)$/);

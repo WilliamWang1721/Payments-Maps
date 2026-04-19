@@ -3,7 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { AddBrandSuccess } from "@/components/add-brand-success";
 import { AddBrandWizard } from "@/components/add-brand-wizard";
-import { AdminLocationErrorReports } from "@/components/admin-location-error-reports";
+import { AdminDashboard } from "@/components/admin-dashboard";
 import { AddLocationSuccess } from "@/components/add-location-success";
 import { AddLocationWizard } from "@/components/add-location-wizard";
 import { BrandDetailWeb } from "@/components/brand-detail-web";
@@ -36,7 +36,7 @@ const ADD_LOCATION_AUTO_READ_MERCHANT_NAME_STORAGE_KEY = "fluxa_add_location_aut
 const ADD_LOCATION_SMART_ADD_STORAGE_KEY = "fluxa_add_location_smart_add_beta";
 const MCP_BETA_STORAGE_KEY = "fluxa_mcp_beta_enabled";
 
-type OverlayView = "cards" | "addLocation" | "addLocationSuccess" | "addBrand" | "addBrandSuccess" | "webSettings" | "mcpSettings" | "adminErrorReports";
+type OverlayView = "cards" | "addLocation" | "addLocationSuccess" | "addBrand" | "addBrandSuccess" | "webSettings" | "mcpSettings";
 type AppView = FluxaPageView | OverlayView;
 type ListPagingMode = "paged" | "scroll";
 type BrandPagingMode = "paged" | "scroll";
@@ -138,6 +138,7 @@ export default function App({
   const deferredSearchQuery = useDeferredValue(currentSearchQuery);
   const listUsesFullDirectory = activeView === "list" && listPagingMode === "scroll";
   const listUsesLightIndex = activeView === "list" && !listUsesFullDirectory;
+  const locationSearchDirectoryEnabled = currentSearchQuery.trim().length > 0 || activeView === "admin";
   const fullLocationsEnabled =
     activeView === "history" ||
     activeView === "detail";
@@ -174,7 +175,7 @@ export default function App({
     locations: locationSearchDirectory,
     loading: locationSearchLoading
   } = useFluxaLocationSearchDirectory({
-    enabled: currentSearchQuery.trim().length > 0
+    enabled: locationSearchDirectoryEnabled
   });
   const {
     indexPoints: mapIndexPoints,
@@ -217,12 +218,12 @@ export default function App({
     setOverlayView("mcpSettings");
   };
 
-  const openAdminErrorReports = (): void => {
+  const openAdminDashboard = (): void => {
     if (!isAdmin) {
       return;
     }
 
-    setOverlayView("adminErrorReports");
+    navigatePage({ view: "admin" });
   };
 
   const openCards = (options?: { create?: boolean }): void => {
@@ -528,8 +529,10 @@ export default function App({
         <FluxaSidebar
           activeTab={sidebarActiveTab}
           accessToken={accessToken}
+          isAdmin={isAdmin}
           onAddBrand={openAddBrand}
           onAddCard={() => openCards({ create: true })}
+          onOpenAdminDashboard={openAdminDashboard}
           onAddLocation={openAddLocation}
           isCardsView={activeView === "cards"}
           onOpenAlbum={openCards}
@@ -638,7 +641,7 @@ export default function App({
               onAddLocationAutoReadMerchantNameChange={handleAddLocationAutoReadMerchantNameChange}
               onAddLocationSmartAddChange={handleAddLocationSmartAddChange}
               onMapThemeChange={handleMapThemeChange}
-              onOpenErrorReportsAdmin={openAdminErrorReports}
+              onOpenAdminDashboard={openAdminDashboard}
             />
           </div>
         ) : null}
@@ -652,11 +655,14 @@ export default function App({
           </div>
         ) : null}
 
-        {activeView === "adminErrorReports" ? (
+        {activeView === "admin" ? (
           <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
-            <AdminLocationErrorReports
+            <AdminDashboard
               isAdmin={isAdmin}
+              locationSearchDirectory={locationSearchDirectory}
+              locationSearchLoading={locationSearchLoading}
               onOpenLocation={handleOpenLocationFromAdminReports}
+              onOpenMcpSettings={openMcpSettings}
             />
           </div>
         ) : null}

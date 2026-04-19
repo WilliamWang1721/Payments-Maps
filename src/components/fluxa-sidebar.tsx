@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { BadgeDollarSign, EllipsisVertical, History, Images, List, LogOut, Map, PanelLeft, Plus, Settings, UserRound, PlugZap } from "lucide-react";
+import { BadgeDollarSign, EllipsisVertical, History, Images, List, LogOut, Map, PanelLeft, Plus, Settings, ShieldCheck, UserRound, PlugZap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,10 +12,12 @@ export type SidebarTab = "map" | "list" | "brands" | "profile" | "history";
 interface FluxaSidebarProps {
   activeTab: SidebarTab;
   accessToken?: string;
+  isAdmin?: boolean;
   onTabChange: (tab: SidebarTab) => void;
   onAddLocation?: () => void;
   onAddBrand?: () => void;
   onAddCard?: () => void;
+  onOpenAdminDashboard?: () => void;
   isCardsView?: boolean;
   onOpenAlbum?: () => void;
   onOpenMcpSettings?: () => void;
@@ -29,10 +31,12 @@ interface FluxaSidebarProps {
 export function FluxaSidebar({
   activeTab,
   accessToken = "",
+  isAdmin = false,
   onTabChange,
   onAddLocation,
   onAddBrand,
   onAddCard,
+  onOpenAdminDashboard,
   isCardsView = false,
   onOpenAlbum,
   onOpenMcpSettings,
@@ -285,6 +289,15 @@ export function FluxaSidebar({
                 <Images className="h-4 w-4" />
                 {t("Cards")}
               </DropdownMenuItem>
+              {isAdmin && onOpenAdminDashboard ? (
+                <DropdownMenuItem
+                  className="flex h-10 cursor-pointer items-center gap-2.5 !rounded-xs px-3.5 py-2.5 text-sm font-medium leading-[1.4286] text-[var(--foreground)] outline-none transition-colors data-[highlighted]:!rounded-m data-[highlighted]:bg-[var(--accent)]"
+                  onSelect={() => onOpenAdminDashboard()}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  {t("Admin Dashboard")}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 className="flex h-10 cursor-pointer items-center gap-2.5 !rounded-xs px-3.5 py-2.5 text-sm font-medium leading-[1.4286] text-[var(--foreground)] outline-none transition-colors data-[highlighted]:!rounded-m data-[highlighted]:bg-[var(--accent)]"
                 onSelect={() => onOpenMcpSettings?.()}
