@@ -43,6 +43,7 @@ async function requestAdminApi<T>(path: string, explicitAccessToken?: string): P
 export const adminService = {
   async listUsers(options?: { accessToken?: string; limit?: number; query?: string }): Promise<AdminUserListRecord> {
     const searchParams = new URLSearchParams();
+    searchParams.set("view", "admin-users");
     if (options?.limit) {
       searchParams.set("limit", String(options.limit));
     }
@@ -51,16 +52,17 @@ export const adminService = {
     }
 
     const suffix = searchParams.toString();
-    return requestAdminApi<AdminUserListRecord>(`/api/admin/users${suffix ? `?${suffix}` : ""}`, options?.accessToken);
+    return requestAdminApi<AdminUserListRecord>(`/api/mcp/sessions${suffix ? `?${suffix}` : ""}`, options?.accessToken);
   },
 
   async getStatistics(options?: { accessToken?: string; topN?: number }): Promise<AdminStatisticsRecord> {
     const searchParams = new URLSearchParams();
+    searchParams.set("view", "admin-statistics");
     if (options?.topN) {
       searchParams.set("topN", String(options.topN));
     }
 
     const suffix = searchParams.toString();
-    return requestAdminApi<AdminStatisticsRecord>(`/api/admin/statistics${suffix ? `?${suffix}` : ""}`, options?.accessToken);
+    return requestAdminApi<AdminStatisticsRecord>(`/api/mcp/sessions${suffix ? `?${suffix}` : ""}`, options?.accessToken);
   }
 };

@@ -960,6 +960,31 @@ app.get("/api/mcp/templates", (_request, response) => {
 app.get("/api/mcp/sessions", async (request, response) => {
   try {
     const user = await authenticateUserRequest(request);
+
+    const adminView = typeof request.query.view === "string" ? request.query.view.trim() : "";
+    if (adminView === "admin-users") {
+      await fluxaService.requireAdminUser(user.id);
+      const parsed = adminUsersQuerySchema.parse(request.query);
+      const result = await fluxaService.listAdminUsers({
+        limit: parsed.limit,
+        query: parsed.query
+      });
+
+      response.json(result);
+      return;
+    }
+
+    if (adminView === "admin-statistics") {
+      await fluxaService.requireAdminUser(user.id);
+      const parsed = adminStatisticsQuerySchema.parse(request.query);
+      const result = await statisticsService.getSiteStatistics({
+        topN: parsed.topN
+      });
+
+      response.json(result);
+      return;
+    }
+
     const sessions = await sessionService.listSessions(user.id);
     response.json({
       sessions,
@@ -1021,41 +1046,6 @@ app.post("/api/mcp/sessions/revoke", async (request, response) => {
   } catch (error) {
     response.status(getErrorStatus(error, 400)).json({
       error: getErrorMessage(error, "Unable to revoke MCP session.")
-    });
-  }
-});
-
-app.get("/api/admin/users", async (request, response) => {
-  try {
-    const user = await authenticateUserRequest(request);
-    await fluxaService.requireAdminUser(user.id);
-    const parsed = adminUsersQuerySchema.parse(request.query);
-    const result = await fluxaService.listAdminUsers({
-      limit: parsed.limit,
-      query: parsed.query
-    });
-
-    response.json(result);
-  } catch (error) {
-    response.status(getErrorStatus(error, 400)).json({
-      error: getErrorMessage(error, "Unable to load admin users.")
-    });
-  }
-});
-
-app.get("/api/admin/statistics", async (request, response) => {
-  try {
-    const user = await authenticateUserRequest(request);
-    await fluxaService.requireAdminUser(user.id);
-    const parsed = adminStatisticsQuerySchema.parse(request.query);
-    const result = await statisticsService.getSiteStatistics({
-      topN: parsed.topN
-    });
-
-    response.json(result);
-  } catch (error) {
-    response.status(getErrorStatus(error, 400)).json({
-      error: getErrorMessage(error, "Unable to load admin statistics.")
     });
   }
 });
