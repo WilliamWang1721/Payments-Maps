@@ -8,7 +8,7 @@ import {
   mergeCookieHeaders,
   parseJsonBody,
   sendJson
-} from "./_shared";
+} from "./_shared.js";
 
 interface RefreshBridgeSessionRequest {
   sessionToken?: string;
