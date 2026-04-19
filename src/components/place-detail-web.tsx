@@ -2737,12 +2737,14 @@ export function PlaceDetailWeb({ location, locationLoading = false, onDeleteLoca
 
       if (nextStaffProficiencyLevel !== previousStaffProficiencyLevel) {
         const mutation = getStaffProficiencyMutation();
+        const currentDetailRecord = await locationService.getLocationDetail(detailRecord).catch(() => detailRecord);
+        const currentStaffProficiencyLevel = getStaffProficiencyLevel(currentDetailRecord);
 
         if (!mutation) {
           staffProficiencySyncError = "The attempt was saved, but staff proficiency updates are not available yet.";
-        } else {
+        } else if (nextStaffProficiencyLevel !== currentStaffProficiencyLevel) {
           try {
-            await mutation(detailRecord, nextStaffProficiencyLevel);
+            await mutation(currentDetailRecord, nextStaffProficiencyLevel);
           } catch (proficiencyError) {
             const message = formatStaffProficiencyMutationError(proficiencyError);
             staffProficiencySyncError = `The attempt was saved, but staff proficiency could not be updated. ${message}`;
