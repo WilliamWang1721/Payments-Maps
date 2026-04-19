@@ -32,7 +32,6 @@ interface FluxaLocationRow {
   merchant_name: string;
   address: string;
   brand: string | null;
-  bin: string | null;
   city: string | null;
   status: "active" | "inactive";
   latitude: number | string;
@@ -190,7 +189,6 @@ const LOCATION_COLUMNS = `
   merchant_name,
   address,
   brand,
-  bin,
   city,
   status,
   latitude,
@@ -925,7 +923,7 @@ function mapFluxaRowToLocation(row: FluxaLocationRow): LocationRecord {
     name: normalizeString(row.merchant_name, "Untitled Location"),
     address: normalizeString(row.address, "Unknown address"),
     brand: normalizeString(row.brand, "Unknown"),
-    bin: normalizeString(row.bin, "N/A"),
+    bin: "N/A",
     city: inferCity(normalizeString(row.address), normalizeString(row.city)),
     addedBy: "Unknown",
     status: row.status === "inactive" ? "inactive" : "active",
@@ -1617,7 +1615,6 @@ function buildFluxaLocationInsertPayload(input: CreateLocationInput, options?: {
     merchant_name: input.name.trim(),
     address: input.address.trim(),
     brand: input.brand.trim() || "Unknown",
-    bin: input.bin.trim() || "N/A",
     city,
     status: input.status,
     latitude: Number(input.lat.toFixed(6)),
@@ -2367,7 +2364,7 @@ export class FluxaService {
 
     if (fluxaLocationData) {
       const base = mapFluxaRowToLocation(fluxaLocationData as FluxaLocationRow);
-      return buildDetailRecord(base, "Fluxa Location", [], [], buildMetaLine(base.brand, base.city, `BIN：${base.bin}`));
+      return buildDetailRecord(base, "Fluxa Location", [], [], buildMetaLine(base.brand, base.city, `状态：${base.status}`));
     }
 
     throw new Error("Location not found.");
