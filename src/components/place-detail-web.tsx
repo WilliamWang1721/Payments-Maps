@@ -671,7 +671,8 @@ function buildFallbackDetail(location: LocationRecord): LocationDetailRecord {
     reviews: [],
     supportInsights: {
       networks: [],
-      paymentMethods: []
+      paymentMethods: [],
+      staffProficiency: null
     }
   };
 }
@@ -1142,15 +1143,19 @@ function getPaymentMethodIcon(name: string): React.ComponentType<{ className?: s
 function StaffProficiencyCard({
   currentLevel,
   updatedAt,
-  error
+  error,
+  supportInsight,
+  onOpenSourceDetails
 }: {
   currentLevel: StaffProficiencyLevel | null;
   updatedAt: string | null;
   saving: boolean;
   savingLevel: StaffProficiencyLevel | null;
   error: string | null;
+  supportInsight?: LocationSupportInsight | null;
   onSelectLevel: (level: StaffProficiencyLevel) => void;
   onClear: () => void;
+  onOpenSourceDetails?: () => void;
 }): React.JSX.Element {
   const { t } = useI18n();
   const activeOption = getStaffProficiencyOption(currentLevel);
@@ -1159,7 +1164,9 @@ function StaffProficiencyCard({
   return (
     <article className={`${DETAIL_CARD_CLASS} h-full xl:col-span-1`}>
       <SectionHeader
+        buttonLabel={supportInsight ? "Source Details" : undefined}
         meta={activeOption ? <StatusPill appearance="info" kind="supported" label={`L${activeOption.level}`} /> : <StatusPill kind="unknown" label="Not set" />}
+        onAction={supportInsight ? onOpenSourceDetails : undefined}
         title="Staff Proficiency"
       />
 
@@ -1423,6 +1430,7 @@ function OverviewContent({
   const businessHoursRows = buildBusinessHoursRows(detail.businessHours, t);
   const contactInfoRows = buildContactInfoRows(detail.contactInfo, t);
   const paymentMethodRows = buildPaymentMethodRows(detail);
+  const staffProficiencyInsight = detail.supportInsights?.staffProficiency || null;
   const visibleNetworkRows = showUnknownNetworksOnly ? networkRows.filter((row) => row.status === "unknown") : networkRows;
   const visiblePaymentMethodRows = showLimitedPaymentMethodsOnly
     ? paymentMethodRows.filter((row) => row.status === "limited" || row.status === "unsupported")
@@ -1524,9 +1532,11 @@ function OverviewContent({
         currentLevel={proficiencyLevel}
         error={proficiencyError}
         onClear={onClearProficiencyLevel}
+        onOpenSourceDetails={staffProficiencyInsight ? () => onOpenSupportInsight(staffProficiencyInsight) : undefined}
         onSelectLevel={onSelectProficiencyLevel}
         saving={proficiencySaving}
         savingLevel={proficiencySavingLevel}
+        supportInsight={staffProficiencyInsight}
         updatedAt={proficiencyUpdatedAt}
       />
 

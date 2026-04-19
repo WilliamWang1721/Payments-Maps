@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { formatStaffProficiencyValue, getStaffProficiencyOption } from "@/lib/staff-proficiency";
 import {
   TRIAL_USER_ID,
   TRIAL_VIEWER_NAME,
@@ -918,6 +919,40 @@ function buildSupportInsightRationale(
   return `${title} does not have enough evidence yet. ${counterSummary}.`;
 }
 
+function buildStaffProficiencySupportInsight(base: LocationRecord): LocationSupportInsight | null {
+  const option = getStaffProficiencyOption(base.staffProficiencyLevel);
+
+  if (!option) {
+    return null;
+  }
+
+  const title = formatStaffProficiencyValue(option);
+  const supportingAttempts = 0;
+  const conflictingAttempts = 0;
+  const officialSources = 1;
+  const status: SupportEvidenceStatus = "supported";
+
+  return {
+    key: "staff-proficiency",
+    title,
+    status,
+    rationale: buildSupportInsightRationale(title, status, supportingAttempts, conflictingAttempts, officialSources),
+    evidence: [
+      {
+        id: "staff-proficiency-official-1",
+        kind: "official",
+        title: "Official Data",
+        status: "supported"
+      }
+    ],
+    counters: {
+      supportingAttempts,
+      conflictingAttempts,
+      officialSources
+    }
+  };
+}
+
 function buildAttemptEvidenceTitle(attempt: LocationAttemptRecord): string {
   const fragments = [
     attempt.cardName.trim(),
@@ -1132,7 +1167,8 @@ function buildSupportInsights(
 
   return {
     networks: finalizeInsights(networkMap),
-    paymentMethods: finalizeInsights(paymentMethodMap)
+    paymentMethods: finalizeInsights(paymentMethodMap),
+    staffProficiency: buildStaffProficiencySupportInsight(base)
   };
 }
 
@@ -2624,11 +2660,14 @@ async function materializeFluxaLocation(location: LocationRecord): Promise<Locat
 
 function buildFallbackDetail(location: LocationRecord): LocationDetailRecord {
   const source: LocationSource = location.source || "fluxa_locations";
+  const supportInsights = {
+    networks: [],
+    paymentMethods: [],
+    staffProficiency: buildStaffProficiencySupportInsight(location)
+  };
+
   return {
-    ...buildDetailRecord(location, location.name, [], [], buildLocationMetaLine(location.brand, location.city), {
-      networks: [],
-      paymentMethods: []
-    }),
+    ...buildDetailRecord(location, location.name, [], [], buildLocationMetaLine(location.brand, location.city), supportInsights),
     source
   };
 }

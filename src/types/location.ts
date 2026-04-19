@@ -105,6 +105,7 @@ export interface LocationSupportInsight {
 export interface LocationSupportInsights {
   networks: LocationSupportInsight[];
   paymentMethods: LocationSupportInsight[];
+  staffProficiency?: LocationSupportInsight | null;
 }
 
 export interface LocationDetailRecord extends LocationRecord {
