@@ -1231,6 +1231,9 @@ function mapAttemptStatus(result: string | null | undefined): LocationAttemptRec
   if (normalized.includes("declin")) {
     return "declined";
   }
+  if (!normalized || normalized.includes("unknown")) {
+    return "unknown";
+  }
   return "failed";
 }
 
@@ -1446,7 +1449,7 @@ function buildDetailRecord(
   supportInsights?: LocationSupportInsights
 ): LocationDetailRecord {
   const successCount = attempts.filter((attempt) => attempt.status === "success").length;
-  const failedCount = attempts.length - successCount;
+  const failedCount = attempts.filter((attempt) => attempt.status !== "success" && attempt.status !== "unknown").length;
   const successRate = attempts.length > 0 ? Number(((successCount / attempts.length) * 100).toFixed(1)) : 0;
 
   return {

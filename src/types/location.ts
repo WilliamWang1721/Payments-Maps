@@ -25,7 +25,7 @@ export interface LocationAttemptRecord {
   cardName: string;
   network: string;
   method: string;
-  status: "success" | "declined" | "failed";
+  status: "success" | "declined" | "failed" | "unknown";
   notes?: string;
   paymentMethod?: string;
   cvm?: string;

@@ -940,7 +940,7 @@ function buildNetworkRows(detail: LocationDetailRecord): NetworkRow[] {
     const next = grouped.get(name) || { supporting: 0, conflicting: 0 };
     if (attempt.status === "success") {
       next.supporting += 1;
-    } else {
+    } else if (attempt.status !== "unknown") {
       next.conflicting += 1;
     }
     grouped.set(name, next);
@@ -984,7 +984,7 @@ function buildPaymentMethodRows(detail: LocationDetailRecord): NetworkRow[] {
     const next = grouped.get(name) || { supporting: 0, conflicting: 0 };
     if (attempt.status === "success") {
       next.supporting += 1;
-    } else {
+    } else if (attempt.status !== "unknown") {
       next.conflicting += 1;
     }
     grouped.set(name, next);
@@ -1012,6 +1012,22 @@ function formatSupportStatusLabel(status: SupportEvidenceStatus): string {
   if (status === "unsupported") return "Unsupported";
   if (status === "limited") return "Limited";
   return "Unknown";
+}
+
+function getAttemptStatusPresentation(status: LocationAttemptRecord["status"]): {
+  kind: "supported" | "unknown" | "limited" | "declined" | "unsupported";
+  label: "Success" | "Declined" | "Failed" | "Unknown";
+} {
+  if (status === "success") {
+    return { kind: "supported", label: "Success" };
+  }
+  if (status === "declined") {
+    return { kind: "declined", label: "Declined" };
+  }
+  if (status === "failed") {
+    return { kind: "unsupported", label: "Failed" };
+  }
+  return { kind: "unknown", label: "Unknown" };
 }
 
 const HEADER_ICON_TONES = {
@@ -1862,7 +1878,7 @@ function AttemptContent({
   const currentPage = Math.min(attemptPage, pageCount);
   const currentRows = attemptRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const successCount = attemptRows.filter((row) => row.status === "success").length;
-  const failedCount = attemptRows.length - successCount;
+  const failedCount = attemptRows.filter((row) => row.status !== "success" && row.status !== "unknown").length;
   const successRate = attemptRows.length > 0 ? ((successCount / attemptRows.length) * 100).toFixed(1) : "0.0";
 
   return (
@@ -1938,28 +1954,32 @@ function AttemptContent({
           <div className="px-6 py-10 text-center text-sm text-[var(--muted-foreground)]">{t("No payment attempts recorded yet.")}</div>
         ) : null}
 
-        {currentRows.map((row, idx) => (
-          <button
-            className={`flex w-full items-center gap-4 px-6 py-4 text-left transition-colors duration-300 ${
-              row.id === focusedAttemptId ? "bg-[#FFF8E8]" : "bg-white"
-            } ${idx !== currentRows.length - 1 ? "border-b border-[#E2E2E8]" : ""} hover:bg-[#FAFAFA]`}
-            key={row.id}
-            onClick={() => onOpenAttemptDetail(row)}
-            type="button"
-          >
-            <p className="w-[140px] text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{row.dateTime}</p>
-            <p className="w-[140px] text-[13px] font-medium leading-[1.2] text-[var(--muted-foreground)]">{row.addedBy}</p>
-            <p className="w-[180px] truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{row.cardName}</p>
-            <p className="w-[140px] truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{formatSupportedNetworkLabel(row.network)}</p>
-            <p className="w-[120px] text-[13px] font-medium leading-[1.2] text-[var(--muted-foreground)]">{formatPaymentMethodLabel(row.method)}</p>
-            <div className="w-[120px]">
-              <StatusPill kind={row.status === "declined" ? "declined" : row.status === "failed" ? "limited" : "supported"} label={row.status === "success" ? "Success" : row.status === "declined" ? "Declined" : "Failed"} />
-            </div>
-            <div className="flex w-[80px] justify-end">
-              <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
-            </div>
-          </button>
-        ))}
+        {currentRows.map((row, idx) => {
+          const statusPresentation = getAttemptStatusPresentation(row.status);
+
+          return (
+            <button
+              className={`flex w-full items-center gap-4 px-6 py-4 text-left transition-colors duration-300 ${
+                row.id === focusedAttemptId ? "bg-[#FFF8E8]" : "bg-white"
+              } ${idx !== currentRows.length - 1 ? "border-b border-[#E2E2E8]" : ""} hover:bg-[#FAFAFA]`}
+              key={row.id}
+              onClick={() => onOpenAttemptDetail(row)}
+              type="button"
+            >
+              <p className="w-[140px] text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{row.dateTime}</p>
+              <p className="w-[140px] text-[13px] font-medium leading-[1.2] text-[var(--muted-foreground)]">{row.addedBy}</p>
+              <p className="w-[180px] truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{row.cardName}</p>
+              <p className="w-[140px] truncate text-[13px] font-medium leading-[1.2] text-[var(--foreground)]">{formatSupportedNetworkLabel(row.network)}</p>
+              <p className="w-[120px] text-[13px] font-medium leading-[1.2] text-[var(--muted-foreground)]">{formatPaymentMethodLabel(row.method)}</p>
+              <div className="w-[120px]">
+                <StatusPill kind={statusPresentation.kind} label={statusPresentation.label} />
+              </div>
+              <div className="flex w-[80px] justify-end">
+                <ChevronRight className="h-4 w-4 text-[#A1A1AA]" />
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex items-center justify-between py-4">
@@ -2015,13 +2035,7 @@ function AttemptDetailDialog({
   onOpenChange: (open: boolean) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
-  const statusLabel = attempt
-    ? attempt.status === "success"
-      ? "Success"
-      : attempt.status === "declined"
-        ? "Declined"
-        : "Failed"
-    : "Unknown";
+  const statusPresentation = getAttemptStatusPresentation(attempt?.status ?? "unknown");
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -2037,10 +2051,7 @@ function AttemptDetailDialog({
               <div className="rounded-[24px] border border-[var(--input)] bg-white px-5 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">{t("Status")}</p>
                 <div className="mt-3">
-                  <StatusPill
-                    kind={attempt.status === "declined" ? "declined" : attempt.status === "failed" ? "limited" : "supported"}
-                    label={statusLabel}
-                  />
+                  <StatusPill kind={statusPresentation.kind} label={statusPresentation.label} />
                 </div>
               </div>
 
