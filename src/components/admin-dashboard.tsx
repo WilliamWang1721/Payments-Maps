@@ -171,12 +171,12 @@ export function AdminDashboard({
 
   if (!isAdmin) {
     return (
-      <section className="flex min-h-dvh w-full items-center justify-center bg-[#F5F4EF] px-6 py-10">
-        <div className="w-full max-w-3xl border border-[rgba(42,41,51,0.12)] bg-white px-8 py-10">
+      <section className="flex min-h-dvh w-full items-center justify-center bg-[#F7F7F6] px-6 py-10">
+        <div className="w-full max-w-3xl border border-[rgba(42,41,51,0.10)] bg-white px-8 py-10">
           <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">{t("Admin Access Required")}</p>
           <h1 className="mt-4 text-[40px] font-semibold leading-[1.05] text-[var(--foreground)]">Fluxa Map 管理后台</h1>
           <div className="mt-8 flex items-start gap-4 border-t border-[rgba(42,41,51,0.08)] pt-6">
-            <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-[#B45309]" />
+            <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-[var(--muted-foreground)]" />
             <div>
               <p className="text-base font-medium text-[var(--foreground)]">{t("Only administrators can access the standalone admin dashboard.")}</p>
               <p className="mt-2 text-sm leading-[1.8] text-[var(--muted-foreground)]">
@@ -190,8 +190,8 @@ export function AdminDashboard({
   }
 
   return (
-    <div className="flex min-h-dvh w-full bg-[#F5F4EF]">
-      <aside className="hidden w-[248px] shrink-0 border-r border-[rgba(42,41,51,0.08)] bg-[#ECE8DC] px-6 py-7 lg:flex lg:flex-col">
+    <div className="flex min-h-dvh w-full bg-[#F7F7F6]">
+      <aside className="hidden w-[248px] shrink-0 border-r border-[rgba(42,41,51,0.08)] bg-[#F1F1F0] px-6 py-7 lg:flex lg:flex-col">
         <button className="text-left" onClick={() => onNavigate("overview")} type="button">
           <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">{t("Admin Console")}</p>
           <p className="mt-3 text-[22px] font-semibold leading-[1.2] text-[var(--foreground)]">Fluxa Map 管理后台</p>
@@ -237,11 +237,10 @@ export function AdminDashboard({
       </aside>
 
       <main className="flex min-h-dvh min-w-0 flex-1 flex-col">
-        <header className="border-b border-[rgba(42,41,51,0.08)] bg-[#F5F4EF] px-6 py-6 lg:px-10">
+        <header className="border-b border-[rgba(42,41,51,0.08)] bg-[#F7F7F6] px-6 py-6 lg:px-10">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">{pageLabel}</p>
-              <h1 className="mt-3 text-[40px] font-semibold leading-[1.02] tracking-[-0.04em] text-[var(--foreground)]">Fluxa Map 管理后台</h1>
+              <h1 className="text-[40px] font-semibold leading-[1.02] tracking-[-0.04em] text-[var(--foreground)]">{pageLabel}</h1>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -282,7 +281,7 @@ export function AdminDashboard({
                 </div>
 
                 {reportsError ? (
-                  <div className="px-4 py-6 text-sm leading-[1.8] text-[#9A3412]">{reportsError}</div>
+                  <div className="px-4 py-6 text-sm leading-[1.8] text-[var(--muted-foreground)]">{reportsError}</div>
                 ) : reportsLoading ? (
                   renderLoadingRow(t("Loading recent error reports..."))
                 ) : recentReports.length === 0 ? (
@@ -327,7 +326,7 @@ export function AdminDashboard({
                 </div>
 
                 {usersError ? (
-                  <div className="px-4 py-6 text-sm leading-[1.8] text-[#9A3412]">{usersError}</div>
+                  <div className="px-4 py-6 text-sm leading-[1.8] text-[var(--muted-foreground)]">{usersError}</div>
                 ) : usersLoading ? (
                   renderLoadingRow(t("Loading user list..."))
                 ) : users.length === 0 ? (
@@ -397,7 +396,7 @@ export function AdminDashboard({
               </div>
 
               {usersError ? (
-                <div className="px-4 py-6 text-sm leading-[1.8] text-[#9A3412]">{usersError}</div>
+                <div className="px-4 py-6 text-sm leading-[1.8] text-[var(--muted-foreground)]">{usersError}</div>
               ) : usersLoading ? (
                 renderLoadingRow(t("Loading user list..."))
               ) : users.length === 0 ? (
@@ -450,7 +449,7 @@ export function AdminDashboard({
                 </div>
 
                 {statisticsError ? (
-                  <div className="px-4 py-6 text-sm leading-[1.8] text-[#9A3412]">{statisticsError}</div>
+                  <div className="px-4 py-6 text-sm leading-[1.8] text-[var(--muted-foreground)]">{statisticsError}</div>
                 ) : statisticsLoading || !statistics ? (
                   renderLoadingRow(t("Loading statistics..."))
                 ) : (

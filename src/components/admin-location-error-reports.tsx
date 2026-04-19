@@ -272,10 +272,10 @@ export function AdminLocationErrorReports({
 
   if (!isAdmin) {
     return (
-      <section className={`flex min-h-0 min-w-0 flex-1 items-center justify-center ${embedded ? "p-6" : "bg-[#FAFAFA] p-6"}`}>
-        <div className="max-w-lg rounded-[28px] border border-[rgba(245,158,11,0.18)] bg-white px-6 py-6">
+      <section className={`flex min-h-0 min-w-0 flex-1 items-center justify-center ${embedded ? "p-6" : "bg-[#F7F7F6] p-6"}`}>
+        <div className="max-w-lg border border-[rgba(42,41,51,0.10)] bg-white px-6 py-6">
           <div className="flex items-start gap-3">
-            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#B45309]" />
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[var(--muted-foreground)]" />
             <div className="min-w-0">
               <p className="text-lg font-semibold text-[var(--foreground)]">{t("Admin Access Required")}</p>
               <p className="mt-2 text-sm leading-[1.7] text-[var(--muted-foreground)]">
@@ -289,14 +289,14 @@ export function AdminLocationErrorReports({
   }
 
   return (
-    <section className={`flex min-h-0 min-w-0 flex-1 flex-col ${embedded ? "h-full" : "bg-[#FAFAFA] p-3 sm:p-4"}`}>
+    <section className={`flex min-h-0 min-w-0 flex-1 flex-col ${embedded ? "h-full" : "bg-[#F7F7F6] p-3 sm:p-4"}`}>
       {showHeader ? (
         <>
           <header className="flex flex-col gap-4 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
             <div className="space-y-1">
-              <h1 className="text-[28px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Error Report Queue")}</h1>
+              <h1 className="text-[28px] font-semibold leading-[1.2] text-[var(--foreground)]">{t("Error Reports")}</h1>
               <p className="text-sm leading-[1.5] text-[var(--muted-foreground)]">
-                {t("Triage, process, and close user-submitted errors from Location Detail.")}
+                {t("Recent Error Report Queue")}
               </p>
             </div>
 
@@ -323,10 +323,10 @@ export function AdminLocationErrorReports({
           embedded ? "min-h-[820px]" : "flex-1"
         }`}
       >
-        <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-[var(--input)] bg-white">
+        <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-[rgba(42,41,51,0.10)] bg-white">
           <div className="border-b border-[var(--input)] px-5 py-4">
             <input
-              className="h-11 w-full rounded-pill border border-[var(--input)] px-4 text-sm text-[var(--foreground)] outline-none"
+              className="h-11 w-full border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("Search reports by summary, location, reporter, or report ID")}
               type="text"
@@ -335,7 +335,7 @@ export function AdminLocationErrorReports({
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <select
-                className="h-10 rounded-pill border border-[var(--input)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
+                className="h-10 border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
                 onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
                 value={statusFilter}
               >
@@ -348,7 +348,7 @@ export function AdminLocationErrorReports({
               </select>
 
               <select
-                className="h-10 rounded-pill border border-[var(--input)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
+                className="h-10 border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
                 onChange={(event) => setSeverityFilter(event.target.value as typeof severityFilter)}
                 value={severityFilter}
               >
@@ -364,13 +364,13 @@ export function AdminLocationErrorReports({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {error ? (
-              <div className="rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm leading-[1.7] text-[#7A1F0E]">
+              <div className="border border-[rgba(42,41,51,0.10)] bg-[rgba(42,41,51,0.03)] px-4 py-3 text-sm leading-[1.7] text-[var(--foreground)]">
                 {error}
               </div>
             ) : null}
 
             {!error && filteredReports.length === 0 ? (
-              <div className="rounded-[18px] border border-[var(--input)] bg-[var(--accent)] px-4 py-4 text-sm leading-[1.7] text-[var(--muted-foreground)]">
+              <div className="border border-[rgba(42,41,51,0.10)] bg-[rgba(42,41,51,0.02)] px-4 py-4 text-sm leading-[1.7] text-[var(--muted-foreground)]">
                 {t("No error reports matched the current filters.")}
               </div>
             ) : null}
@@ -381,10 +381,10 @@ export function AdminLocationErrorReports({
 
                 return (
                   <button
-                    className={`w-full rounded-[22px] border px-4 py-4 text-left transition-colors duration-200 ${
+                    className={`w-full border px-4 py-4 text-left transition-colors duration-200 ${
                       isSelected
-                        ? "border-[var(--primary)] bg-[rgba(79,70,229,0.06)]"
-                        : "border-[var(--input)] bg-white hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)]"
+                        ? "border-[rgba(42,41,51,0.28)] bg-[rgba(42,41,51,0.04)]"
+                        : "border-[rgba(42,41,51,0.10)] bg-white hover:border-[rgba(42,41,51,0.18)] hover:bg-[rgba(42,41,51,0.02)]"
                     }`}
                     key={report.id}
                     onClick={() => setSelectedReportId(report.id)}
@@ -412,7 +412,7 @@ export function AdminLocationErrorReports({
           </div>
         </aside>
 
-        <div className="min-h-0 min-w-0 overflow-hidden rounded-[24px] border border-[var(--input)] bg-white">
+        <div className="min-h-0 min-w-0 overflow-hidden border border-[rgba(42,41,51,0.10)] bg-white">
           {!selectedReport ? (
             <div className="flex h-full items-center justify-center px-6 py-6 text-sm leading-[1.7] text-[var(--muted-foreground)]">
               {t("Select an error report from the queue to review its details.")}
@@ -456,7 +456,7 @@ export function AdminLocationErrorReports({
 
               <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
                 <div className="min-h-0 overflow-y-auto px-6 py-5">
-                  <section className="rounded-[22px] border border-[var(--input)] bg-[var(--accent)] px-5 py-5">
+                  <section className="border border-[rgba(42,41,51,0.10)] bg-[rgba(42,41,51,0.02)] px-5 py-5">
                     <h3 className="text-base font-semibold text-[var(--foreground)]">{t("Report Details")}</h3>
                     <p className="mt-3 text-sm leading-[1.8] text-[var(--foreground)]">{selectedReport.details}</p>
                     {selectedReport.fieldKey ? (
@@ -466,7 +466,7 @@ export function AdminLocationErrorReports({
                     ) : null}
                   </section>
 
-                  <section className="mt-5 rounded-[22px] border border-[var(--input)] bg-white px-5 py-5">
+                  <section className="mt-5 border border-[rgba(42,41,51,0.10)] bg-white px-5 py-5">
                     <h3 className="text-base font-semibold text-[var(--foreground)]">{t("Location Snapshot")}</h3>
                     <div className="mt-4 grid grid-cols-1 gap-3 text-sm leading-[1.7] text-[var(--muted-foreground)] sm:grid-cols-2">
                       <p><span className="font-medium text-[var(--foreground)]">{t("Location")}:</span> {selectedReport.locationSnapshot.name}</p>
@@ -478,24 +478,20 @@ export function AdminLocationErrorReports({
                   </section>
 
                   {selectedReport.attachments.length > 0 ? (
-                    <section className="mt-5 rounded-[22px] border border-[var(--input)] bg-white px-5 py-5">
+                    <section className="mt-5 border border-[rgba(42,41,51,0.10)] bg-white px-5 py-5">
                       <h3 className="text-base font-semibold text-[var(--foreground)]">{t("Attachments")}</h3>
                       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                         {selectedReport.attachments.map((attachment) => {
                           const signedUrl = attachmentUrls[attachment.path];
 
                           return (
-                            <div className="rounded-[20px] border border-[var(--input)] bg-[var(--accent)] p-3" key={attachment.path}>
+                            <div className="border border-[rgba(42,41,51,0.10)] bg-[rgba(42,41,51,0.02)] p-3" key={attachment.path}>
                               {signedUrl ? (
                                 <a href={signedUrl} rel="noreferrer" target="_blank">
-                                  <img
-                                    alt={attachment.fileName}
-                                    className="h-[180px] w-full rounded-[16px] object-cover"
-                                    src={signedUrl}
-                                  />
+                                  <img alt={attachment.fileName} className="h-[180px] w-full object-cover" src={signedUrl} />
                                 </a>
                               ) : (
-                                <div className="flex h-[180px] items-center justify-center rounded-[16px] border border-dashed border-[var(--input)] text-sm text-[var(--muted-foreground)]">
+                                <div className="flex h-[180px] items-center justify-center border border-dashed border-[rgba(42,41,51,0.12)] text-sm text-[var(--muted-foreground)]">
                                   {t("Attachment preview unavailable")}
                                 </div>
                               )}
@@ -523,14 +519,14 @@ export function AdminLocationErrorReports({
                     </section>
                   ) : null}
 
-                  <section className="mt-5 rounded-[22px] border border-[var(--input)] bg-white px-5 py-5">
+                  <section className="mt-5 border border-[rgba(42,41,51,0.10)] bg-white px-5 py-5">
                     <h3 className="text-base font-semibold text-[var(--foreground)]">{t("Audit Trail")}</h3>
                     {eventsLoading ? (
                       <p className="mt-4 text-sm text-[var(--muted-foreground)]">{t("Loading...")}</p>
                     ) : (
                       <div className="mt-4 space-y-3">
                         {events.map((event) => (
-                          <div className="rounded-[18px] border border-[var(--input)] bg-[var(--accent)] px-4 py-4" key={event.id}>
+                          <div className="border border-[rgba(42,41,51,0.10)] bg-[rgba(42,41,51,0.02)] px-4 py-4" key={event.id}>
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="inline-flex rounded-pill border border-[var(--input)] px-2.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)]">
                                 {t(event.eventType === "status_changed" ? "Status Changed" : event.eventType === "attachments_added" ? "Attachments Added" : event.eventType === "submitted" ? "Submitted" : "Internal Note")}
@@ -555,12 +551,12 @@ export function AdminLocationErrorReports({
                   </section>
                 </div>
 
-                <aside className="min-h-0 overflow-y-auto border-t border-[var(--input)] bg-[#FCFCFD] px-6 py-5 xl:border-l xl:border-t-0">
-                  <section className="rounded-[22px] border border-[var(--input)] bg-white px-4 py-4">
+                <aside className="min-h-0 overflow-y-auto border-t border-[rgba(42,41,51,0.08)] bg-[#F7F7F6] px-6 py-5 xl:border-l xl:border-t-0">
+                  <section className="border border-[rgba(42,41,51,0.10)] bg-white px-4 py-4">
                     <h3 className="text-base font-semibold text-[var(--foreground)]">{t("Process Report")}</h3>
 
                     {actionError ? (
-                      <div className="mt-4 rounded-[18px] border border-[#FFD9D0] bg-[#FFF4F1] px-4 py-3 text-sm leading-[1.7] text-[#7A1F0E]">
+                      <div className="mt-4 border border-[rgba(42,41,51,0.10)] bg-[rgba(42,41,51,0.03)] px-4 py-3 text-sm leading-[1.7] text-[var(--foreground)]">
                         {actionError}
                       </div>
                     ) : null}
@@ -568,7 +564,7 @@ export function AdminLocationErrorReports({
                     <label className="mt-4 block space-y-2">
                       <span className="text-sm font-medium text-[var(--foreground)]">{t("Internal Note")}</span>
                       <textarea
-                        className="min-h-[120px] w-full rounded-[20px] border border-[var(--input)] px-4 py-3 text-sm leading-[1.7] text-[var(--foreground)] outline-none"
+                        className="min-h-[120px] w-full border border-[rgba(42,41,51,0.12)] bg-white px-4 py-3 text-sm leading-[1.7] text-[var(--foreground)] outline-none"
                         onChange={(event) => setNote(event.target.value)}
                         placeholder={t("Record the triage judgment, blocker, or processing note here.")}
                         value={note}
@@ -578,7 +574,7 @@ export function AdminLocationErrorReports({
                     <label className="mt-4 block space-y-2">
                       <span className="text-sm font-medium text-[var(--foreground)]">{t("Resolution Type (Optional)")}</span>
                       <input
-                        className="h-11 w-full rounded-pill border border-[var(--input)] px-4 text-sm text-[var(--foreground)] outline-none"
+                        className="h-11 w-full border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
                         onChange={(event) => setResolutionType(event.target.value)}
                         placeholder={t("Examples: data_fix, content_cleanup, product_bug")}
                         type="text"
@@ -589,7 +585,7 @@ export function AdminLocationErrorReports({
                     <label className="mt-4 block space-y-2">
                       <span className="text-sm font-medium text-[var(--foreground)]">{t("Resolution Note (Optional)")}</span>
                       <textarea
-                        className="min-h-[110px] w-full rounded-[20px] border border-[var(--input)] px-4 py-3 text-sm leading-[1.7] text-[var(--foreground)] outline-none"
+                        className="min-h-[110px] w-full border border-[rgba(42,41,51,0.12)] bg-white px-4 py-3 text-sm leading-[1.7] text-[var(--foreground)] outline-none"
                         onChange={(event) => setResolutionNote(event.target.value)}
                         placeholder={t("Describe how the report was handled or why it was closed.")}
                         value={resolutionNote}
@@ -599,7 +595,7 @@ export function AdminLocationErrorReports({
                     <label className="mt-4 block space-y-2">
                       <span className="text-sm font-medium text-[var(--foreground)]">{t("Linked Linear Issue (Optional)")}</span>
                       <input
-                        className="h-11 w-full rounded-pill border border-[var(--input)] px-4 text-sm text-[var(--foreground)] outline-none"
+                        className="h-11 w-full border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
                         onChange={(event) => setLinkedLinearIssueId(event.target.value)}
                         placeholder="ALL-54"
                         type="text"
@@ -610,7 +606,7 @@ export function AdminLocationErrorReports({
                     <label className="mt-4 block space-y-2">
                       <span className="text-sm font-medium text-[var(--foreground)]">{t("Linked Linear URL (Optional)")}</span>
                       <input
-                        className="h-11 w-full rounded-pill border border-[var(--input)] px-4 text-sm text-[var(--foreground)] outline-none"
+                        className="h-11 w-full border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm text-[var(--foreground)] outline-none"
                         onChange={(event) => setLinkedLinearIssueUrl(event.target.value)}
                         placeholder="https://linear.app/..."
                         type="text"
@@ -620,7 +616,7 @@ export function AdminLocationErrorReports({
 
                     <div className="mt-5 flex flex-wrap gap-2">
                       <button
-                        className="inline-flex h-10 items-center rounded-pill border border-[var(--input)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:border-[var(--border-hover)] hover:bg-[var(--muted-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center border border-[rgba(42,41,51,0.12)] bg-white px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[rgba(42,41,51,0.03)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving || !note.trim()}
                         onClick={() => {
                           void handleAddNote();
@@ -630,7 +626,7 @@ export function AdminLocationErrorReports({
                         {t("Add Internal Note")}
                       </button>
                       <button
-                        className="inline-flex h-10 items-center rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center border border-[rgba(42,41,51,0.12)] bg-[rgba(42,41,51,0.04)] px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[rgba(42,41,51,0.08)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving}
                         onClick={() => {
                           void handleTransition("triaged");
@@ -640,7 +636,7 @@ export function AdminLocationErrorReports({
                         {t("Triaged")}
                       </button>
                       <button
-                        className="inline-flex h-10 items-center rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center border border-[rgba(42,41,51,0.12)] bg-[rgba(42,41,51,0.04)] px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[rgba(42,41,51,0.08)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving}
                         onClick={() => {
                           void handleTransition("need_info");
@@ -650,7 +646,7 @@ export function AdminLocationErrorReports({
                         {t("Need Info")}
                       </button>
                       <button
-                        className="inline-flex h-10 items-center rounded-pill bg-[var(--secondary)] px-4 text-sm font-medium text-[var(--secondary-foreground)] transition-colors duration-200 hover:bg-[var(--secondary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center border border-[rgba(42,41,51,0.12)] bg-[rgba(42,41,51,0.04)] px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[rgba(42,41,51,0.08)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving}
                         onClick={() => {
                           void handleTransition("accepted");
@@ -660,7 +656,7 @@ export function AdminLocationErrorReports({
                         {t("Accepted")}
                       </button>
                       <button
-                        className="inline-flex h-10 items-center rounded-pill bg-[#FEE2E2] px-4 text-sm font-medium text-[#991B1B] transition-colors duration-200 hover:bg-[#FECACA] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center border border-[rgba(42,41,51,0.12)] bg-[rgba(42,41,51,0.08)] px-4 text-sm font-medium text-[var(--foreground)] transition-colors duration-200 hover:bg-[rgba(42,41,51,0.12)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving}
                         onClick={() => {
                           void handleTransition("rejected");
@@ -670,7 +666,7 @@ export function AdminLocationErrorReports({
                         {t("Rejected")}
                       </button>
                       <button
-                        className="inline-flex h-10 items-center rounded-pill bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-200 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center bg-[var(--foreground)] px-4 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving}
                         onClick={() => {
                           void handleTransition("resolved");
@@ -680,7 +676,7 @@ export function AdminLocationErrorReports({
                         {t("Resolved")}
                       </button>
                       <button
-                        className="inline-flex h-10 items-center rounded-pill bg-[var(--foreground)] px-4 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 items-center bg-[rgba(42,41,51,0.82)] px-4 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={actionSaving}
                         onClick={() => {
                           void handleTransition("closed");
