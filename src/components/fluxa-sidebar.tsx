@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { BadgeDollarSign, EllipsisVertical, History, Images, List, LogOut, Map, PanelLeft, Plus, Settings, ShieldCheck, UserRound, PlugZap } from "lucide-react";
+import { BadgeDollarSign, EllipsisVertical, FileText, History, Images, List, LogOut, Map, PanelLeft, Plus, Settings, ShieldCheck, UserRound, PlugZap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ interface FluxaSidebarProps {
   onOpenAdminDashboard?: () => void;
   isCardsView?: boolean;
   onOpenAlbum?: () => void;
+  onOpenSubmittedReports?: () => void;
   onOpenMcpSettings?: () => void;
   onOpenSettings?: () => void;
   onSignOut?: () => Promise<void> | void;
@@ -39,6 +40,7 @@ export function FluxaSidebar({
   onOpenAdminDashboard,
   isCardsView = false,
   onOpenAlbum,
+  onOpenSubmittedReports,
   onOpenMcpSettings,
   onOpenSettings,
   onSignOut,
@@ -288,6 +290,13 @@ export function FluxaSidebar({
               >
                 <Images className="h-4 w-4" />
                 {t("Cards")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex h-10 cursor-pointer items-center gap-2.5 !rounded-xs px-3.5 py-2.5 text-sm font-medium leading-[1.4286] text-[var(--foreground)] outline-none transition-colors data-[highlighted]:!rounded-m data-[highlighted]:bg-[var(--accent)]"
+                onSelect={() => onOpenSubmittedReports?.()}
+              >
+                <FileText className="h-4 w-4" />
+                {t("Submitted Reports")}
               </DropdownMenuItem>
               {isAdmin && onOpenAdminDashboard ? (
                 <DropdownMenuItem

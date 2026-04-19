@@ -12,6 +12,7 @@ import { FluxaHeader } from "@/components/fluxa-header";
 import { FluxaMapCanvas } from "@/components/fluxa-map-canvas";
 import { WebMcpSettings } from "@/components/web-mcp-settings";
 import { PlaceDetailWeb } from "@/components/place-detail-web";
+import { SubmittedReportsWeb } from "@/components/submitted-reports-web";
 import { FluxaSidebar, type SidebarTab } from "@/components/fluxa-sidebar";
 import { WebSettings } from "@/components/web-settings";
 import { invalidateFluxaBrandDirectoryCache } from "@/hooks/use-fluxa-brand-catalog";
@@ -231,6 +232,13 @@ export default function App({
     setOverlayView("cards");
   };
 
+  const openSubmittedReports = (): void => {
+    navigatePage({
+      view: "reports",
+      from: sidebarActiveTab
+    });
+  };
+
   const openLocationDetail = (location: LocationRecord): void => {
     setSelectedLocation(location);
     navigatePage({
@@ -350,6 +358,7 @@ export default function App({
   });
 
   const isFullCanvasPage = activeView === "profile" || activeView === "history";
+  const isCanvasShellPage = isSidebarTab(activeView);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -551,6 +560,7 @@ export default function App({
           onAddLocation={openAddLocation}
           isCardsView={activeView === "cards"}
           onOpenAlbum={openCards}
+          onOpenSubmittedReports={openSubmittedReports}
           onOpenMcpSettings={openMcpSettings}
           onOpenSettings={openWebSettings}
           onSignOut={onSignOut}
@@ -679,7 +689,13 @@ export default function App({
           </div>
         ) : null}
 
-        <section className={`${isSidebarTab(activeView) ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 flex-col gap-2 p-3 sm:p-4`}>
+        {activeView === "reports" ? (
+          <div className="tab-switch-enter flex min-h-0 min-w-0 flex-1">
+            <SubmittedReportsWeb />
+          </div>
+        ) : null}
+
+        <section className={`${isCanvasShellPage ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 flex-col gap-2 p-3 sm:p-4`}>
             {!isFullCanvasPage ? (
               <FluxaHeader
                 activeTab={sidebarActiveTab}

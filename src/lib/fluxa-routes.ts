@@ -1,7 +1,7 @@
 import type { SidebarTab } from "@/components/fluxa-sidebar";
 
 export type AdminSection = "overview" | "reports" | "users" | "stats";
-export type FluxaPageView = SidebarTab | "detail" | "brandDetail" | "admin";
+export type FluxaPageView = SidebarTab | "detail" | "brandDetail" | "admin" | "reports";
 
 export interface FluxaPageRoute {
   view: FluxaPageView;
@@ -42,6 +42,10 @@ export function parseFluxaPageRoute(pathname: string, search: string): FluxaPage
 
   if (cleanPath === "/history") {
     return { view: "history" };
+  }
+
+  if (cleanPath === "/reports") {
+    return { view: "reports", from };
   }
 
   if (cleanPath === "/admin") {
@@ -106,6 +110,15 @@ export function buildFluxaPagePath(route: FluxaPageRoute): string {
     }
 
     return `/admin/${route.adminSection}`;
+  }
+
+  if (route.view === "reports") {
+    const query = new URLSearchParams();
+    if (route.from) {
+      query.set("from", route.from);
+    }
+    const suffix = query.toString();
+    return `/reports${suffix ? `?${suffix}` : ""}`;
   }
 
   return route.view === "map" ? "/map" : `/${route.view}`;
